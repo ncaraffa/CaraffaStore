@@ -21,6 +21,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@next/env": "16.2.12",
     "@types/node": "22.20.1",
     "@types/react": "19.0.7",
     "@types/react-dom": "19.0.3",

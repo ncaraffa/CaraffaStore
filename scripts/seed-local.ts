@@ -9,6 +9,7 @@
  *   npx supabase db reset
  *   npm run seed:local
  */
+import { loadLocalEnv } from "../lib/env/load-local-env";
 import { createAdminSupabaseClient } from "../lib/supabase/admin";
 import { FIXTURE_PRODUCTS, FIXTURE_STORES, FIXTURE_USERS } from "../lib/data/fixtures";
 
@@ -79,6 +80,15 @@ async function ensureProduct(
 }
 
 async function main() {
+  // `tsx scripts/seed-local.ts` roda fora do runtime do Next.js, que é
+  // quem normalmente carrega .env.local sozinho (next dev/build/start).
+  // Sem esta chamada explícita, o script só funcionaria se as variáveis
+  // já estivessem exportadas manualmente no shell.
+  const { loadedEnvFiles } = loadLocalEnv();
+  if (loadedEnvFiles.length > 0) {
+    console.log(`Ambiente carregado de: ${loadedEnvFiles.join(", ")}\n`);
+  }
+
   const admin = createAdminSupabaseClient();
 
   const adminAId = await ensureUser(admin, FIXTURE_USERS.adminA.email);

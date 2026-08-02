@@ -3,7 +3,7 @@
 **Status:** REVIEW  
 **Responsável:** Claude Code
 **Branch:** feat/TASK-001-multitenant-foundation
-**Evidência de entrega:** ver `docs/HANDOFF.md` (seção "TASK-001 — resumo da entrega") para resultados de lint/typecheck/testes/build, arquivos alterados e instruções de QA. RLS validada por Claude Code contra Postgres real (Docker) após correção do RETEST-BUG-001 (GRANTs ausentes) — 7/7 PASS em duas execuções. **Ainda pendente reteste independente do Júnior** antes de qualquer aprovação.
+**Evidência de entrega:** ver `docs/HANDOFF.md` (seção "TASK-001 — resumo da entrega") para resultados de lint/typecheck/testes/build, arquivos alterados e instruções de QA. RLS validada por Claude Code contra Postgres real (Docker) — 7/7 PASS em duas execuções. FINAL-BUG-001 (`npm run seed:local` não carregava `.env.local` automaticamente) corrigido e revalidado em processo limpo — ver "Correção do FINAL-BUG-001" em `docs/HANDOFF.md`. **Ainda pendente reteste independente final do Júnior** antes de qualquer aprovação.
 
 ## Objetivo
 

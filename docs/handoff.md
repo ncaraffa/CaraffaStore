@@ -3,10 +3,10 @@
 ## Estado atual
 
 - Fase: 1 — Fundação técnica.
-- Código da aplicação: TASK-001 implementada; correções do QA (`qa/reports/TASK-001.md`) e do reteste RLS real (`qa/reports/TASK-001-RETEST.md`) aplicadas, em `tasks/review/task-001.md` — **ainda REVIEW, não DONE**.
+- Código da aplicação: TASK-001 implementada; correções de 3 rodadas de QA aplicadas (`qa/reports/TASK-001.md`, `qa/reports/TASK-001-RETEST.md`, `qa/reports/TASK-001-RETEST-2.md`), em `tasks/review/task-001.md` — **ainda REVIEW, não DONE**.
 - Branch: `feat/TASK-001-multitenant-foundation` (não mesclada na `master`).
 - Responsável pela implementação: Claude Code.
-- QA: 1ª rodada pelo Júnior — "APROVADO COM RESSALVAS" (`qa/reports/TASK-001.md`); 2ª rodada (reteste RLS com Docker real) — **REPROVADO** (`qa/reports/TASK-001-RETEST.md`, RETEST-BUG-001: GRANTs de tabela ausentes). RETEST-BUG-001 corrigido e revalidado por Claude Code nesta sessão — ver "Correção do RETEST-BUG-001" abaixo. **Aguardando novo reteste independente do Júnior** antes de qualquer aprovação.
+- QA: 1ª rodada — "APROVADO COM RESSALVAS" (`qa/reports/TASK-001.md`); 2ª rodada (RLS com Docker real) — **REPROVADO** (`qa/reports/TASK-001-RETEST.md`, RETEST-BUG-001: GRANTs de tabela ausentes, corrigido); 3ª rodada (reteste final) — RLS **aprovada** (7/7 PASS), mas **REPROVADO** por FINAL-BUG-001: `npm run seed:local` não carregava `.env.local` automaticamente (`qa/reports/TASK-001-RETEST-2.md`). FINAL-BUG-001 corrigido e revalidado nesta sessão — ver "Correção do FINAL-BUG-001" abaixo. **Aguardando o último reteste independente do Júnior** antes de qualquer aprovação.
 
 ## TASK-001 — resumo da entrega (2026-08-02)
 
@@ -51,15 +51,16 @@ contrato (`StoreRepository`) usado em produção. As policies de RLS reais
 um Postgres real nesta execução. Isso é a principal pendência de QA.~~
 
 **Resultados dos gates (rodada mais recente, após correção do
-RETEST-BUG-001 — ver detalhamento abaixo):**
+FINAL-BUG-001 — ver detalhamento abaixo):**
 
 | Gate | Comando | Resultado |
 |---|---|---|
 | Lint | `npm run lint` | OK, sem erros |
 | Typecheck | `npm run typecheck` | OK, sem erros |
-| Testes | `npm test` | 21/21 passando (13 originais + 8 novos de regressão de privilégios SQL) |
+| Testes | `npm test` | **29/29** passando (13 originais + 8 de regressão de privilégios SQL + 8 novos de carregamento de ambiente) |
 | Build | `npm run build` | OK, build de produção concluído |
-| RLS real (Docker) | `supabase/tests/isolation_check.sql` | 7/7 PASS, em 2 execuções seguidas |
+| RLS real (Docker) | `supabase/tests/isolation_check.sql` | 7/7 PASS, em 2 execuções seguidas, em processo limpo |
+| Seed real (Docker) | `npm run seed:local` | OK, em processo limpo, sem export manual — ver detalhamento abaixo |
 
 **Dependências:** `npm audit` e `npm audit --omit=dev` reportam **0
 vulnerabilidades** (correção BUG-003, confirmada novamente nesta rodada).
@@ -273,25 +274,130 @@ persistiu de nenhuma das duas execuções.
   confirmado limpo após o commit desta correção.
 - Git limpo após o commit — confirmado.
 
-## Instruções para o reteste independente do Júnior
+## Correção do FINAL-BUG-001 (2026-08-02) — `.env.local` não carregado pelo seed
+
+Terceiro reteste independente do Júnior
+(`qa/reports/TASK-001-RETEST-2.md`, não alterado — arquivo do Júnior):
+**REPROVADO**, mas apenas por este item — RLS real (7/7 PASS em duas
+execuções + 4/4 testes cross-tenant adicionais), 21/21 testes, build e
+audits já estavam todos aprovados.
+
+### Causa-raiz
+
+`npm run seed:local` executa `tsx scripts/seed-local.ts`. Diferente de
+`next dev`/`next build`/`next start` — que chamam `loadEnvConfig`
+internamente antes de qualquer código da aplicação rodar —, `tsx` não
+carrega `.env.local` sozinho. O script só lia `process.env` diretamente
+(`lib/supabase/env.ts`), então funcionava apenas se as variáveis já
+estivessem exportadas manualmente no shell antes do comando, contrariando
+o fluxo documentado (`.env.local` + `npm run seed:local`).
+
+### Arquivos alterados
+
+- **`lib/env/load-local-env.ts`** (novo): wrapper de `loadEnvConfig` de
+  `@next/env` — a mesma função que `next dev`/`build`/`start` usam
+  internamente, já disponível como dependência transitiva do `next`
+  (`16.2.12`) e agora declarada explicitamente em `devDependencies` na
+  mesma versão. Só é importado por `scripts/seed-local.ts`; nenhuma rota
+  ou módulo do app o importa.
+- **`scripts/seed-local.ts`**: chama `loadLocalEnv()` como primeira ação
+  de `main()`, antes de criar o cliente admin. Imprime
+  `Ambiente carregado de: <arquivos>` quando encontra algo.
+- **`lib/supabase/env.ts`**: mensagens de erro agora citam o(s) nome(s)
+  exato(s) da(s) variável(is) ausente(s)/inválida(s) (via
+  `parsed.error.issues`, só os *nomes* dos campos — nunca
+  `issue.message`/valor), em vez de um texto genérico.
+- **`package.json`**: `@next/env` adicionado a `devDependencies`, fixado
+  em `16.2.12` (mesma versão do `next` já usado).
+- **`lib/env/load-local-env.test.ts`** e **`lib/supabase/env.test.ts`**
+  (novos, 8 testes): regressão do carregador e das mensagens sanitizadas.
+
+### Mecanismo e precedência aplicada
+
+`loadEnvConfig(dir, dev, log, forceReload)` do `@next/env` — mesma
+precedência documentada do Next.js: variáveis já presentes em
+`process.env` **nunca** são sobrescritas por arquivo; entre arquivos, a
+ordem é `.env.$(NODE_ENV).local` → `.env.local` (pulado apenas se
+`NODE_ENV=test`) → `.env.$(NODE_ENV)` → `.env`. Puro Node.js
+(`fs`/`path`), sem nada específico de shell — funciona igual no Windows.
+`dir` é `process.cwd()` por padrão, igual ao Next.js (raiz do projeto de
+onde o comando é rodado).
+
+### Resultado do seed em processo limpo (Docker real)
+
+Fluxo completo executado do zero, sem nenhuma variável `SUPABASE`/`NEXT_PUBLIC` pré-exportada (confirmado com `env | grep SUPABASE` antes de começar):
+
+```text
+npx supabase stop --no-backup
+npx supabase start
+npx supabase db reset
+# .env.local criado com as credenciais impressas pelo start
+npm run seed:local
+```
+
+Saída: `Ambiente carregado de: .env.local` seguida de
+`Seed local concluído.`, **exit code 0**, sem nenhuma exportação manual.
+Executado uma segunda vez sem alterações: mesmos IDs, mesmo resultado —
+`ensureUser`/`ensureStore` reaproveitam registros existentes e
+`ensureMembership`/`ensureProduct` usam `upsert`, então o script é
+idempotente.
+
+### Resultado quando `.env.local` está ausente
+
+`.env.local` removido e `npm run seed:local` executado novamente:
+
+```text
+Error: Variável(is) de ambiente ausente(s) ou inválida(s): NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY. Copie .env.example para .env.local e preencha com valores do seu Supabase local (nunca de produção).
+```
+
+**Exit code 1**, nomeia exatamente as duas variáveis ausentes, nenhum
+valor exposto (não havia nenhum, mas a mensagem também nunca ecoaria um
+valor inválido presente — coberto pelos testes de regressão).
+
+### RLS real (após a correção, mesmo fluxo limpo)
+
+Script `supabase/tests/isolation_check.sql` (7 cenários) executado duas
+vezes seguidas contra o Postgres deste mesmo fluxo limpo:
+**7/7 PASS** em ambas, exit code `0`, sem `ERROR`, sem estado residual
+(2 lojas, 2 produtos, 0 forjados após as duas execuções).
+
+### Gates (mesma sessão, após a correção)
+
+Lint, typecheck, **29/29 testes** (21 anteriores + 8 novos:
+`load-local-env.test.ts` e `env.test.ts`), build, `npm audit` e
+`npm audit --omit=dev` — todos OK / 0 vulnerabilidades.
+
+### Segurança
+
+Nenhum segredo real usado ou versionado — `.env.local` desta validação
+usava as chaves de demonstração padrão que o próprio `supabase start`
+imprime (públicas, iguais em qualquer instalação local da ferramenta) e
+foi removido ao final; `git check-ignore .env.local` confirmado; `git
+status` limpo após o commit desta correção; `.env.local` nunca é lido
+por nenhuma rota da aplicação (só por `scripts/seed-local.ts`).
+
+## Instruções para o (último) reteste independente do Júnior
 
 1. `git checkout feat/TASK-001-multitenant-foundation` e `git log -1` para confirmar o commit desta correção (hash no final deste documento).
-2. `npm install && npm run lint && npm run typecheck && npm test && npm run build` — todos devem passar (21/21 testes).
+2. `npm install && npm run lint && npm run typecheck && npm test && npm run build` — todos devem passar (29/29 testes).
 3. `npm audit && npm audit --omit=dev` — ambos devem retornar 0 vulnerabilidades.
-4. **Validação de RLS real com Docker Desktop:**
-   1. `npx supabase stop --no-backup` (só se já houver uma instância local de uma sessão anterior).
-   2. `npx supabase start`.
-   3. `npx supabase db reset` — aplica `supabase/migrations/0001_init.sql` (agora com os GRANTs).
-   4. Copiar `.env.example` para `.env.local` e preencher com a `API_URL`/`ANON_KEY`/`SERVICE_ROLE_KEY` impressas pelo `supabase start`.
-   5. `npm run seed:local` — deve concluir sem erro (antes: `permission denied for table stores`); **copie os UUIDs de `admin-a`, `admin-b` e `cliente-a` impressos no final**.
-   6. Editar `supabase/tests/isolation_check.sql` (ou uma cópia fora do repositório, como fez o Júnior na rodada anterior) substituindo `SUBSTITUA_PELO_ID_ADMIN_A`/`SUBSTITUA_PELO_ID_ADMIN_B`/`SUBSTITUA_PELO_ID_CLIENTE_A` pelos UUIDs copiados.
-   7. Rodar: `psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/isolation_check.sql` (ou `docker exec -i <container_postgres> psql -U postgres -d postgres -v ON_ERROR_STOP=1 < arquivo.sql`, se `psql` não estiver instalado localmente — o nome do container é `supabase_db_commerce-platform-local`).
-   8. Esperado: **7 mensagens `NOTICE: PASS - Caso N - ...`**, sem nenhum `ERROR`, saída `ROLLBACK` no final, exit code `0`.
-   9. Rodar o mesmo comando uma segunda vez, sem `db reset` entre as execuções — resultado deve ser idêntico (repetibilidade, sem estado residual).
-   10. `npx supabase stop` ao terminar.
+4. **Fluxo completo com Docker Desktop, em processo/terminal novo:**
+   1. Confirmar que nenhuma variável `SUPABASE`/`NEXT_PUBLIC` está exportada manualmente (`env | grep -i SUPABASE`, ou `Get-ChildItem Env:` no PowerShell, deve vir vazio).
+   2. `npx supabase stop --no-backup` (só se já houver uma instância local de uma sessão anterior).
+   3. `npx supabase start`.
+   4. `npx supabase db reset` — aplica `supabase/migrations/0001_init.sql`.
+   5. Copiar `.env.example` para `.env.local` e preencher com a `API_URL`/`ANON_KEY`/`SERVICE_ROLE_KEY` impressas pelo `supabase start`.
+   6. `npm run seed:local` **direto, sem exportar nada manualmente** — deve imprimir `Ambiente carregado de: .env.local` e terminar com exit code `0`. **Este é o ponto que reprovou na rodada anterior.**
+   7. Rodar `npm run seed:local` de novo, sem alterar nada — deve terminar igual (idempotente).
+   8. **copie os UUIDs de `admin-a`, `admin-b` e `cliente-a` impressos no final** e edite `supabase/tests/isolation_check.sql` (ou uma cópia fora do repositório) substituindo `SUBSTITUA_PELO_ID_ADMIN_A`/`SUBSTITUA_PELO_ID_ADMIN_B`/`SUBSTITUA_PELO_ID_CLIENTE_A`.
+   9. Rodar: `psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/isolation_check.sql` (ou `docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -v ON_ERROR_STOP=1 < arquivo.sql`, se `psql` não estiver instalado localmente).
+   10. Esperado: **7 mensagens `NOTICE: PASS - Caso N - ...`**, sem nenhum `ERROR`, exit code `0`.
+   11. Rodar o mesmo comando uma segunda vez, sem `db reset` entre as execuções — resultado deve ser idêntico.
+   12. Remover `.env.local` e rodar `npm run seed:local` mais uma vez — deve falhar com exit code diferente de `0`, citando pelo nome as variáveis ausentes, sem expor nenhum valor.
+   13. `npx supabase stop` ao terminar.
 5. Testar manualmente `npm run dev` e a rota `/api/stores/store-a/products` / `/api/stores/store-b/products` (requer sessão autenticada — sem painel de login nesta tarefa, fora de escopo).
 6. Registrar o resultado em `qa/reports/` conforme `AGENTS.md`.
-7. Não mover a TASK-001 para `tasks/done/` sem: testes passando, RLS validada de forma independente com Postgres real (itens 4.8 e 4.9) e aprovação de Caraffa para as propostas técnicas em `docs/DECISIONS.md`.
+7. Não mover a TASK-001 para `tasks/done/` sem: todos os itens acima aprovados de forma independente e aprovação de Caraffa para as propostas técnicas em `docs/DECISIONS.md`.
 
 ## Antes de implementar
 
