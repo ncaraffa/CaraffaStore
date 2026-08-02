@@ -1,7 +1,9 @@
 # TASK-001 — Fundação do projeto e arquitetura multi-tenant
 
-**Status:** READY  
+**Status:** REVIEW  
 **Responsável:** Claude Code
+**Branch:** feat/TASK-001-multitenant-foundation
+**Evidência de entrega:** ver `docs/HANDOFF.md` (seção "TASK-001 — resumo da entrega") para resultados de lint/typecheck/testes/build, arquivos alterados e instruções de QA. Pendência principal: validação de RLS contra Postgres real (Docker), ainda não executada.
 
 ## Objetivo
 
