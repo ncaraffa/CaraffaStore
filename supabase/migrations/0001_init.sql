@@ -61,7 +61,7 @@ create or replace function public.is_store_member(target_store_id uuid)
 returns boolean
 language sql
 security definer
-set search_path = public
+set search_path = ''
 stable
 as $$
   select exists (
@@ -76,7 +76,7 @@ create or replace function public.is_store_admin(target_store_id uuid)
 returns boolean
 language sql
 security definer
-set search_path = public
+set search_path = ''
 stable
 as $$
   select exists (
@@ -149,3 +149,56 @@ create policy products_delete_admin
 
 -- Anônimo: nenhuma policy concede acesso a `anon` em nenhuma das três
 -- tabelas acima — RLS habilitada + ausência de policy = negado por padrão.
+
+-- ============================================================
+-- Privilégios SQL mínimos (RETEST-BUG-001)
+--
+-- RLS decide QUAIS LINHAS uma consulta pode ver/alterar; o GRANT de
+-- tabela decide SE a operação pode ao menos ser tentada. Sem o GRANT,
+-- o Postgres nega antes de a policy ser avaliada ("permission denied
+-- for table ..."), mesmo que a policy fosse permitir. Os dois
+-- mecanismos são independentes e ambos necessários — daí os GRANTs
+-- explícitos abaixo, no menor conjunto possível por papel.
+--
+-- Não presume privilégios implícitos concedidos pela plataforma
+-- Supabase: o reteste em Postgres real (qa/reports/TASK-001-RETEST.md)
+-- encontrou REFERENCES/TRIGGER/TRUNCATE já concedidos a anon,
+-- authenticated e service_role nestas tabelas — via
+-- `ALTER DEFAULT PRIVILEGES` da própria plataforma para toda tabela
+-- nova, não algo desta migração —, nenhum deles suficiente para a
+-- aplicação funcionar, e TRUNCATE em especial é perigoso: ignora RLS por
+-- completo e apagaria a tabela inteira de uma vez, para qualquer usuário
+-- autenticado. Por isso a primeira ação é revogar TUDO de PUBLIC e dos
+-- três papéis nestas tabelas e conceder de volta apenas o necessário.
+--
+-- Sequences: não há colunas serial/identity nesta migração (todas as
+-- chaves primárias são uuid + gen_random_uuid()), portanto não há
+-- sequence para conceder privilégio.
+-- ============================================================
+
+grant usage on schema public to anon, authenticated, service_role;
+
+revoke all on public.stores, public.store_members, public.products
+  from public, anon, authenticated, service_role;
+
+-- anon: nenhum GRANT nestas tabelas. Não há storefront público nesta
+-- fundação (TASK-001) — todo dado em stores/store_members/products é
+-- privado ao painel administrativo. Se um catálogo público for
+-- implementado em tarefa futura, a decisão de conceder SELECT a `anon`
+-- (e as policies correspondentes) deve ser proposta e aprovada
+-- separadamente, não assumida aqui.
+
+-- authenticated: exatamente as operações com policy de RLS
+-- correspondente acima — sem policy de escrita em stores/store_members,
+-- não há motivo para conceder INSERT/UPDATE/DELETE nelas.
+grant select on public.stores to authenticated;
+grant select on public.store_members to authenticated;
+grant select, insert, update, delete on public.products to authenticated;
+
+-- service_role: uso administrativo/local (scripts/seed-local.ts),
+-- nunca a partir de uma requisição de usuário — ver lib/supabase/admin.ts
+-- e lib/supabase/env.ts. Tem BYPASSRLS na plataforma Supabase; ainda
+-- assim precisa do GRANT de tabela para poder operar.
+grant select, insert, update, delete
+  on public.stores, public.store_members, public.products
+  to service_role;
