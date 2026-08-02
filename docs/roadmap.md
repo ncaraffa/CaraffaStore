@@ -1,0 +1,37 @@
+# Roadmap
+
+## Fase 0 — Produto e organização
+
+- Definir MVP, arquitetura preliminar e regras de trabalho.
+- Propor divisão dos planos para aprovação.
+- Manter documentação, Loja A, Loja B e matriz de isolamento.
+
+## Fase 1 — Fundação técnica
+
+- Next.js, TypeScript, Supabase, autenticação, lojas e membros.
+- Contexto de tenant, RLS, isolamento, testes e ambientes separados.
+
+## Fase 2 — Loja virtual e painel
+
+- Personalização, produtos, categorias, estoque e loja pública.
+- Carrinho, checkout, pedidos e painel do comerciante.
+
+## Fase 3 — Pix
+
+- Configuração, cobrança, webhooks, confirmação e idempotência.
+- Reserva/baixa de estoque, expiração, logs seguros e testes.
+
+## Fase 4 — SaaS e assinaturas
+
+- Planos de R$ 30, R$ 50 e R$ 80 via Pix.
+- Renovação, vencimento, tolerância, suspensão, reativação e superadmin.
+- Limites de plano somente após aprovação de Caraffa.
+
+## Fase 5 — Recursos comerciais
+
+- Cupons, banners, avaliações, relatórios, chat, domínio próprio, importação e melhorias visuais.
+
+## Fase 6 — Lançamento
+
+- Segurança, QA completo, políticas, termos, privacidade e backup.
+- Monitoramento, onboarding e primeiras lojas piloto.
