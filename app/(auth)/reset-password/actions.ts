@@ -5,8 +5,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { resetPasswordSchema } from "@/lib/auth/schemas";
 import { fieldErrorsFromZod } from "@/lib/auth/form-errors";
 import { isPasswordLeaked } from "@/lib/auth/password-policy";
-import { consumeRecoveryGrant, isCurrentSessionRecovery } from "@/lib/tenant/recovery-session";
-import { GENERIC_UNEXPECTED_ERROR_MESSAGE, RESET_LINK_INVALID_MESSAGE } from "@/lib/auth/messages";
+import { claimRecoveryGrantForPasswordChange, isCurrentSessionRecovery } from "@/lib/tenant/recovery-session";
+import { RESET_LINK_INVALID_MESSAGE } from "@/lib/auth/messages";
 
 export interface ResetPasswordState {
   status: "idle" | "error";
@@ -48,22 +48,32 @@ export async function resetPasswordAction(
     };
   }
 
+  // Reivindicação atômica IMEDIATAMENTE ANTES da troca de senha — nunca
+  // depois (qa/reports/TASK-002-RETEST.md, BUG-RT2-002). O DELETE
+  // condicional dentro da função é o que garante que, sob duas
+  // requisições concorrentes com a mesma sessão, exatamente uma
+  // consegue prosseguir: a segunda encontra 0 linhas (a primeira já
+  // apagou) e recebe `false` aqui, sem nunca chamar updateUser().
+  const claimed = await claimRecoveryGrantForPasswordChange(supabase);
+  if (!claimed) {
+    return { status: "error", message: RESET_LINK_INVALID_MESSAGE };
+  }
+
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
   if (error) {
-    return { status: "error", message: GENERIC_UNEXPECTED_ERROR_MESSAGE };
+    // O grant já foi consumido pela reivindicação acima — não há como
+    // "devolvê-lo" com segurança (reabriria a mesma janela de reuso que
+    // a atomicidade acima fecha). Falha segura: encerra a sessão e exige
+    // uma nova recuperação, em vez de permitir nova tentativa com o
+    // mesmo grant.
+    await supabase.auth.signOut();
+    return { status: "error", message: RESET_LINK_INVALID_MESSAGE };
   }
 
-  // Auditoria via função SECURITY DEFINER (nunca service role — lê
-  // auth.uid() da própria sessão que acabou de trocar a senha).
-  const { error: auditError } = await supabase.rpc("log_password_recovery_completed");
-  if (auditError) {
-    console.error("[reset-password] falha ao registrar auditoria:", auditError.message);
-  }
-
-  // Encerra o contexto especial de recuperação: apaga o grant (dupla
-  // garantia, além do signOut() abaixo) e derruba a sessão — o token não
-  // pode ser reutilizado, e a próxima autenticação exige a senha nova.
-  await consumeRecoveryGrant(supabase);
+  // Auditoria já gravada dentro de claim_recovery_grant_for_password_change()
+  // (mesma transação atômica do consumo do grant) — nenhuma RPC de
+  // auditoria separada e chamável isoladamente existe para este evento
+  // (BUG-RT2-005, qa/reports/TASK-002-RETEST.md).
   await supabase.auth.signOut();
   redirect("/login");
 }

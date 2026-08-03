@@ -948,3 +948,114 @@ Log completo do servidor de desenvolvimento desta sessão e as capturas do Mailp
 5. `npx tsx supabase/tests/slug-concurrency-check.ts`.
 6. Navegador real, sempre `http://127.0.0.1:3000` (nunca `localhost`): repetir as 7 combinações de acesso direto por URL da tabela acima; repetir o fluxo de recuperação completo e confirmar que sessão comum não acessa `/reset-password` e que o link usado não é reaproveitável.
 7. **Esta remediação não deve ser considerada aprovada por esta entrega** — cabe exclusivamente ao QA independente do Júnior decidir o resultado.
+
+## Segunda remediação pós-QA da TASK-002 (2026-08-03) — reteste REPROVADO, corrigido nesta sessão
+
+**Reteste do Júnior:** `qa/reports/TASK-002-RETEST.md` (não alterado — arquivo do Júnior), commit avaliado `104eefb4ec03287b5c70938d829f447de836240d`. Resultado: **REPROVADO**. Os guards de estado (BUG-T2-001) e o fluxo legítimo de recuperação passaram, mas o mecanismo `recovery_grants` era criticamente contornável: qualquer sessão comum inseria a própria linha e ganhava acesso a `/reset-password` (BUG-RT2-001, CRÍTICA); códigos PKCE de confirmação e de recuperação eram intercambiáveis entre `/auth/confirm`/`/auth/recovery` nos dois sentidos (BUG-RT2-003/004, CRÍTICAS); duas trocas de senha concorrentes eram aceitas (BUG-RT2-002, ALTA); RPCs de auditoria eram fabricáveis por qualquer sessão comum (BUG-RT2-005, ALTA); a migração 0004 quebrava sobre dados históricos da 0002 (BUG-RT2-006, ALTA); `ON DELETE SET NULL` em `audit_log.store_id` alterava indiretamente eventos históricos (RESSALVA-RT2-001). Todos corrigidos nesta sessão. **Status ao final: continua REVIEW — esta remediação não se autoaprova; QA independente do Júnior decide.**
+
+### Redesenho: `public.recovery_grants` → `public.auth_flow_grants`
+
+**Causa-raiz comum a BUG-RT2-001/002/003/004:** a primeira correção pós-QA confiava em RLS (`user_id = auth.uid()`) mais um `DEFAULT`/`CHECK` de `session_id` para provar "esta sessão veio de recuperação" — mas `authenticated` tinha `GRANT INSERT` na tabela, então qualquer sessão comum inserida a própria linha diretamente, sem jamais ter passado por um e-mail de recuperação (BUG-RT2-001). Separadamente, `exchangeCodeForSession`/`verifyOtp` do GoTrue devolvem uma sessão válida para QUALQUER código de e-mail legítimo, sem vincular o código à rota Next.js que o consumiu — trocar um código de confirmação em `/auth/recovery` (ou vice-versa) funcionava igual (BUG-RT2-003/004). Não havia `expires_at`/`consumed_at`, então nada impedia reuso/concorrência (BUG-RT2-002).
+
+**Arquitetura final** (`supabase/migrations/0003_recovery_session.sql`, reescrita completa): tabela `public.auth_flow_grants` (`id` uuid, `user_id`, `purpose` — `email_confirmation`\|`password_recovery`, `session_id`, `created_at`, `expires_at` not null, `consumed_at`, unique `(user_id, purpose)`) — **zero GRANT de tabela para `anon`/`authenticated`**, RLS habilitada sem nenhuma policy (ninguém acessa a linha diretamente, nem por engano via RLS mal escrita). Toda a superfície é um punhado de funções `SECURITY DEFINER`, nenhuma aceitando `user_id`/`session_id`/nonce vindo do cliente:
+
+1. **Confirmação de cadastro** — pedido pendente nasce SOZINHO via `TRIGGER AFTER INSERT ON auth.users` (`handle_new_user_confirmation_grant()`, expira em 24h) — só o próprio GoTrue insere ali ao criar um usuário de verdade; não existe RPC de emissão chamável por um cliente.
+2. **Recuperação de senha** — `request_password_recovery_grant(p_email text)` (EXECUTE: `anon`, `authenticated`) resolve o usuário pelo e-mail internamente (anti-enumeração: e-mail sem conta não gera linha nem erro visível) e grava um pedido PENDENTE (expira em 30min) — chamar isto sozinho **não concede nada**, só marca "existe um pedido".
+3. **Ativação** — `consume_auth_flow_grant(p_purpose text)` (EXECUTE só `authenticated`) — chamada pelas rotas logo após uma troca de código real bem-sucedida. UPDATE condicional ATÔMICO num único statement (`user_id = auth.uid() and purpose = p_purpose and consumed_at is null and expires_at > now()`) — sem "consultar depois agir". `false` = nada pendente para este usuário+propósito (sessão comum, código de finalidade errada, expirado ou já consumido). A auditoria de `email_verification_completed` é gravada DENTRO do mesmo UPDATE — sem exception handler ao redor, então uma falha no insert desfaz também o consumo do grant (rollback completo, provado no Caso 24 do SQL real).
+4. **Reivindicação da troca de senha** — `claim_recovery_grant_for_password_change()` (EXECUTE só `authenticated`, zero parâmetros) — DELETE condicional atômico (`consumed_at is not null and expires_at > now()`), chamado IMEDIATAMENTE ANTES de `updateUser({password})`, nunca depois. Sob duas requisições concorrentes com a mesma sessão, o lock de linha do Postgres serializa as duas: só uma encontra a linha ainda presente. Grava `password_recovery_completed` no mesmo DELETE atômico.
+5. **Leitura** — `is_current_session_recovery_grant()` (EXECUTE só `authenticated`, zero parâmetros) — usada por `lib/tenant/recovery-session.ts`/guards/`proxy.ts`; só `true` entre o consumo (passo 3) e a reivindicação (passo 4).
+
+**Como as rotas usam isso** (`app/auth/confirm/route.ts`/`app/auth/recovery/route.ts`, reescritas): depois de `exchangeCodeForSession`/`verifyOtp` bem-sucedido, chamam `consume_auth_flow_grant` com o `purpose` fixo da PRÓPRIA rota (`email_confirmation`/`password_recovery`). Se `false` — código de finalidade incompatível, ou nada pendente — a rota chama `supabase.auth.signOut()` IMEDIATAMENTE antes de redirecionar para `/login?error=invalid_link`: nenhuma sessão sobrevive a uma troca de finalidade incompatível, nos dois sentidos. Também corrigido um bug de cookies nas duas rotas: o padrão anterior recriava `NextResponse.redirect(...)` a cada chamada de `setAll`, perdendo cookies de uma chamada anterior sempre que `setAll` disparava mais de uma vez (ex.: exchange seguido de signOut) — agora os cookies são acumulados numa lista e aplicados numa ÚNICA resposta final, construída só no `return`.
+
+**Consumo atômico, explicado:** a "prova não fabricável" não depende de nenhum nonce apresentado pelo cliente numa URL — vem inteira do banco: `auth.uid()` (a sessão JÁ provou identidade ao GoTrue) cruzado com uma linha PENDENTE que só um mecanismo interno (trigger/função restrita a um propósito) pôde ter criado. Isso evita a superfície adicional de "aceitar um nonce como parâmetro", que — se mal desenhada — reabriria a mesma classe de bug ao permitir registrar um grant para um `user_id` arbitrário escolhido pelo cliente.
+
+### BUG-RT2-005 — RPCs de auditoria fabricáveis
+
+**Causa-raiz:** `log_email_verification_completed()`/`log_password_recovery_completed()` só exigiam `auth.uid()` não nulo — qualquer sessão comum as chamava diretamente e fabricava os dois eventos.
+
+**Correção:** as duas funções foram REMOVIDAS (`drop function`, em `supabase/migrations/0004_account_audit.sql`). A auditoria agora acontece DENTRO das funções atômicas de `0003_recovery_session.sql` (passos 3 e 4 acima) — não existe mais nenhuma RPC de auditoria isolada e chamável diretamente por um cliente para estes dois eventos.
+
+### BUG-RT2-006 — migração 0004 quebrava sobre dados históricos da 0002
+
+**Causa-raiz:** a versão anterior de `0004_account_audit.sql` fazia `drop constraint audit_log_action_check` + `add constraint ... check (action in (...))` REMOVENDO `'signup_completed'`/`'password_recovery_requested'` do conjunto permitido. Um banco com linhas históricas gravadas sob a 0002 (que já permitia esses dois valores) quebrava com `check_violation` ao aplicar essa migração.
+
+**Correção:** a migração corrigida NÃO toca mais em `audit_log_action_check` — o conjunto definido em `0002_auth_onboarding.sql` já inclui TODOS os valores necessários (inclusive `email_verification_completed`/`password_recovery_completed`, já usados desde a primeira correção pós-QA), então não há nada a estreitar nem a alargar. Nenhum evento histórico é apagado, alterado ou reinterpretado — a aplicação só para de ESCREVER os dois valores antigos (já não escrevia desde a primeira correção), mas eles continuam válidos para qualquer linha antiga existente.
+
+**Validado com teste real de upgrade** (`supabase/tests/migration-upgrade-check.sh`, novo): move 0003/0004 para fora → `supabase db reset` (só 0001+0002 aplicadas) → insere uma linha real com `action='signup_completed'` → devolve 0003/0004 → `supabase migration up` (aplica sobre o banco JÁ POPULADO, sem resetar — o caminho real de upgrade) → confirma: sem erro, linha histórica sobrevive INTACTA, as 4 funções novas existem e respondem, `audit_log_store_id_fkey` está `ON DELETE RESTRICT`. **PASS** em execução real.
+
+### RESSALVA-RT2-001 — `ON DELETE SET NULL` alterava auditoria histórica
+
+**Causa-raiz:** `audit_log.store_id` usava `on delete set null` — apagar uma loja (via `service_role`) alterava retroativamente uma linha histórica de auditoria (`store_id` virava `NULL`), contradizendo "append-only": auditoria verdadeiramente imutável não pode ser afetada nem indiretamente por uma operação em outra tabela.
+
+**Correção:** `alter table ... drop constraint audit_log_store_id_fkey, add constraint ... foreign key (store_id) references public.stores (id) on delete restrict`. Excluir uma loja com histórico de auditoria associado agora é bloqueado pelo próprio banco (`foreign_key_violation`), em vez de silenciosamente mutar o evento histórico — validado no Caso 25 do SQL real (cria loja temporária, grava evento referenciando-a, tenta excluir a loja — bloqueado).
+
+### Testes de regressão adicionados/reescritos
+
+| Item | O que cobre |
+|---|---|
+| `supabase/migrations/0003_recovery_session.privileges.test.ts` (reescrito) | Zero GRANT de tabela a anon/authenticated; RLS sem policy; nenhuma função aceita user_id/session_id/nonce do cliente; EXECUTE correto por função; atomicidade (UPDATE/DELETE condicionais únicos); auditoria sem exception handler ao redor (rollback completo); SECURITY DEFINER + search_path vazio nas 5 funções |
+| `supabase/migrations/0004_account_audit.privileges.test.ts` (reescrito) | Não estreita `audit_log_action_check`; `ON DELETE RESTRICT` em vez de `SET NULL`; as duas RPCs de auditoria antigas foram removidas |
+| `supabase/tests/onboarding_isolation_check.sql` (Casos 17–26, substituem os antigos 17–21) | INSERT direto bloqueado (17); pedido pendente sozinho não concede acesso (18); auto-fabricação via `consume_auth_flow_grant` sem pedido pendente falha e não grava auditoria (19); grant expirado falha (20); grant consumido não é reutilizável (21); usuário incompatível falha (22); claim sem consumo prévio falha + ciclo completo pendente→consumido→reivindicado (23); falha obrigatória de auditoria propaga exceção E desfaz o UPDATE do grant — atomicidade real, testada com um gatilho temporário dentro de um savepoint (24); `ON DELETE RESTRICT` bloqueia exclusão de loja com histórico (25); `audit_log` append-only para authenticated e service_role (26, reaproveita o antigo 21) |
+| `supabase/tests/recovery-claim-concurrency-check.ts` (novo) | Duas requisições reais e concorrentes (mesmo access/refresh token, duas conexões HTTP independentes) chamando `claim_recovery_grant_for_password_change()` — exatamente uma autorização, exatamente um evento de auditoria |
+| `supabase/tests/auth-flow-purpose-check.ts` (novo) | Ponta a ponta real (Next.js + Supabase + Mailpit + PKCE real): código de confirmação em `/auth/recovery` falha e não deixa sessão viva; confirmação legítima continua funcionando; código de recuperação em `/auth/confirm` falha e não deixa sessão viva; recuperação legítima continua funcionando |
+| `supabase/tests/migration-upgrade-check.sh` (novo) | Upgrade real desde a 0002 (com dado histórico) até o schema final — ver BUG-RT2-006 acima |
+| `lib/tenant/recovery-session.test.ts` (reescrito) | `isCurrentSessionRecovery`/`claimRecoveryGrantForPasswordChange` via mock de RPC; assinatura de função sem parâmetro algum (requisito 14 do reteste) |
+| `lib/auth/jwt.ts`/`jwt.test.ts` | **Removidos** — decodificação de JWT no cliente não é mais necessária (toda a lógica de sessão/propósito vive nas funções `SECURITY DEFINER`, via `auth.uid()`/`auth.jwt()` server-side) |
+
+**Total de testes automatizados (`npm test`): 217/217** (era 213 antes desta rodada; 22 arquivos, um a menos que antes por causa da remoção de `jwt.test.ts`, mas com mais casos nos arquivos que cresceram).
+
+### Resultados dos gates
+
+| Gate | Comando | Resultado |
+|---|---|---|
+| Lint | `npm run lint` | OK, sem erros |
+| Typecheck | `npx tsc --noEmit` | OK, sem erros |
+| Testes | `npm test` | **217/217** passando (22 arquivos) |
+| Build | `npm run build` | OK, `/auth/confirm` e `/auth/recovery` continuam rotas separadas |
+| `npm audit` | `npm audit` | 0 vulnerabilidades |
+| `npm audit --omit=dev` | `npm audit --omit=dev` | 0 vulnerabilidades |
+
+### Validação real (Docker/Supabase, múltiplos ciclos de reset completo)
+
+- `supabase/tests/isolation_check.sql` (TASK-001, regressão): **7/7 PASS**.
+- `supabase/tests/onboarding_isolation_check.sql` (26 cenários): **37/37 asserts PASS**, 0 FAIL, 0 ERROR.
+- `supabase/tests/slug-concurrency-check.ts`: PASS (exatamente 1 sucesso, 1 falha `slug_taken`, 1 loja gravada).
+- `supabase/tests/recovery-claim-concurrency-check.ts` (novo): PASS (exatamente 1 autorização, exatamente 1 evento de auditoria, sob corrida real com o mesmo token em duas conexões independentes).
+- `supabase/tests/auth-flow-purpose-check.ts` (novo, ponta a ponta real com Next.js rodando): **4/4 PASS** — código de confirmação rejeitado em `/auth/recovery` sem deixar sessão viva; confirmação legítima funciona; código de recuperação rejeitado em `/auth/confirm` sem deixar sessão viva; recuperação legítima funciona.
+- `supabase/tests/migration-upgrade-check.sh` (novo): PASS — upgrade real desde a 0002 com dado histórico, sem erro, dado preservado, schema final funcional.
+- **Navegador real**: cadastro → confirmação real via Mailpit → onboarding; sessão comum bloqueada de `GET /reset-password` (mesma reprodução exata do BUG-RT2-001); recuperação real via Mailpit → `/reset-password` → senha trocada → login com a senha nova funciona.
+
+### Scan de segredos
+
+Log completo do servidor de desenvolvimento desta sessão e do container do GoTrue (`docker logs supabase_auth_...`) revisados — buscas automatizadas por `password|bearer|authorization|service_role_key` e inspeção manual: **nenhuma ocorrência**. Mesmo item de transparência já documentado (não novo): o log padrão do `next dev` inclui o `code` PKCE de uso único na linha de acesso — comportamento do framework, código de uso único, inútil sem o `code_verifier` correspondente.
+
+### Privilégios SQL — resumo do que foi revogado/concedido nesta rodada
+
+| Objeto | Antes | Depois |
+|---|---|---|
+| `public.recovery_grants` (tabela) | `authenticated`: SELECT/INSERT/UPDATE/DELETE (via RLS "own row") | **Removida** — substituída por `public.auth_flow_grants` |
+| `public.auth_flow_grants` (tabela) | — | **Zero grant** para `anon`/`authenticated`; `service_role`: SELECT/INSERT/UPDATE/DELETE (uso administrativo, RLS sem policy) |
+| `request_password_recovery_grant(text)` | — | EXECUTE: `anon`, `authenticated` |
+| `consume_auth_flow_grant(text)` | — | EXECUTE: `authenticated` (nunca `anon`) |
+| `claim_recovery_grant_for_password_change()` | — | EXECUTE: `authenticated` (nunca `anon`) |
+| `is_current_session_recovery_grant()` | — | EXECUTE: `authenticated` (nunca `anon`) |
+| `handle_new_user_confirmation_grant()` (trigger) | — | Nenhum EXECUTE direto — só invocável pelo próprio mecanismo de trigger em `auth.users` |
+| `log_email_verification_completed()` / `log_password_recovery_completed()` | EXECUTE: `authenticated` | **Removidas** (`drop function`) |
+| `audit_log_action_check` | Estreitada pela 0004 anterior (removia 2 valores) | **Inalterada** desde a 0002 (bloqueador 6) |
+| `audit_log.store_id` FK | `on delete set null` | `on delete restrict` |
+
+### Limitações restantes (não bloqueantes, inalteradas desde a rodada anterior)
+
+- Rate limiting em memória por padrão; CAPTCHA/HIBP desativados local; `app/dashboard` placeholder; `TRUSTED_PROXY_ENABLED` precisa do cabeçalho certo antes de deploy atrás de proxy real. Rate limiter distribuído, Redis, CAPTCHA e HIBP explicitamente fora do escopo desta rodada.
+
+### Instruções para o próximo QA do Júnior
+
+1. Commit a validar: hash informado ao final desta sessão (`git log feat/TASK-002-auth-onboarding`).
+2. `npx supabase stop && npx supabase start` seguido de `npx supabase db reset --local && npm run seed:local` (reinício completo necessário — `supabase stop` sem `--no-backup` pode restaurar um backup em vez de aplicar as migrações atuais; `db reset --local` garante reconstrução a partir dos arquivos de migração correntes).
+3. `npm run lint && npx tsc --noEmit && npm test && npm run build && npm audit && npm audit --omit=dev`.
+4. `docker exec -i <container_postgres> psql -U postgres -d postgres -f supabase/tests/isolation_check.sql` (7/7 esperado, requer substituir os 3 placeholders de UUID pelos IDs impressos por `npm run seed:local`) e `-f supabase/tests/onboarding_isolation_check.sql` (26 cenários, todos PASS).
+5. `npx tsx supabase/tests/slug-concurrency-check.ts` e `npx tsx supabase/tests/recovery-claim-concurrency-check.ts`.
+6. Com o Next.js rodando (`npm run dev -- --port 3000`): `npx tsx supabase/tests/auth-flow-purpose-check.ts` (4/4 esperado).
+7. `bash supabase/tests/migration-upgrade-check.sh` (requer bash/Docker; restaura o ambiente ao final).
+8. Navegador real, sempre `http://127.0.0.1:3000`: repetir a reprodução exata do BUG-RT2-001 (sessão comum → `GET /reset-password` → deve mostrar "Link inválido"), e o fluxo completo de recuperação via Mailpit.
+9. **Esta remediação não deve ser considerada aprovada por esta entrega** — cabe exclusivamente ao QA independente do Júnior decidir o resultado.

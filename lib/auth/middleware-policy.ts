@@ -30,9 +30,11 @@ export const UNVERIFIED_ALLOWED_PATHS = ["/verify", "/logout", "/auth/confirm"];
  * encaminhado, ou a aba ficar aberta depois do clique.
  *
  * `isRecoverySession` aqui vem de lib/tenant/recovery-session.ts
- * (`recovery_grants` + `session_id` do JWT) — NUNCA do claim `amr` do
- * GoTrue, que não distingue recuperação de confirmação de cadastro
- * (confirmado contra o Supabase local real, ver lib/auth/jwt.ts).
+ * (`public.auth_flow_grants`, ativado só depois de uma troca de código
+ * real com finalidade comprovada — ver
+ * supabase/migrations/0003_recovery_session.sql) — NUNCA do claim `amr`
+ * do GoTrue, que não distingue recuperação de confirmação de cadastro
+ * (confirmado contra o Supabase local real).
  */
 export const RECOVERY_SESSION_ALLOWED_PATHS = ["/reset-password", "/logout"];
 

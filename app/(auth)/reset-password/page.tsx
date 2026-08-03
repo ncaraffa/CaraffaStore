@@ -11,10 +11,12 @@ export const dynamic = "force-dynamic";
 /**
  * BUG-T2-002 (qa/reports/TASK-002.md): não basta existir `user` — uma
  * sessão de login normal também tem `user`. Exige um grant de
- * recuperação válido para a sessão ATUAL (lib/tenant/recovery-session.ts,
- * baseado em recovery_grants + session_id do JWT, nunca no claim `amr`
- * nem em `next`). A Server Action repete exatamente esta mesma checagem
- * — a página não é a única barreira.
+ * recuperação ATIVO para a sessão ATUAL (lib/tenant/recovery-session.ts,
+ * baseado em public.auth_flow_grants — só ativado depois de uma troca
+ * de código real com finalidade comprovada, nunca por uma sessão comum
+ * inserindo a própria linha; nem no claim `amr` nem em `next`). A
+ * Server Action repete exatamente esta mesma checagem — a página não é
+ * a única barreira.
  */
 export default async function ResetPasswordPage() {
   const supabase = await createServerSupabaseClient();

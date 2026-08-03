@@ -1,32 +1,31 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 
 /**
  * Callback de RECUPERAÇÃO DE SENHA apenas — confirmação de cadastro tem
- * sua própria rota dedicada (app/auth/confirm/route.ts). Ver o comentário
- * daquela rota para a explicação completa de por que a separação existe
- * (BUG-T2-003, qa/reports/TASK-002.md): é a rota em si, configurada como
- * `redirectTo` só em app/(auth)/forgot-password/actions.ts, que classifica
- * o fluxo — nunca um parâmetro de query.
+ * sua própria rota dedicada (app/auth/confirm/route.ts). Ver o
+ * comentário daquela rota para a explicação completa de por que separar
+ * as ROTAS sozinho não bastava (qa/reports/TASK-002-RETEST.md,
+ * BUG-RT2-003/004): `exchangeCodeForSession`/`verifyOtp` não vinculam o
+ * código à rota que o consumiu.
  *
- * Depois de trocar o código pela sessão, grava um "grant" de recuperação
- * em `recovery_grants` — a prova real, verificada no PRÓXIMO request por
- * lib/tenant/recovery-session.ts, de que esta sessão específica nasceu
- * aqui (não de um login normal). `session_id` é gravado automaticamente
- * a partir do próprio JWT da sessão recém-criada (DEFAULT + CHECK
- * constraint em supabase/migrations/0003_recovery_session.sql) — não há
- * como o cliente influenciar esse valor, mesmo tentando enviá-lo
- * explicitamente.
+ * Depois da troca de código, esta rota exige
+ * `consume_auth_flow_grant('password_recovery')` — só `true` se existir
+ * um pedido de recuperação PENDENTE e não expirado para exatamente este
+ * usuário, criado por `request_password_recovery_grant()`
+ * (app/(auth)/forgot-password/actions.ts) ANTES do e-mail ser
+ * disparado. Um código de CONFIRMAÇÃO de cadastro trocado manualmente
+ * aqui não corresponde a nenhum pedido de recuperação pendente — a
+ * checagem falha e a sessão é encerrada imediatamente (BUG-RT2-003).
  *
- * NÃO usa o claim `amr` do GoTrue para nada disso: confirmado
- * empiricamente contra o Supabase local real que confirmação de
- * cadastro e recuperação de senha produzem o mesmo `amr=[{"method":"otp"}]`
- * — inútil para diferenciar os dois fluxos (ver lib/auth/jwt.ts).
+ * Também fecha BUG-RT2-001 (qa/reports/TASK-002-RETEST.md): não há
+ * nenhuma tabela em que uma sessão comum possa inserir a própria linha
+ * — `consume_auth_flow_grant` só ativa um pedido que JÁ existia antes
+ * desta troca de código, nunca cria um do zero.
  *
- * Sempre redireciona para /reset-password — não há `next` configurável
- * aqui (não sobrou nenhum parâmetro do cliente capaz de influenciar o
- * destino ou a classificação do fluxo).
+ * Sempre redireciona para /reset-password em caso de sucesso — não há
+ * `next` configurável aqui.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -34,7 +33,7 @@ export async function GET(request: NextRequest) {
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type");
 
-  let response = NextResponse.redirect(new URL("/reset-password", request.url));
+  const pendingCookies: { name: string; value: string; options: CookieOptions }[] = [];
 
   const env = getPublicSupabaseEnv();
   const supabase = createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
@@ -46,46 +45,49 @@ export async function GET(request: NextRequest) {
         for (const { name, value } of cookiesToSet) {
           request.cookies.set(name, value);
         }
-        response = NextResponse.redirect(new URL("/reset-password", request.url));
-        for (const { name, value, options } of cookiesToSet) {
-          response.cookies.set(name, value, options);
-        }
+        pendingCookies.push(...cookiesToSet);
       },
     },
   });
 
-  async function afterSuccess() {
-    // Upsert: se já existir um grant anterior (ex.: usuário pediu
-    // recuperação de novo antes de concluir a primeira), substitui pelo
-    // desta sessão nova — nunca acumula grants órfãos de sessões já
-    // encerradas.
-    const { error } = await supabase
-      .from("recovery_grants")
-      .upsert({ user_id: (await supabase.auth.getUser()).data.user!.id }, { onConflict: "user_id" });
-
-    if (error) {
-      // Sem grant gravado, /reset-password vai recusar esta sessão (age
-      // como "link inválido") — comportamento seguro por padrão, não
-      // silenciosamente permissivo. Ainda assim, registra o problema.
-      console.error("[auth/recovery] falha ao gravar recovery_grants:", error.message);
+  function redirectTo(path: string): NextResponse {
+    const target = NextResponse.redirect(new URL(path, request.url));
+    for (const { name, value, options } of pendingCookies) {
+      target.cookies.set(name, value, options);
     }
-
-    return response;
+    return target;
   }
 
-  if (code) {
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error && data.user) {
-      return afterSuccess();
+  async function exchanged(): Promise<boolean> {
+    if (code) {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      return !error && Boolean(data.user);
     }
-  } else if (tokenHash && type === "recovery") {
-    const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-    if (!error && data.user) {
-      return afterSuccess();
+    if (tokenHash && type === "recovery") {
+      const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+      return !error && Boolean(data.user);
     }
+    return false;
   }
 
-  // Código/token ausente/inválido/expirado/reutilizado — sempre a mesma
-  // resposta, sem detalhar o motivo.
-  return NextResponse.redirect(new URL("/login?error=invalid_link", request.url));
+  if (await exchanged()) {
+    const { data: consumed, error: consumeError } = await supabase.rpc("consume_auth_flow_grant", {
+      p_purpose: "password_recovery",
+    });
+
+    if (!consumeError && consumed === true) {
+      return redirectTo("/reset-password");
+    }
+
+    // Código trocado com sucesso, mas sem pedido de recuperação
+    // pendente correspondente (ex.: era um código de confirmação de
+    // cadastro — BUG-RT2-003). Encerra a sessão que a troca acabou de
+    // criar: nada de recuperação foi concedido, nada além disso pode
+    // sobrar.
+    await supabase.auth.signOut();
+  }
+
+  // Código/token ausente/inválido/expirado/reutilizado/de finalidade
+  // incompatível — sempre a mesma resposta, sem detalhar o motivo.
+  return redirectTo("/login?error=invalid_link");
 }

@@ -1,38 +1,41 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 
 /**
  * Callback de confirmação de CADASTRO apenas — recuperação de senha tem
- * sua própria rota dedicada (app/auth/recovery/route.ts). A separação
- * existe porque não há sinal do GoTrue, depois da troca de código, que
- * diga se um `code` PKCE veio de um fluxo de cadastro ou de recuperação
- * — usar um parâmetro de query como `next`/`type` para decidir isso era
- * exatamente o BUG-T2-003 (qa/reports/TASK-002.md): o cliente controla a
- * query string. Com rotas separadas, é a PRÓPRIA ROTA executada —
- * decidida só pelo `emailRedirectTo`/`redirectTo` que o servidor
- * configurou ao disparar o e-mail — que classifica o fluxo, nunca uma
- * entrada do cliente.
+ * sua própria rota dedicada (app/auth/recovery/route.ts).
  *
- * Este cliente Supabase (@supabase/ssr) usa o fluxo PKCE por padrão: o
- * link do e-mail aponta para o `/auth/v1/verify` do GoTrue, que valida o
- * token e redireciona para cá com `?code=...` (não `token_hash`/`type`
- * como no fluxo antigo/implícito) — `exchangeCodeForSession` troca esse
- * código pela sessão. Mantemos `token_hash`/`type=signup` como caminho
- * alternativo só por robustez, caso a configuração de flow mude.
+ * O reteste do Júnior (qa/reports/TASK-002-RETEST.md, BUG-RT2-003/004)
+ * provou que separar as ROTAS não é suficiente: `exchangeCodeForSession`/
+ * `verifyOtp` do GoTrue devolvem uma sessão válida para QUALQUER código
+ * de e-mail legítimo, sem vincular o código à rota Next.js que o
+ * consumiu — um código de RECUPERAÇÃO trocado manualmente aqui também
+ * "funcionava", concedendo uma sessão comum plena (acesso a onboarding
+ * etc.) sem jamais ter passado pela restrição de /reset-password.
  *
- * IMPORTANTE: diferente de Server Components/Actions (onde
- * lib/supabase/server.ts grava cookies via a API ambiente `cookies()` de
- * `next/headers`, mesclada automaticamente na resposta pelo Next.js),
- * este Route Handler retorna seu próprio `NextResponse.redirect(...)`
- * explícito — por isso o cliente Supabase é criado aqui com os cookies
- * vinculados diretamente a ESSE objeto de resposta (mesmo padrão do
- * proxy.ts). Sem isso, a sessão criada pela troca de código nunca chega
- * ao navegador e a próxima requisição (ex.: "/") não a reconhece.
+ * Por isso, depois da troca de código, esta rota exige explicitamente
+ * `consume_auth_flow_grant('email_confirmation')` — só retorna `true`
+ * se existir um pedido de CONFIRMAÇÃO pendente e não expirado para
+ * exatamente este usuário (criado automaticamente por um trigger em
+ * `auth.users` quando a conta foi criada, nunca por uma chamada de
+ * cliente — ver supabase/migrations/0003_recovery_session.sql). Um
+ * código de recuperação, mesmo trocado com sucesso, não corresponde a
+ * nenhum pedido de confirmação pendente — a checagem falha e a sessão
+ * recém-criada é IMEDIATAMENTE encerrada (`signOut()`) antes do
+ * redirecionamento. Nenhuma sessão sobrevive a uma troca de finalidade
+ * incompatível, nos dois sentidos (ver também app/auth/recovery/route.ts).
+ *
+ * IMPORTANTE: diferente de Server Components/Actions, este Route
+ * Handler vincula os cookies diretamente a UM ÚNICO NextResponse final,
+ * construído só no retorno — acumula todo cookie que o Supabase pedir
+ * para gravar (troca de código, signOut) numa lista, em vez de recriar
+ * um NextResponse a cada chamada de `setAll` (o padrão anterior perdia
+ * cookies de uma chamada anterior sempre que `setAll` disparava de
+ * novo, ex.: exchange seguido de signOut).
  *
  * `code`/`token_hash`/a URL completa NUNCA são logados aqui, nem em caso
- * de erro — só o resultado (sucesso/falha) vai para a auditoria, via
- * função SECURITY DEFINER (nunca service role — BUG-T2-004).
+ * de erro.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -40,7 +43,7 @@ export async function GET(request: NextRequest) {
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type");
 
-  let response = NextResponse.redirect(new URL("/", request.url));
+  const pendingCookies: { name: string; value: string; options: CookieOptions }[] = [];
 
   const env = getPublicSupabaseEnv();
   const supabase = createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
@@ -52,40 +55,50 @@ export async function GET(request: NextRequest) {
         for (const { name, value } of cookiesToSet) {
           request.cookies.set(name, value);
         }
-        response = NextResponse.redirect(new URL("/", request.url));
-        for (const { name, value, options } of cookiesToSet) {
-          response.cookies.set(name, value, options);
-        }
+        pendingCookies.push(...cookiesToSet);
       },
     },
   });
 
-  async function afterSuccess() {
-    // Falha ao gravar a auditoria não pode passar em silêncio (era
-    // exatamente o catch vazio do BUG-T2-004), mas também não pode
-    // impedir um cadastro que já foi confirmado com sucesso de
-    // completar — não há "rollback" possível aqui: a confirmação já
-    // aconteceu no GoTrue (sistema externo, transação própria dele).
-    const { error } = await supabase.rpc("log_email_verification_completed");
-    if (error) {
-      console.error("[auth/confirm] falha ao registrar auditoria:", error.message);
+  function redirectTo(path: string): NextResponse {
+    const target = NextResponse.redirect(new URL(path, request.url));
+    for (const { name, value, options } of pendingCookies) {
+      target.cookies.set(name, value, options);
     }
-    return response;
+    return target;
   }
 
-  if (code) {
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error && data.user) {
-      return afterSuccess();
+  async function exchanged(): Promise<boolean> {
+    if (code) {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      return !error && Boolean(data.user);
     }
-  } else if (tokenHash && type === "signup") {
-    const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-    if (!error && data.user) {
-      return afterSuccess();
+    if (tokenHash && type === "signup") {
+      const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+      return !error && Boolean(data.user);
     }
+    return false;
   }
 
-  // Código/token ausente/inválido/expirado/reutilizado — sempre a mesma
-  // resposta, sem detalhar o motivo.
-  return NextResponse.redirect(new URL("/login?error=invalid_link", request.url));
+  if (await exchanged()) {
+    const { data: consumed, error: consumeError } = await supabase.rpc("consume_auth_flow_grant", {
+      p_purpose: "email_confirmation",
+    });
+
+    if (!consumeError && consumed === true) {
+      return redirectTo("/");
+    }
+
+    // Código trocado com sucesso, mas sem pedido de confirmação
+    // pendente correspondente (ex.: era um código de recuperação —
+    // BUG-RT2-004). A auditoria de confirmação já teria sido gravada
+    // dentro de consume_auth_flow_grant se fosse legítimo; aqui não há
+    // nada a fazer além de encerrar a sessão que a troca de código
+    // acabou de criar.
+    await supabase.auth.signOut();
+  }
+
+  // Código/token ausente/inválido/expirado/reutilizado/de finalidade
+  // incompatível — sempre a mesma resposta, sem detalhar o motivo.
+  return redirectTo("/login?error=invalid_link");
 }

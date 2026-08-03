@@ -16,6 +16,7 @@ export type AuditAction =
   | "plan_selected"
   | "onboarding_completed"
   | "access_denied";
+export type AuthFlowGrantPurpose = "email_confirmation" | "password_recovery";
 
 /**
  * Minimal hand-written mirror of `supabase/migrations/0001_init.sql`
@@ -244,21 +245,33 @@ export interface Database {
           },
         ];
       };
-      recovery_grants: {
+      auth_flow_grants: {
         Row: {
+          id: string;
           user_id: string;
-          session_id: string;
+          purpose: AuthFlowGrantPurpose;
+          session_id: string | null;
           created_at: string;
+          expires_at: string;
+          consumed_at: string | null;
         };
         Insert: {
+          id?: string;
           user_id: string;
-          session_id?: string;
+          purpose: AuthFlowGrantPurpose;
+          session_id?: string | null;
           created_at?: string;
+          expires_at: string;
+          consumed_at?: string | null;
         };
         Update: {
+          id?: string;
           user_id?: string;
-          session_id?: string;
+          purpose?: AuthFlowGrantPurpose;
+          session_id?: string | null;
           created_at?: string;
+          expires_at?: string;
+          consumed_at?: string | null;
         };
         Relationships: [];
       };
@@ -293,13 +306,21 @@ export interface Database {
         Args: { p_slug: string };
         Returns: boolean;
       };
-      log_email_verification_completed: {
-        Args: Record<string, never>;
+      request_password_recovery_grant: {
+        Args: { p_email: string };
         Returns: void;
       };
-      log_password_recovery_completed: {
+      consume_auth_flow_grant: {
+        Args: { p_purpose: AuthFlowGrantPurpose };
+        Returns: boolean;
+      };
+      claim_recovery_grant_for_password_change: {
         Args: Record<string, never>;
-        Returns: void;
+        Returns: boolean;
+      };
+      is_current_session_recovery_grant: {
+        Args: Record<string, never>;
+        Returns: boolean;
       };
     };
   };

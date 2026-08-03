@@ -38,9 +38,19 @@ export async function forgotPasswordAction(
 
   try {
     const supabase = await createServerSupabaseClient();
-    // Aponta para a rota DEDICADA de recuperação — é ela (não um `next`
-    // controlável pelo cliente) que classifica o fluxo depois da troca
-    // de código (BUG-T2-003, qa/reports/TASK-002.md). A "solicitação de
+    // Grava o pedido PENDENTE de recuperação ANTES de disparar o
+    // e-mail — é essa linha (supabase/migrations/0003_recovery_session.sql),
+    // não a rota que recebe o `code` depois, que prova a finalidade do
+    // fluxo (qa/reports/TASK-002-RETEST.md, BUG-RT2-001/003): sem um
+    // pedido pendente correspondente, app/auth/recovery/route.ts recusa
+    // o código e encerra a sessão, mesmo que a troca de código em si
+    // tenha sido bem-sucedida. A função resolve o usuário pelo e-mail
+    // internamente (anti-enumeração preservada — nenhuma linha é criada
+    // nem erro aparece para um e-mail sem conta) e não é suficiente
+    // sozinha para conceder acesso a /reset-password.
+    await supabase.rpc("request_password_recovery_grant", { p_email: parsed.data.email });
+
+    // Aponta para a rota DEDICADA de recuperação. A "solicitação de
     // recuperação" em si não é gravada em public.audit_log: o próprio
     // GoTrue já registra isso em auth.audit_log_entries
     // (user_recovery_requested), confirmado contra o Supabase local

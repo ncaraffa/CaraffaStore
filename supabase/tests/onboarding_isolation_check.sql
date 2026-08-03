@@ -25,17 +25,41 @@
 --   4. psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
 --        -v ON_ERROR_STOP=1 -f supabase/tests/onboarding_isolation_check.sql
 --
--- 21 cenários (16 originais + 5 adicionados na correção pós-QA,
--- qa/reports/TASK-002.md) cobrindo: isolamento de onboarding_progress/
--- merchant_profiles/store_plans entre usuários e entre lojas, múltiplos
--- memberships, audit_log inacessível para anon/authenticated, escrita
--- direta forjada em stores/store_members bloqueada (sem GRANT), plano
--- forjado rejeitado pela função, slug bloqueado após conclusão,
--- idempotência do retry, anon bloqueado em TODAS as 7 funções
--- onboarding_* (Caso 16 — RESSALVA-T2-001), session_id de
--- recovery_grants protegido por CHECK contra o JWT (Casos 17–19), e
--- audit_log verdadeiramente append-only + funções de auditoria de conta
--- sem ator forjável (Casos 20–21 — BUG-T2-004).
+-- 26 cenários (16 originais + 5 da primeira correção pós-QA,
+-- qa/reports/TASK-002.md, + 10 da segunda correção pós-QA,
+-- qa/reports/TASK-002-RETEST.md) cobrindo: isolamento de
+-- onboarding_progress/merchant_profiles/store_plans entre usuários e
+-- entre lojas, múltiplos memberships, audit_log inacessível para
+-- anon/authenticated, escrita direta forjada em stores/store_members
+-- bloqueada (sem GRANT), plano forjado rejeitado pela função, slug
+-- bloqueado após conclusão, idempotência do retry, anon bloqueado em
+-- TODAS as 7 funções onboarding_* (Caso 16 — RESSALVA-T2-001).
+--
+-- Casos 17–25 (segunda correção pós-QA, qa/reports/TASK-002-RETEST.md):
+-- `public.auth_flow_grants` (substitui `recovery_grants`) não pode ser
+-- inserida/alterada diretamente por `authenticated` (BUG-RT2-001);
+-- pedido pendente sozinho não concede acesso; tentativa de
+-- auto-fabricação via `consume_auth_flow_grant` sem pedido pendente
+-- falha e não grava auditoria; grant expirado falha; grant consumido
+-- não pode ser reutilizado (BUG-RT2-002); sessão de um usuário não
+-- consome o grant de outro; reivindicar a troca de senha sem ter
+-- consumido antes falha; ciclo completo pendente→consumido→reivindicado
+-- confere em cada etapa; falha obrigatória de auditoria propaga exceção
+-- e desfaz também o consumo do grant (atomicidade real, não
+-- "consultar-depois-agir" — BUG-RT2-005); `ON DELETE RESTRICT` bloqueia
+-- exclusão de loja com histórico de auditoria associado
+-- (RESSALVA-RT2-001, antes `ON DELETE SET NULL` alterava um evento
+-- histórico indiretamente).
+--
+-- Caso 26: audit_log verdadeiramente append-only (nem authenticated nem
+-- service_role alteram/apagam — BUG-T2-004/BUG-RT2-006).
+--
+-- Trocas de código PKCE entre /auth/confirm e /auth/recovery
+-- (BUG-RT2-003/004) e concorrência real de duas trocas de senha
+-- simultâneas (BUG-RT2-002) exigem múltiplas sessões HTTP reais e
+-- independentes — não cabem neste script de uma única sessão psql; ver
+-- supabase/tests/auth-flow-purpose-check.ts e
+-- supabase/tests/recovery-claim-concurrency-check.ts.
 
 \set ON_ERROR_STOP on
 
@@ -483,138 +507,348 @@ end $$;
 rollback to savepoint case_16;
 
 -- ------------------------------------------------------------
--- Caso 17: recovery_grants — session_id é sempre preenchido a partir do
--- JWT da própria requisição (DEFAULT), nunca precisa vir do cliente
--- (correção do BUG-T2-002/003, qa/reports/TASK-002.md).
+-- Caso 17: authenticated não consegue INSERT direto em
+-- auth_flow_grants — nenhum GRANT de tabela concedido, mesmo para a
+-- própria linha (BUG-RT2-001, qa/reports/TASK-002-RETEST.md: a versão
+-- anterior concedia INSERT via RLS "user_id = auth.uid()", permitindo
+-- que qualquer sessão comum fabricasse o próprio grant).
 -- ------------------------------------------------------------
 savepoint case_17;
 set local role authenticated;
-select set_config(
-  'request.jwt.claims',
-  json_build_object(
-    'sub', current_setting('app.merchant_onboarding_id'),
-    'session_id', 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'
-  )::text,
-  true
-);
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_onboarding_id'))::text, true);
 
 do $$
-declare
-  v_session_id uuid;
 begin
-  insert into public.recovery_grants (user_id) values (current_setting('app.merchant_onboarding_id')::uuid);
-  select session_id into v_session_id from public.recovery_grants where user_id = current_setting('app.merchant_onboarding_id')::uuid;
-
-  if v_session_id = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa' then
-    raise notice 'PASS - Caso 17: session_id de recovery_grants preenchido automaticamente a partir do JWT';
-  else
-    raise exception 'FAIL - Caso 17: session_id esperado aaaaaaaa..., obtido %', v_session_id;
-  end if;
+  begin
+    insert into public.auth_flow_grants (user_id, purpose, expires_at)
+      values (current_setting('app.merchant_onboarding_id')::uuid, 'password_recovery', now() + interval '30 minutes');
+    raise exception 'FAIL - Caso 17: insert direto em auth_flow_grants deveria ter sido bloqueado';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 17: authenticated nao consegue inserir diretamente em auth_flow_grants (sem GRANT de tabela)';
+  end;
 end $$;
 rollback to savepoint case_17;
 
 -- ------------------------------------------------------------
--- Caso 18: tentativa de forjar session_id explicitamente no INSERT de
--- recovery_grants -> bloqueada pelo CHECK constraint, não pelo DEFAULT
--- sozinho (o DEFAULT só protege quando a coluna é omitida — testado
--- durante o desenvolvimento que um valor explícito o contorna sem o
--- CHECK).
+-- Caso 18: request_password_recovery_grant() sozinha NÃO concede acesso
+-- a /reset-password — só marca um pedido pendente (consumed_at null).
 -- ------------------------------------------------------------
 savepoint case_18;
+set local role anon;
+select set_config('request.jwt.claims', '', true);
+do $$ begin perform public.request_password_recovery_grant('merchant-pending@example.test'); end $$;
+reset role;
+
 set local role authenticated;
 select set_config(
   'request.jwt.claims',
-  json_build_object(
-    'sub', current_setting('app.merchant_onboarding_id'),
-    'session_id', 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb'
-  )::text,
+  json_build_object('sub', current_setting('app.merchant_pending_id'), 'session_id', '11111111-1111-4111-8111-111111111111')::text,
   true
 );
-
 do $$
+declare
+  v_active boolean;
 begin
-  begin
-    insert into public.recovery_grants (user_id, session_id)
-      values (current_setting('app.merchant_onboarding_id')::uuid, 'cccccccc-3333-4333-8333-cccccccccccc');
-    raise exception 'FAIL - Caso 18: insert com session_id forjado explicitamente foi aceito';
-  exception
-    when check_violation then
-      raise notice 'PASS - Caso 18: CHECK constraint bloqueou session_id forjado (recovery_grants)';
-  end;
+  select public.is_current_session_recovery_grant() into v_active;
+  if v_active = false then
+    raise notice 'PASS - Caso 18: pedido pendente sozinho nao concede acesso a reset-password (consumed_at continua null)';
+  else
+    raise exception 'FAIL - Caso 18: pedido pendente sozinho concedeu acesso indevidamente';
+  end if;
 end $$;
 rollback to savepoint case_18;
 
 -- ------------------------------------------------------------
--- Caso 19: anônimo não acessa recovery_grants (nem select nem insert)
+-- Caso 19: tentativa de auto-fabricação — sessão comum chama
+-- consume_auth_flow_grant('password_recovery') SEM nenhum pedido
+-- pendente correspondente -> false, e nenhuma linha de auditoria é
+-- gravada (BUG-RT2-001/BUG-RT2-005).
 -- ------------------------------------------------------------
 savepoint case_19;
-set local role anon;
-select set_config('request.jwt.claims', '', true);
-
-do $$
-begin
-  begin
-    perform count(*) from public.recovery_grants;
-    raise exception 'FAIL - Caso 19: anonimo leu recovery_grants';
-  exception
-    when insufficient_privilege then
-      raise notice 'PASS - Caso 19: anonimo bloqueado em recovery_grants';
-  end;
-end $$;
-rollback to savepoint case_19;
-
--- ------------------------------------------------------------
--- Caso 20: log_email_verification_completed()/log_password_recovery_completed()
--- gravam actor_user_id = auth.uid() da própria sessão — zero parâmetros,
--- nada para um cliente forjar (correção do BUG-T2-004,
--- qa/reports/TASK-002.md).
--- ------------------------------------------------------------
-savepoint case_20;
 set local role authenticated;
-select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_pending_id'))::text, true);
-
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.admin_a_id'), 'session_id', '22222222-2222-4222-8222-222222222222')::text,
+  true
+);
 do $$
+declare
+  v_result boolean;
 begin
-  perform public.log_email_verification_completed();
-  perform public.log_password_recovery_completed();
+  select public.consume_auth_flow_grant('password_recovery') into v_result;
+  if v_result = false then
+    raise notice 'PASS - Caso 19a: consume_auth_flow_grant sem pedido pendente correspondente devolve false (auto-fabricacao bloqueada)';
+  else
+    raise exception 'FAIL - Caso 19a: consume_auth_flow_grant deveria ter devolvido false';
+  end if;
 end $$;
-
--- audit_log não tem SELECT para authenticated — confere como
--- postgres/superusuario, ainda dentro do savepoint case_20 (as linhas
--- gravadas acima continuam visíveis até o rollback no final do caso).
 reset role;
 do $$
 declare
   qtd int;
 begin
   select count(*) into qtd from public.audit_log
-    where actor_user_id = current_setting('app.merchant_pending_id')::uuid
-      and action in ('email_verification_completed', 'password_recovery_completed')
-      and target_id = current_setting('app.merchant_pending_id');
-  if qtd = 2 then
-    raise notice 'PASS - Caso 20: as duas funcoes de auditoria de conta gravaram com actor_user_id = auth.uid(), sem parametro forjavel';
+    where actor_user_id = current_setting('app.admin_a_id')::uuid and action = 'password_recovery_completed';
+  if qtd = 0 then
+    raise notice 'PASS - Caso 19b: nenhuma linha de auditoria fabricada por uma tentativa sem grant pendente';
   else
-    raise exception 'FAIL - Caso 20: esperado 2 eventos de auditoria de conta, obtido %', qtd;
+    raise exception 'FAIL - Caso 19b: esperado 0 eventos fabricados, obtido %', qtd;
+  end if;
+end $$;
+rollback to savepoint case_19;
+
+-- ------------------------------------------------------------
+-- Caso 20: grant expirado é rejeitado por consume_auth_flow_grant.
+-- ------------------------------------------------------------
+savepoint case_20;
+insert into public.auth_flow_grants (user_id, purpose, expires_at)
+  values (current_setting('app.merchant_multi_id')::uuid, 'password_recovery', now() - interval '1 minute')
+  on conflict (user_id, purpose) do update
+    set expires_at = excluded.expires_at, consumed_at = null, session_id = null, id = gen_random_uuid(), created_at = now();
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_multi_id'), 'session_id', '33333333-3333-4333-8333-333333333333')::text,
+  true
+);
+do $$
+declare
+  v_result boolean;
+begin
+  select public.consume_auth_flow_grant('password_recovery') into v_result;
+  if v_result = false then
+    raise notice 'PASS - Caso 20: grant expirado e rejeitado por consume_auth_flow_grant';
+  else
+    raise exception 'FAIL - Caso 20: grant expirado deveria ter sido rejeitado';
   end if;
 end $$;
 rollback to savepoint case_20;
 
 -- ------------------------------------------------------------
--- Caso 21: audit_log é append-only de verdade — nem authenticated nem
--- service_role conseguem UPDATE/DELETE (correção do BUG-T2-004: antes
--- service_role tinha UPDATE/DELETE, o que contradizia "append-only").
+-- Caso 21: grant consumido não pode ser reutilizado — segunda chamada a
+-- consume_auth_flow_grant com o mesmo pedido devolve false
+-- (BUG-RT2-002).
 -- ------------------------------------------------------------
 savepoint case_21;
+set local role anon;
+select set_config('request.jwt.claims', '', true);
+do $$ begin perform public.request_password_recovery_grant('merchant-multi@example.test'); end $$;
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_multi_id'), 'session_id', '44444444-4444-4444-8444-444444444444')::text,
+  true
+);
+do $$
+declare
+  v_first boolean;
+  v_second boolean;
+begin
+  select public.consume_auth_flow_grant('password_recovery') into v_first;
+  select public.consume_auth_flow_grant('password_recovery') into v_second;
+  if v_first = true and v_second = false then
+    raise notice 'PASS - Caso 21: grant consumido uma vez nao pode ser consumido de novo (segunda chamada devolve false)';
+  else
+    raise exception 'FAIL - Caso 21: esperado true depois false, obtido %/%', v_first, v_second;
+  end if;
+end $$;
+rollback to savepoint case_21;
+
+-- ------------------------------------------------------------
+-- Caso 22: sessão de um usuário não consegue consumir o pedido pendente
+-- de OUTRO usuário (usuário incompatível).
+-- ------------------------------------------------------------
+savepoint case_22;
+set local role anon;
+select set_config('request.jwt.claims', '', true);
+do $$ begin perform public.request_password_recovery_grant('merchant-pending@example.test'); end $$;
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_onboarding_id'), 'session_id', '55555555-5555-4555-8555-555555555555')::text,
+  true
+);
+do $$
+declare
+  v_result boolean;
+begin
+  select public.consume_auth_flow_grant('password_recovery') into v_result;
+  if v_result = false then
+    raise notice 'PASS - Caso 22: sessao de um usuario nao consegue consumir o grant pendente de outro usuario';
+  else
+    raise exception 'FAIL - Caso 22: consumo deveria ter falhado (usuario incompativel)';
+  end if;
+end $$;
+rollback to savepoint case_22;
+
+-- ------------------------------------------------------------
+-- Caso 23: reivindicar a troca de senha sem ter consumido o grant antes
+-- falha; ciclo completo pendente(false) -> consumido(true) ->
+-- reivindicado(false de novo, linha removida) confere em cada etapa.
+-- ------------------------------------------------------------
+savepoint case_23;
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_pending_id'), 'session_id', '66666666-6666-4666-8666-666666666666')::text,
+  true
+);
+do $$
+declare
+  v_claim boolean;
+begin
+  select public.claim_recovery_grant_for_password_change() into v_claim;
+  if v_claim = false then
+    raise notice 'PASS - Caso 23a: reivindicar a troca de senha sem ter consumido o grant antes falha';
+  else
+    raise exception 'FAIL - Caso 23a: claim sem consumo previo deveria ter falhado';
+  end if;
+end $$;
+
+reset role;
+set local role anon;
+select set_config('request.jwt.claims', '', true);
+do $$ begin perform public.request_password_recovery_grant('merchant-pending@example.test'); end $$;
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_pending_id'), 'session_id', '66666666-6666-4666-8666-666666666666')::text,
+  true
+);
+do $$
+declare
+  v_before boolean;
+  v_consumed boolean;
+  v_after boolean;
+  v_claimed boolean;
+  v_final boolean;
+begin
+  select public.is_current_session_recovery_grant() into v_before;
+  select public.consume_auth_flow_grant('password_recovery') into v_consumed;
+  select public.is_current_session_recovery_grant() into v_after;
+  select public.claim_recovery_grant_for_password_change() into v_claimed;
+  select public.is_current_session_recovery_grant() into v_final;
+
+  if v_before = false and v_consumed = true and v_after = true and v_claimed = true and v_final = false then
+    raise notice 'PASS - Caso 23b: ciclo completo pendente(false) -> consumido(true) -> reivindicado(false de novo) confere em cada etapa';
+  else
+    raise exception 'FAIL - Caso 23b: esperado false/true/true/true/false, obtido %/%/%/%/%', v_before, v_consumed, v_after, v_claimed, v_final;
+  end if;
+end $$;
+rollback to savepoint case_23;
+
+-- ------------------------------------------------------------
+-- Caso 24: falha obrigatória de auditoria impede a operação sensível —
+-- um gatilho de teste bloqueia o INSERT em audit_log; a chamada inteira
+-- de consume_auth_flow_grant precisa propagar a exceção (não engolir) E
+-- desfazer também o UPDATE do grant (rollback completo da função, não
+-- só do insert). Reaproveita o pedido de confirmação de e-mail que já
+-- nasce pendente para merchant-onboarding (criado automaticamente pelo
+-- trigger em auth.users no momento do seed, nunca consumido).
+-- ------------------------------------------------------------
+savepoint case_24;
+create or replace function public.__test_block_audit_insert()
+returns trigger
+language plpgsql
+as $$
+begin
+  raise exception 'blocked_for_test';
+end;
+$$;
+create trigger __test_block_audit_insert_trigger
+  before insert on public.audit_log
+  for each row execute function public.__test_block_audit_insert();
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_onboarding_id'), 'session_id', '77777777-7777-4777-8777-777777777777')::text,
+  true
+);
+do $$
+begin
+  begin
+    perform public.consume_auth_flow_grant('email_confirmation');
+    raise exception 'FAIL - Caso 24a: consume_auth_flow_grant deveria ter falhado (gatilho de teste bloqueou o insert em audit_log)';
+  exception
+    when others then
+      if sqlerrm = 'blocked_for_test' then
+        raise notice 'PASS - Caso 24a: falha obrigatoria da auditoria propaga a excecao (nao e engolida)';
+      else
+        raise;
+      end if;
+  end;
+end $$;
+
+reset role;
+do $$
+declare
+  qtd int;
+begin
+  select count(*) into qtd from public.auth_flow_grants
+    where user_id = current_setting('app.merchant_onboarding_id')::uuid
+      and purpose = 'email_confirmation'
+      and consumed_at is null;
+  if qtd = 1 then
+    raise notice 'PASS - Caso 24b: falha na auditoria desfez tambem o UPDATE do grant (consumed_at continua null — rollback completo, nao so do insert)';
+  else
+    raise exception 'FAIL - Caso 24b: esperado 1 grant ainda pendente (rollback completo), obtido %', qtd;
+  end if;
+end $$;
+-- rollback to savepoint desfaz o gatilho/funcao de teste tambem (DDL e transacional).
+rollback to savepoint case_24;
+
+-- ------------------------------------------------------------
+-- Caso 25: ON DELETE RESTRICT bloqueia a exclusão de uma loja com
+-- histórico de auditoria associado — não altera silenciosamente o
+-- evento histórico (RESSALVA-RT2-001: antes, ON DELETE SET NULL
+-- mutava store_id para NULL numa linha de auditoria já gravada).
+-- ------------------------------------------------------------
+savepoint case_25;
+do $$
+declare
+  v_temp_store_id uuid;
+begin
+  insert into public.stores (slug, name, status)
+    values ('loja-teste-restrict-fk', 'Loja Teste Restrict FK', 'onboarding')
+    returning id into v_temp_store_id;
+
+  insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
+    values (current_setting('app.merchant_onboarding_id')::uuid, v_temp_store_id, 'store_created', 'store', v_temp_store_id::text, '{}'::jsonb);
+
+  begin
+    delete from public.stores where id = v_temp_store_id;
+    raise exception 'FAIL - Caso 25: exclusao de loja com historico de auditoria deveria ter sido bloqueada (ON DELETE RESTRICT)';
+  exception
+    when foreign_key_violation then
+      raise notice 'PASS - Caso 25: ON DELETE RESTRICT bloqueou a exclusao da loja — evento historico de auditoria nao pode ser alterado nem indiretamente';
+  end;
+end $$;
+rollback to savepoint case_25;
+
+-- ------------------------------------------------------------
+-- Caso 26: audit_log é append-only de verdade — nem authenticated nem
+-- service_role conseguem UPDATE/DELETE.
+-- ------------------------------------------------------------
+savepoint case_26;
 set local role authenticated;
 select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_pending_id'))::text, true);
 do $$
 begin
   begin
     update public.audit_log set metadata = '{}'::jsonb;
-    raise exception 'FAIL - Caso 21a: authenticated conseguiu UPDATE em audit_log';
+    raise exception 'FAIL - Caso 26a: authenticated conseguiu UPDATE em audit_log';
   exception
     when insufficient_privilege then
-      raise notice 'PASS - Caso 21a: authenticated bloqueado em UPDATE audit_log';
+      raise notice 'PASS - Caso 26a: authenticated bloqueado em UPDATE audit_log';
   end;
 end $$;
 reset role;
@@ -623,20 +857,20 @@ do $$
 begin
   begin
     update public.audit_log set metadata = '{}'::jsonb;
-    raise exception 'FAIL - Caso 21b: service_role conseguiu UPDATE em audit_log';
+    raise exception 'FAIL - Caso 26b: service_role conseguiu UPDATE em audit_log';
   exception
     when insufficient_privilege then
-      raise notice 'PASS - Caso 21b: service_role tambem bloqueado em UPDATE audit_log (append-only real, nem uso administrativo altera)';
+      raise notice 'PASS - Caso 26b: service_role tambem bloqueado em UPDATE audit_log (append-only real, nem uso administrativo altera)';
   end;
   begin
     delete from public.audit_log;
-    raise exception 'FAIL - Caso 21c: service_role conseguiu DELETE em audit_log';
+    raise exception 'FAIL - Caso 26c: service_role conseguiu DELETE em audit_log';
   exception
     when insufficient_privilege then
-      raise notice 'PASS - Caso 21c: service_role tambem bloqueado em DELETE audit_log';
+      raise notice 'PASS - Caso 26c: service_role tambem bloqueado em DELETE audit_log';
   end;
 end $$;
-rollback to savepoint case_21;
+rollback to savepoint case_26;
 
 -- Nenhuma alteração persiste: garante execução repetível a qualquer momento.
 rollback;

@@ -43,9 +43,10 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Distingue sessão de recuperação de senha de sessão normal via
-  // recovery_grants (lib/tenant/recovery-session.ts) — nunca via claim
-  // `amr` do GoTrue, que não diferencia recuperação de confirmação de
-  // cadastro (confirmado contra o Supabase local real).
+  // public.auth_flow_grants (lib/tenant/recovery-session.ts), ativado só
+  // depois de uma troca de código real com finalidade comprovada — nunca
+  // via claim `amr` do GoTrue, que não diferencia recuperação de
+  // confirmação de cadastro (confirmado contra o Supabase local real).
   const isRecovery = user ? await isCurrentSessionRecovery(supabase) : false;
 
   const decision = resolveMiddlewareDecision({
