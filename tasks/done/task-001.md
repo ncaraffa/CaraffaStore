@@ -1,7 +1,9 @@
 # TASK-001 — Fundação do projeto e arquitetura multi-tenant
 
-**Status:** READY  
+**Status:** DONE  
 **Responsável:** Claude Code
+**Branch:** feat/TASK-001-multitenant-foundation (mesclada na `master` via merge --no-ff, histórico preservado)
+**Aprovação final:** `qa/reports/TASK-001-RETEST-4.md` — **APROVADO** pelo Júnior em 2026-08-03, commit testado `83b2e6421370f07e42516fd8c5d0ac62c5f1c061`. 36/36 testes, lint, typecheck, build, `npm audit`/`npm audit --omit=dev` (0 vulnerabilidades), seed idempotente sem vazamento de credenciais em duas execuções, RLS real 7/7 PASS em duas execuções sem estado residual, falha sem `.env.local` sanitizada. Nenhum bloqueador restante. Detalhes completos em `docs/HANDOFF.md`.
 
 ## Objetivo
 
