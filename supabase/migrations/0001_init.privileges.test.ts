@@ -17,7 +17,15 @@ const migrationPath = path.resolve(
   import.meta.dirname,
   "0001_init.sql",
 );
-const raw = readFileSync(migrationPath, "utf8").toLowerCase();
+// Normaliza CRLF -> LF antes de qualquer coisa: com `core.autocrlf=true`
+// (comum no Windows), o Git grava CRLF ao materializar o arquivo num
+// checkout/merge "de verdade" — diferente de quando o arquivo é só
+// escrito por uma ferramenta de edição direto no disco. Sem isso, as
+// asserções abaixo (que dependem de `\n` literal) quebram só por causa
+// do final de linha, não por o SQL estar errado.
+const raw = readFileSync(migrationPath, "utf8")
+  .replace(/\r\n/g, "\n")
+  .toLowerCase();
 
 // Remove comentários de linha (`-- ...`) antes de qualquer asserção —
 // caso contrário, prosa explicativa que menciona termos como "truncate"
