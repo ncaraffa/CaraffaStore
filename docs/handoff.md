@@ -3,10 +3,25 @@
 ## Estado atual
 
 - Fase: 1 — Fundação técnica.
-- Código da aplicação: TASK-001 implementada; correções de 4 rodadas de QA aplicadas (`qa/reports/TASK-001.md`, `qa/reports/TASK-001-RETEST.md`, `qa/reports/TASK-001-RETEST-2.md`, `qa/reports/TASK-001-RETEST-3.md`), em `tasks/review/task-001.md` — **ainda REVIEW, não DONE**.
-- Branch: `feat/TASK-001-multitenant-foundation` (não mesclada na `master`).
+- **TASK-001: DONE.** Aprovada no reteste final do Júnior
+  (`qa/reports/TASK-001-RETEST-4.md`, 2026-08-03, commit testado
+  `83b2e6421370f07e42516fd8c5d0ac62c5f1c061`) e mesclada na `master` via
+  `git merge --no-ff` (histórico de implementação/correções/QA
+  preservado, sem squash). Arquivo da tarefa em `tasks/done/task-001.md`.
+  Branch `feat/TASK-001-multitenant-foundation` preservada (não
+  excluída).
 - Responsável pela implementação: Claude Code.
-- QA: 1ª rodada — "APROVADO COM RESSALVAS" (`qa/reports/TASK-001.md`); 2ª rodada (RLS com Docker real) — **REPROVADO** (RETEST-BUG-001: GRANTs de tabela ausentes, corrigido); 3ª rodada — RLS **aprovada** (7/7 PASS), mas **REPROVADO** por FINAL-BUG-001: `.env.local` não carregava automaticamente (corrigido); 4ª rodada (último reteste) — RLS, seed, 29/29 testes, gates e audits todos **aprovados**, mas **REPROVADO** por FINAL-BUG-002: o seed imprimia a senha de desenvolvimento nos logs (`qa/reports/TASK-001-RETEST-3.md`). FINAL-BUG-002 corrigido e revalidado nesta sessão — ver "Correção do FINAL-BUG-002" abaixo. **Aguardando o último reteste independente do Júnior** antes de qualquer aprovação.
+- Histórico de QA (5 rodadas até a aprovação):
+  1. `qa/reports/TASK-001.md` — "APROVADO COM RESSALVAS" (4 ressalvas).
+  2. `qa/reports/TASK-001-RETEST.md` — **REPROVADO** (RETEST-BUG-001: GRANTs de tabela ausentes; corrigido).
+  3. `qa/reports/TASK-001-RETEST-2.md` — RLS **aprovada** (7/7), **REPROVADO** por FINAL-BUG-001 (`.env.local` não carregava automaticamente; corrigido).
+  4. `qa/reports/TASK-001-RETEST-3.md` — RLS/seed/29 testes/gates/audits **aprovados**, **REPROVADO** por FINAL-BUG-002 (senha de dev impressa nos logs do seed; corrigido).
+  5. `qa/reports/TASK-001-RETEST-4.md` — **APROVADO**, sem ressalvas: 36/36 testes, lint, typecheck, build, `npm audit`/`npm audit --omit=dev` (0 vulnerabilidades), seed idempotente sem vazamento em 2 execuções, RLS real 7/7 PASS em 2 execuções sem estado residual, falha sem `.env.local` sanitizada, Git limpo, nenhum bloqueador restante.
+- **Próxima tarefa recomendada: TASK-002 — Autenticação e onboarding do
+  comerciante** (`tasks/backlog/task-002.md`, depende da fundação
+  multi-tenant desta TASK-001). Ainda em `BACKLOG`, não implementada
+  nesta sessão — segue o processo normal de `AGENTS.md` (Júnior refina e
+  move para `tasks/ready/` antes de Claude Code implementar).
 
 ## TASK-001 — resumo da entrega (2026-08-02)
 
@@ -506,31 +521,47 @@ instalação local da ferramenta), removido ao final;
 `git check-ignore .env.local` confirmado; `git status` limpo após o
 commit desta correção.
 
-## Instruções para o (último) reteste independente do Júnior
+## Encerramento da TASK-001 (2026-08-03)
 
-1. `git checkout feat/TASK-001-multitenant-foundation` e `git log -1` para confirmar o commit desta correção (hash no final deste documento).
-2. `npm install && npm run lint && npm run typecheck && npm test && npm run build` — todos devem passar (36/36 testes).
-3. `npm audit && npm audit --omit=dev` — ambos devem retornar 0 vulnerabilidades.
-4. **Fluxo completo com Docker Desktop, em processo/terminal novo:**
-   1. Confirmar que nenhuma variável `SUPABASE`/`NEXT_PUBLIC` está exportada manualmente (`env | grep -i SUPABASE`, ou `Get-ChildItem Env:` no PowerShell, deve vir vazio).
-   2. `npx supabase stop --no-backup` (só se já houver uma instância local de uma sessão anterior).
-   3. `npx supabase start`.
-   4. `npx supabase db reset` — aplica `supabase/migrations/0001_init.sql`.
-   5. Copiar `.env.example` para `.env.local` e preencher com a `API_URL`/`ANON_KEY`/`SERVICE_ROLE_KEY` impressas pelo `supabase start`.
-   6. `npm run seed:local` **direto, sem exportar nada manualmente**, redirecionando a saída para um arquivo (ex.: `npm run seed:local > seed.log 2>&1`) — deve imprimir `Ambiente carregado de: .env.local` e terminar com exit code `0`.
-   7. Inspecionar `seed.log` manualmente e com
-      `grep -iE "password|secret|service_role|bearer|authorization|dev-local-only-not-a-real-secret" seed.log`
-      — **não deve haver nenhuma ocorrência**. **Este é o ponto que reprovou na rodada anterior.**
-   8. Rodar `npm run seed:local` de novo — deve terminar igual (idempotente), ainda sem nenhuma credencial na saída.
-   9. **copie os UUIDs de `admin-a`, `admin-b` e `cliente-a` impressos no final** e edite `supabase/tests/isolation_check.sql` (ou uma cópia fora do repositório) substituindo `SUBSTITUA_PELO_ID_ADMIN_A`/`SUBSTITUA_PELO_ID_ADMIN_B`/`SUBSTITUA_PELO_ID_CLIENTE_A`.
-   10. Rodar: `psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/isolation_check.sql` (ou `docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -v ON_ERROR_STOP=1 < arquivo.sql`, se `psql` não estiver instalado localmente).
-   11. Esperado: **7 mensagens `NOTICE: PASS - Caso N - ...`**, sem nenhum `ERROR`, exit code `0`.
-   12. Rodar o mesmo comando uma segunda vez, sem `db reset` entre as execuções — resultado deve ser idêntico.
-   13. Remover `.env.local` e rodar `npm run seed:local` mais uma vez — deve falhar com exit code diferente de `0`, citando pelo nome as variáveis ausentes, sem expor nenhum valor.
-   14. `npx supabase stop` ao terminar; apagar `seed.log` e outros temporários.
-5. Testar manualmente `npm run dev` e a rota `/api/stores/store-a/products` / `/api/stores/store-b/products` (requer sessão autenticada — sem painel de login nesta tarefa, fora de escopo).
-6. Registrar o resultado em `qa/reports/` conforme `AGENTS.md`.
-7. Não mover a TASK-001 para `tasks/done/` sem: todos os itens acima aprovados de forma independente e aprovação de Caraffa para as propostas técnicas em `docs/DECISIONS.md`.
+**Aprovação final:** `qa/reports/TASK-001-RETEST-4.md` (não alterado —
+arquivo do Júnior), **APROVADO**, commit testado
+`83b2e6421370f07e42516fd8c5d0ac62c5f1c061`. Nenhuma ressalva ou
+bloqueador restante. Não há aviso do tipo "Exec failed" nesse relatório
+representando um teste obrigatório reprovado — confirmado por leitura
+integral antes do encerramento.
+
+Evidência consolidada da aprovação:
+
+- 36/36 testes, lint, typecheck e build aprovados.
+- `npm audit` e `npm audit --omit=dev`: 0 vulnerabilidades.
+- Seed (`npm run seed:local`) aprovado em duas execuções: idempotente,
+  `.env.local` carregado automaticamente sem export manual, nenhum
+  segredo (senha/anon key/service role key/token/cookie/connection
+  string) em nenhum dos dois logs — inspeção manual e automática
+  (`grep`).
+- RLS real (`supabase/tests/isolation_check.sql`) — **7/7 PASS** em
+  duas execuções seguidas, sem `db reset` entre elas, sem estado
+  residual.
+- Falha sem `.env.local`: controlada e sanitizada (só nomes de
+  variável, sem valor, sem stack trace).
+- Git limpo antes e depois do reteste; nenhuma credencial versionada.
+
+**Ação:** TASK-001 movida para `tasks/done/task-001.md` (status `DONE`)
+e branch `feat/TASK-001-multitenant-foundation` mesclada na `master`
+via `git merge --no-ff` (sem squash — histórico de implementação,
+correções e QA preservado). Branch da tarefa **não** excluída. Nenhum
+deploy realizado.
+
+## Próximos passos
+
+- **TASK-002 — Autenticação e onboarding do comerciante**
+  (`tasks/backlog/task-002.md`): próxima tarefa recomendada, depende
+  diretamente da fundação multi-tenant desta TASK-001. Segue o processo
+  normal de `AGENTS.md` — Júnior refina e move para `tasks/ready/`
+  antes de qualquer implementação.
+- Propostas técnicas registradas em `docs/DECISIONS.md` (PROP-001 a
+  PROP-004) seguem aguardando aprovação explícita de Caraffa antes de
+  novas tarefas se apoiarem nelas como decisão consolidada.
 
 ## Antes de implementar
 

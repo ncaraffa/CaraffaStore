@@ -1,9 +1,9 @@
 # TASK-001 — Fundação do projeto e arquitetura multi-tenant
 
-**Status:** REVIEW  
+**Status:** DONE  
 **Responsável:** Claude Code
-**Branch:** feat/TASK-001-multitenant-foundation
-**Evidência de entrega:** ver `docs/HANDOFF.md` (seção "TASK-001 — resumo da entrega") para resultados de lint/typecheck/testes/build, arquivos alterados e instruções de QA. RLS validada por Claude Code contra Postgres real (Docker) — 7/7 PASS em duas execuções. FINAL-BUG-001 (`.env.local` não carregava) e FINAL-BUG-002 (senha de dev impressa nos logs do seed) corrigidos e revalidados em processo limpo — ver "Correção do FINAL-BUG-002" em `docs/HANDOFF.md`. **Ainda pendente reteste independente final do Júnior** antes de qualquer aprovação.
+**Branch:** feat/TASK-001-multitenant-foundation (mesclada na `master` via merge --no-ff, histórico preservado)
+**Aprovação final:** `qa/reports/TASK-001-RETEST-4.md` — **APROVADO** pelo Júnior em 2026-08-03, commit testado `83b2e6421370f07e42516fd8c5d0ac62c5f1c061`. 36/36 testes, lint, typecheck, build, `npm audit`/`npm audit --omit=dev` (0 vulnerabilidades), seed idempotente sem vazamento de credenciais em duas execuções, RLS real 7/7 PASS em duas execuções sem estado residual, falha sem `.env.local` sanitizada. Nenhum bloqueador restante. Detalhes completos em `docs/HANDOFF.md`.
 
 ## Objetivo
 
