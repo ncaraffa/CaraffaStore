@@ -3,10 +3,10 @@
 ## Estado atual
 
 - Fase: 1 — Fundação técnica.
-- Código da aplicação: TASK-001 implementada; correções de 3 rodadas de QA aplicadas (`qa/reports/TASK-001.md`, `qa/reports/TASK-001-RETEST.md`, `qa/reports/TASK-001-RETEST-2.md`), em `tasks/review/task-001.md` — **ainda REVIEW, não DONE**.
+- Código da aplicação: TASK-001 implementada; correções de 4 rodadas de QA aplicadas (`qa/reports/TASK-001.md`, `qa/reports/TASK-001-RETEST.md`, `qa/reports/TASK-001-RETEST-2.md`, `qa/reports/TASK-001-RETEST-3.md`), em `tasks/review/task-001.md` — **ainda REVIEW, não DONE**.
 - Branch: `feat/TASK-001-multitenant-foundation` (não mesclada na `master`).
 - Responsável pela implementação: Claude Code.
-- QA: 1ª rodada — "APROVADO COM RESSALVAS" (`qa/reports/TASK-001.md`); 2ª rodada (RLS com Docker real) — **REPROVADO** (`qa/reports/TASK-001-RETEST.md`, RETEST-BUG-001: GRANTs de tabela ausentes, corrigido); 3ª rodada (reteste final) — RLS **aprovada** (7/7 PASS), mas **REPROVADO** por FINAL-BUG-001: `npm run seed:local` não carregava `.env.local` automaticamente (`qa/reports/TASK-001-RETEST-2.md`). FINAL-BUG-001 corrigido e revalidado nesta sessão — ver "Correção do FINAL-BUG-001" abaixo. **Aguardando o último reteste independente do Júnior** antes de qualquer aprovação.
+- QA: 1ª rodada — "APROVADO COM RESSALVAS" (`qa/reports/TASK-001.md`); 2ª rodada (RLS com Docker real) — **REPROVADO** (RETEST-BUG-001: GRANTs de tabela ausentes, corrigido); 3ª rodada — RLS **aprovada** (7/7 PASS), mas **REPROVADO** por FINAL-BUG-001: `.env.local` não carregava automaticamente (corrigido); 4ª rodada (último reteste) — RLS, seed, 29/29 testes, gates e audits todos **aprovados**, mas **REPROVADO** por FINAL-BUG-002: o seed imprimia a senha de desenvolvimento nos logs (`qa/reports/TASK-001-RETEST-3.md`). FINAL-BUG-002 corrigido e revalidado nesta sessão — ver "Correção do FINAL-BUG-002" abaixo. **Aguardando o último reteste independente do Júnior** antes de qualquer aprovação.
 
 ## TASK-001 — resumo da entrega (2026-08-02)
 
@@ -51,16 +51,16 @@ contrato (`StoreRepository`) usado em produção. As policies de RLS reais
 um Postgres real nesta execução. Isso é a principal pendência de QA.~~
 
 **Resultados dos gates (rodada mais recente, após correção do
-FINAL-BUG-001 — ver detalhamento abaixo):**
+FINAL-BUG-002 — ver detalhamento abaixo):**
 
 | Gate | Comando | Resultado |
 |---|---|---|
 | Lint | `npm run lint` | OK, sem erros |
 | Typecheck | `npm run typecheck` | OK, sem erros |
-| Testes | `npm test` | **29/29** passando (13 originais + 8 de regressão de privilégios SQL + 8 novos de carregamento de ambiente) |
+| Testes | `npm test` | **36/36** passando (29 anteriores + 7 novos de não-vazamento de credenciais no seed) |
 | Build | `npm run build` | OK, build de produção concluído |
 | RLS real (Docker) | `supabase/tests/isolation_check.sql` | 7/7 PASS, em 2 execuções seguidas, em processo limpo |
-| Seed real (Docker) | `npm run seed:local` | OK, em processo limpo, sem export manual — ver detalhamento abaixo |
+| Seed real (Docker) | `npm run seed:local` | OK, 2 execuções idênticas (idempotente), sem export manual, sem nenhuma credencial na saída — ver detalhamento abaixo |
 
 **Dependências:** `npm audit` e `npm audit --omit=dev` reportam **0
 vulnerabilidades** (correção BUG-003, confirmada novamente nesta rodada).
@@ -376,10 +376,140 @@ foi removido ao final; `git check-ignore .env.local` confirmado; `git
 status` limpo após o commit desta correção; `.env.local` nunca é lido
 por nenhuma rota da aplicação (só por `scripts/seed-local.ts`).
 
+## Correção do FINAL-BUG-002 (2026-08-03) — senha de dev exposta nos logs do seed
+
+Quarto reteste independente do Júnior
+(`qa/reports/TASK-001-RETEST-3.md`, não alterado — arquivo do Júnior):
+**REPROVADO**, mas apenas por este item — `.env.local` carregado
+automaticamente, seed idempotente, RLS 7/7 PASS em duas execuções, 29/29
+testes, lint, typecheck, build e audits já estavam todos aprovados.
+
+### Causa exata
+
+`scripts/seed-local.ts`, última linha de `main()`, imprimia a constante
+`DEV_ONLY_PASSWORD` diretamente:
+
+```ts
+console.log(`\nSenha de dev (não usar fora do ambiente local): ${DEV_ONLY_PASSWORD}`);
+```
+
+Essa senha só existe para satisfazer o parâmetro obrigatório `password`
+do `admin.auth.admin.createUser(...)` do Supabase Auth ao criar os
+usuários fictícios locais — nunca precisava ser exibida.
+
+Verificações adicionais pedidas pelo roteiro (item "antes de alterar"):
+
+- **Outro log que pudesse revelar credenciais:** o `catch` final de
+  `main()` fazia `console.error(error)`, imprimindo o objeto de erro
+  completo. Nenhuma chamada atual joga um segredo dentro de um `Error`,
+  mas um objeto de erro de uma lib HTTP *poderia* carregar detalhes de
+  requisição (ex.: um `Authorization: Bearer <service_role_key>`) em uma
+  propriedade extra — `console.error(error)` imprimiria isso junto.
+  Corrigido por precaução (ver abaixo), mesmo sem uma ocorrência real
+  identificada — é o mesmo tipo de vazamento pedido para investigar.
+- **Objetos completos de usuário do Supabase Auth:** nenhuma chamada
+  atual imprime `data.user`/`existing.users` — confirmado, nada a
+  corrigir aqui.
+- **Valores de ambiente em stack traces:** as únicas mensagens de erro
+  lançadas pelo próprio script (`ensureUser`/`ensureStore`) usam só
+  `error?.message` (texto, nunca o objeto/valor); a validação de env
+  (`lib/supabase/env.ts`) já cita apenas nomes de variável desde o
+  FINAL-BUG-001.
+
+### Arquivos alterados
+
+- **`scripts/seed-output.ts`** (novo): duas funções pequenas e
+  reutilizáveis.
+  - `logSeedSummary(ids)` — a assinatura só aceita identificadores não
+    sensíveis (UUIDs, e-mails via fixtures); não há parâmetro por onde
+    uma senha/token passaria, nem por engano numa edição futura.
+  - `logSeedFailure(error)` — imprime só `error.message` (ou
+    `String(error)` para não-`Error`), nunca o objeto/propriedades
+    extras.
+- **`scripts/seed-local.ts`**: `main()` agora chama `logSeedSummary(...)`
+  em vez de uma sequência de `console.log` com a senha no final;
+  `main().catch(...)` chama `logSeedFailure(error)` em vez de
+  `console.error(error)`. `DEV_ONLY_PASSWORD` continua existindo (ainda
+  necessária para `createUser`), só não é mais impressa em lugar nenhum.
+- **`scripts/seed-output.test.ts`** (novo, 7 testes): regressão do
+  não-vazamento — ver abaixo.
+
+### O que deixou de ser impresso
+
+- A senha de desenvolvimento (`DEV_ONLY_PASSWORD`) — completamente,
+  sem substituição por máscara parcial.
+- O objeto de erro completo no `catch` final (agora só a mensagem).
+
+### O que continua sendo impresso (não sensível)
+
+- `Ambiente carregado de: .env.local` (nome do arquivo, nunca o
+  conteúdo).
+- `Seed local concluído.`
+- Os 6 UUIDs (admin-a, admin-b, cliente-a, cliente-b, store-a, store-b),
+  necessários para preencher `supabase/tests/isolation_check.sql`.
+- Os e-mails fictícios (`admin-a@example.test` etc.) e os nomes lógicos
+  `admin-a`/`admin-b`/`cliente-a`/`cliente-b`.
+
+### Testes de regressão (`scripts/seed-output.test.ts`, 7 casos)
+
+Capturam a saída real de `logSeedSummary`/`logSeedFailure` via
+`vi.spyOn(console, "log"/"error")` — não dependem de Docker nem checam
+strings de documentação, testam o que a função realmente imprime:
+
+1. senha de dev, anon key e service role key (valores conhecidos/fake)
+   nunca aparecem na saída de sucesso;
+2. nenhum padrão `password|secret|service_role|bearer|authorization`
+   aparece na saída de sucesso;
+3. `logSeedFailure` com um `Error` que carrega um token vazado numa
+   propriedade extra (`error.config.headers.Authorization`) — só a
+   mensagem aparece, o token e a palavra "Bearer" não;
+4. `logSeedFailure` com um valor que não é `Error` (objeto solto com uma
+   propriedade `token`) também não vaza essa propriedade;
+5. os 6 UUIDs e os nomes `admin-a`/`admin-b`/`cliente-a` continuam
+   presentes e identificáveis na saída;
+6. a saída de sucesso contém "Seed local concluído" sem nenhuma
+   credencial conhecida;
+7. guarda estática: o código-fonte de `scripts/seed-local.ts` não tem
+   nenhuma linha com `console.*` referenciando `DEV_ONLY_PASSWORD` —
+   trava contra reintrodução acidental do vazamento original.
+
+### Validação real (Docker, processo limpo, sem export manual)
+
+Mesmo fluxo das rodadas anteriores (`stop --no-backup` → `start` →
+`db reset` → `.env.local` novo → `npm run seed:local`), com a saída de
+**ambas** as execuções capturada em arquivo e verificada com `grep -iE
+"password|secret|service_role|bearer|authorization|dev-local-only-not-a-real-secret"`
+e busca literal pelo prefixo JWT das chaves reais (`eyJhbGci...`):
+**nenhuma ocorrência** em nenhum dos dois logs, confirmando tanto
+manualmente (leitura direta) quanto automaticamente (grep).
+
+- Seed execução 1: exit `0`, `Ambiente carregado de: .env.local`, 6
+  UUIDs impressos, nenhuma credencial.
+- Seed execução 2: exit `0`, saída **idêntica** à execução 1 (`diff`
+  confirmou) — idempotente.
+- RLS execução 1: **7/7 PASS**, exit `0`.
+- RLS execução 2 (sem `db reset`): **7/7 PASS**, exit `0`, sem estado
+  residual.
+- Gates: lint, typecheck, **36/36 testes**, build — todos OK.
+- `npm audit` e `npm audit --omit=dev`: **0 vulnerabilidades**.
+- `.env.local` removido e `npm run seed:local` executado de novo: exit
+  `1`, `Seed local falhou: Variável(is) de ambiente ausente(s) ou
+  inválida(s): NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY.
+  ...` — cita só os nomes, nenhum valor, e agora nem mostra mais o stack
+  trace completo (efeito colateral positivo de `logSeedFailure`).
+
+### Segurança
+
+`.env.local` desta validação usava as chaves de demonstração padrão que
+o próprio `supabase start` imprime (públicas, iguais em qualquer
+instalação local da ferramenta), removido ao final;
+`git check-ignore .env.local` confirmado; `git status` limpo após o
+commit desta correção.
+
 ## Instruções para o (último) reteste independente do Júnior
 
 1. `git checkout feat/TASK-001-multitenant-foundation` e `git log -1` para confirmar o commit desta correção (hash no final deste documento).
-2. `npm install && npm run lint && npm run typecheck && npm test && npm run build` — todos devem passar (29/29 testes).
+2. `npm install && npm run lint && npm run typecheck && npm test && npm run build` — todos devem passar (36/36 testes).
 3. `npm audit && npm audit --omit=dev` — ambos devem retornar 0 vulnerabilidades.
 4. **Fluxo completo com Docker Desktop, em processo/terminal novo:**
    1. Confirmar que nenhuma variável `SUPABASE`/`NEXT_PUBLIC` está exportada manualmente (`env | grep -i SUPABASE`, ou `Get-ChildItem Env:` no PowerShell, deve vir vazio).
@@ -387,14 +517,17 @@ por nenhuma rota da aplicação (só por `scripts/seed-local.ts`).
    3. `npx supabase start`.
    4. `npx supabase db reset` — aplica `supabase/migrations/0001_init.sql`.
    5. Copiar `.env.example` para `.env.local` e preencher com a `API_URL`/`ANON_KEY`/`SERVICE_ROLE_KEY` impressas pelo `supabase start`.
-   6. `npm run seed:local` **direto, sem exportar nada manualmente** — deve imprimir `Ambiente carregado de: .env.local` e terminar com exit code `0`. **Este é o ponto que reprovou na rodada anterior.**
-   7. Rodar `npm run seed:local` de novo, sem alterar nada — deve terminar igual (idempotente).
-   8. **copie os UUIDs de `admin-a`, `admin-b` e `cliente-a` impressos no final** e edite `supabase/tests/isolation_check.sql` (ou uma cópia fora do repositório) substituindo `SUBSTITUA_PELO_ID_ADMIN_A`/`SUBSTITUA_PELO_ID_ADMIN_B`/`SUBSTITUA_PELO_ID_CLIENTE_A`.
-   9. Rodar: `psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/isolation_check.sql` (ou `docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -v ON_ERROR_STOP=1 < arquivo.sql`, se `psql` não estiver instalado localmente).
-   10. Esperado: **7 mensagens `NOTICE: PASS - Caso N - ...`**, sem nenhum `ERROR`, exit code `0`.
-   11. Rodar o mesmo comando uma segunda vez, sem `db reset` entre as execuções — resultado deve ser idêntico.
-   12. Remover `.env.local` e rodar `npm run seed:local` mais uma vez — deve falhar com exit code diferente de `0`, citando pelo nome as variáveis ausentes, sem expor nenhum valor.
-   13. `npx supabase stop` ao terminar.
+   6. `npm run seed:local` **direto, sem exportar nada manualmente**, redirecionando a saída para um arquivo (ex.: `npm run seed:local > seed.log 2>&1`) — deve imprimir `Ambiente carregado de: .env.local` e terminar com exit code `0`.
+   7. Inspecionar `seed.log` manualmente e com
+      `grep -iE "password|secret|service_role|bearer|authorization|dev-local-only-not-a-real-secret" seed.log`
+      — **não deve haver nenhuma ocorrência**. **Este é o ponto que reprovou na rodada anterior.**
+   8. Rodar `npm run seed:local` de novo — deve terminar igual (idempotente), ainda sem nenhuma credencial na saída.
+   9. **copie os UUIDs de `admin-a`, `admin-b` e `cliente-a` impressos no final** e edite `supabase/tests/isolation_check.sql` (ou uma cópia fora do repositório) substituindo `SUBSTITUA_PELO_ID_ADMIN_A`/`SUBSTITUA_PELO_ID_ADMIN_B`/`SUBSTITUA_PELO_ID_CLIENTE_A`.
+   10. Rodar: `psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/isolation_check.sql` (ou `docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -v ON_ERROR_STOP=1 < arquivo.sql`, se `psql` não estiver instalado localmente).
+   11. Esperado: **7 mensagens `NOTICE: PASS - Caso N - ...`**, sem nenhum `ERROR`, exit code `0`.
+   12. Rodar o mesmo comando uma segunda vez, sem `db reset` entre as execuções — resultado deve ser idêntico.
+   13. Remover `.env.local` e rodar `npm run seed:local` mais uma vez — deve falhar com exit code diferente de `0`, citando pelo nome as variáveis ausentes, sem expor nenhum valor.
+   14. `npx supabase stop` ao terminar; apagar `seed.log` e outros temporários.
 5. Testar manualmente `npm run dev` e a rota `/api/stores/store-a/products` / `/api/stores/store-b/products` (requer sessão autenticada — sem painel de login nesta tarefa, fora de escopo).
 6. Registrar o resultado em `qa/reports/` conforme `AGENTS.md`.
 7. Não mover a TASK-001 para `tasks/done/` sem: todos os itens acima aprovados de forma independente e aprovação de Caraffa para as propostas técnicas em `docs/DECISIONS.md`.

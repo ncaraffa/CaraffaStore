@@ -12,7 +12,12 @@
 import { loadLocalEnv } from "../lib/env/load-local-env";
 import { createAdminSupabaseClient } from "../lib/supabase/admin";
 import { FIXTURE_PRODUCTS, FIXTURE_STORES, FIXTURE_USERS } from "../lib/data/fixtures";
+import { logSeedFailure, logSeedSummary } from "./seed-output";
 
+// Usada apenas para satisfazer o requisito de senha do Supabase Auth ao
+// criar os usuários fictícios locais — nunca impressa em log (ver
+// scripts/seed-output.ts e qa/reports/TASK-001-RETEST-3.md,
+// FINAL-BUG-002).
 const DEV_ONLY_PASSWORD = "dev-local-only-not-a-real-secret-123!";
 
 async function ensureUser(
@@ -118,18 +123,17 @@ async function main() {
     await ensureProduct(admin, storeId, product.name, product.stock);
   }
 
-  console.log("Seed local concluído.\n");
-  console.log("IDs para uso em supabase/tests/isolation_check.sql:");
-  console.log(`  admin-a (${FIXTURE_USERS.adminA.email}): ${adminAId}`);
-  console.log(`  admin-b (${FIXTURE_USERS.adminB.email}): ${adminBId}`);
-  console.log(`  cliente-a (${FIXTURE_USERS.clienteA.email}): ${clienteAId}`);
-  console.log(`  cliente-b (${FIXTURE_USERS.clienteB.email}): ${clienteBId}`);
-  console.log(`  store-a: ${storeAId}`);
-  console.log(`  store-b: ${storeBId}`);
-  console.log(`\nSenha de dev (não usar fora do ambiente local): ${DEV_ONLY_PASSWORD}`);
+  logSeedSummary({
+    adminAId,
+    adminBId,
+    clienteAId,
+    clienteBId,
+    storeAId,
+    storeBId,
+  });
 }
 
 main().catch((error) => {
-  console.error(error);
+  logSeedFailure(error);
   process.exitCode = 1;
 });
