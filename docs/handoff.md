@@ -648,3 +648,173 @@ Prompt executável para o Claude Code, sem placeholders pendentes: `docs/CLAUDE_
 ### Próxima ação
 
 Claude Code pode implementar a TASK-002 seguindo `tasks/ready/task-002.md` e `docs/CLAUDE_PROMPT_TASK-002.md`, em branch/worktree própria. Ao terminar, deve entregar evidências ao Júnior para QA independente; não pode mover para DONE, fazer merge ou deploy.
+
+## Entrega da TASK-002 — autenticação e onboarding (2026-08-03)
+
+**Status: REVIEW.** Implementada integralmente em branch própria, sem merge, sem deploy, sem Pix/Mercado Pago/cobrança real, sem credenciais reais. Não movida para `tasks/done/`. Aguarda QA independente do Júnior.
+
+- **Branch:** `feat/TASK-002-auth-onboarding`
+- **HEAD-base (master, limpo antes de começar):** `ca2435146b9d3cc63ea589410284e9e14d31c034`
+- **Commit desta entrega:** ver hash informado ao final desta sessão (branch ainda não mesclada; `git log feat/TASK-002-auth-onboarding` mostra o histórico completo).
+- Todas as decisões `T2-DEC-001` a `T2-DEC-011` (`docs/DECISIONS.md`) foram implementadas exatamente como aprovadas — nenhuma reinterpretação ou ampliação de escopo.
+
+### Arquivos e migrações principais
+
+**Migração nova:** `supabase/migrations/0002_auth_onboarding.sql` — mínima, local/dev, reversível (drop das tabelas/funções novas), documentada em comentários:
+- `stores`: + colunas `status` (enum fechado `onboarding|pending_payment|active|suspended`, default `onboarding`) e `whatsapp`.
+- Tabelas novas: `merchant_profiles`, `onboarding_progress`, `store_plans`, `audit_log` — todas com RLS negada por padrão (só `merchant_profiles`/`onboarding_progress`/`store_plans` têm policy de `select` da própria linha/loja; `audit_log` não tem NENHUMA policy nem grant para `anon`/`authenticated`, só `service_role`).
+- Funções `SECURITY DEFINER` (`search_path=''`, grants mínimos, mesmo padrão de `is_store_member`/`is_store_admin` da 0001): `onboarding_ensure_progress`, `onboarding_save_profile`, `onboarding_save_store_name`, `onboarding_save_slug`, `onboarding_save_plan`, `onboarding_complete` (zero parâmetros de negócio — só lê o progresso já validado etapa a etapa), `is_slug_available`. Helpers puros: `normalize_slug`, `is_reserved_slug`, `onboarding_step_rank`/`onboarding_advance_step`.
+- Guarda de regressão por análise estática (mesmo padrão da 0001, RETEST-BUG-001): `supabase/migrations/0002_auth_onboarding.privileges.test.ts` (14 testes, roda em `npm test`, não depende de Docker).
+
+**Camada de aplicação (Next.js App Router):**
+- `proxy.ts` (renomeado de `middleware.ts` — Next.js 16 depreciou a convenção antiga, mesma API) + `lib/auth/middleware-policy.ts`: refresh de sessão SSR, gate de anônimo/não-verificado/sessão-de-recuperação. Lógica pura testável separada do I/O de cookies.
+- `lib/auth/`: `redirects.ts` (allowlist anti-open-redirect), `rate-limit.ts` (limiter em memória por IP+ação), `captcha.ts` (verificação preparada, no-op se desativado), `password-policy.ts` (15–128 chars, sem composição, checagem HIBP opcional), `schemas.ts` (zod), `messages.ts` (textos neutros fixos), `jwt.ts` (leitura do claim `amr` para detectar sessão de recuperação), `site-url.ts`, `action-state.ts`, `form-errors.ts`.
+- `lib/onboarding/`: `service.ts` (wrapper tipado dos RPCs), `steps.ts` (resolução de etapa/retomada), `messages.ts` (mapeamento de erro SQL → texto).
+- `lib/tenant/`: `membership.ts` (matriz de destino por nº de lojas), `store-redirect.ts`, `resolve-optional-store.ts` (reforça `resolveAuthorizedStore` já existente da TASK-001).
+- `lib/audit/log.ts`: auditoria de eventos de conta via cliente service-role (server-only), com `hashForAudit` para não guardar e-mail em texto puro nos eventos de recuperação.
+- `lib/supabase/client.ts`: cliente browser (existe, não usado ainda — todo formulário é Server Action).
+- Rotas: `app/(auth)/{signup,login,verify,forgot-password,reset-password}`, `app/auth/confirm/route.ts` (callback único de confirmação/recuperação, troca de código PKCE), `app/logout/route.ts` (POST-only), `app/onboarding/*` (5 etapas + revisão), `app/select-store`, `app/pending-payment`, `app/suspended`, `app/dashboard` (placeholder), `app/page.tsx` (resolvedor central de redirecionamento).
+- `lib/data/repository.ts`/`supabase-repository.ts`/`fixtures.ts`: `Store` ganhou o campo `status` (extensão mínima da TASK-001, sem quebrar a interface existente).
+- `scripts/seed-local.ts`/`seed-output.ts`: fixtures novas da TASK-002 (ver abaixo).
+- `supabase/config.toml`: `enable_confirmations=true`, `minimum_password_length=15`, `password_requirements=""`, `[auth.rate_limit]` explícito, `[auth.captcha]` preparado/desativado, `additional_redirect_urls` restrito a `/auth/confirm`.
+- `.env.example`: variáveis novas documentadas (`NEXT_PUBLIC_SITE_URL`, `CAPTCHA_*`, `HIBP_PASSWORD_CHECK_ENABLED`).
+
+### Decisões estruturais tomadas nesta implementação (revisão bem-vinda)
+
+- **WhatsApp modelado em `stores.whatsapp`** (não em `merchant_profiles`), pois `docs/PRODUCT.md` já lista WhatsApp como dado de configuração da loja, não do comerciante como pessoa. `merchant_profiles.display_name` guarda só o nome do comerciante.
+- **`onboarding_progress.step`** é só o marcador de "etapa mais avançada alcançada" para fins de retomada — o bloqueio real de salto de etapa vem de cada função `onboarding_save_*` exigir que os campos da etapa anterior já estejam preenchidos (validado no banco, não só na UI). O usuário pode voltar e editar uma etapa já alcançada via `?step=`, nunca avançar além da primeira incompleta (`lib/onboarding/steps.ts`).
+- **Distinção cadastro vs. recuperação no mesmo callback** (`app/auth/confirm/route.ts`): como o fluxo PKCE usa o mesmo `code` de troca para os dois casos, a Server Action de recuperação passa `?next=/reset-password` no próprio `redirectTo` — o GoTrue preserva essa query ao anexar `code`. Validado empiricamente que o GoTrue aceita `redirectTo` com querystring quando a origem+caminho batem com `additional_redirect_urls`.
+- **Rate limiting é em memória, por processo** — suficiente para dev local/MVP de instância única; documentado como pendência para produção multi-instância (precisa de Redis/Upstash compartilhado). Os limites nativos do GoTrue (`[auth.rate_limit]`) continuam valendo como segunda camada independente.
+- **Bloqueio de senha vazada (HIBP)** implementado em nível de aplicação (`lib/auth/password-policy.ts`, k-anonimato — só o prefixo de 5 caracteres do hash sai da máquina), porque o Supabase self-hosted local não expõe essa opção em `config.toml` (só existe nativamente no painel hospedado). Desativado por padrão (depende de rede externa); documentado no `.env.example` e no checklist abaixo.
+
+### Checklist para configuração futura (depende do painel hospedado do Supabase)
+
+Nada abaixo foi validado nesta sessão além da preparação local — precisa de decisão/execução futura fora deste ambiente:
+
+- [ ] **CAPTCHA real** (hCaptcha/Turnstile): criar conta no provedor, preencher `CAPTCHA_SECRET_KEY`/`NEXT_PUBLIC_CAPTCHA_SITE_KEY` e espelhar em `supabase/config.toml [auth.captcha]` (ou no painel hospedado, se for projeto gerenciado). Trocar `CAPTCHA_ENABLED=true`. Requer também adicionar o widget real no HTML dos formulários de cadastro/recuperação (hoje há só um campo oculto vazio).
+- [ ] **Bloqueio de senha vazada nativo do Supabase hospedado**: o painel gerenciado (diferente do self-hosted local) tem uma opção nativa equivalente — avaliar se substitui ou complementa a checagem HIBP em nível de aplicação já implementada.
+- [ ] **SMTP de produção** para envio real de e-mail (local usa Mailpit/Inbucket, que nunca envia e-mail de verdade) — preencher `[auth.email.smtp]`.
+- [ ] **`site_url`/`additional_redirect_urls`** precisam apontar para o domínio real de produção antes de qualquer ambiente compartilhado.
+- [ ] Confirmar qual cabeçalho (`x-forwarded-for` ou outro) o proxy/edge de produção realmente controla, para `lib/auth/rate-limit.ts` (`getClientIp`) não confiar num header que o próprio cliente possa forjar.
+- [ ] Rate limiter em memória → migrar para armazenamento compartilhado (Redis/Upstash) antes de qualquer deploy multi-instância.
+
+### Matriz de estados e redirecionamentos (implementada exatamente como aprovada)
+
+| Situação | Destino |
+|---|---|
+| Anônimo em rota protegida | `/login?next=<destino validado>` |
+| Autenticado não verificado (qualquer rota fora de `/verify`, `/logout`, `/auth/confirm` — inclusive `/login`/`/signup`/`/reset-password`) | `/verify` |
+| Sessão de recuperação de senha (fora de `/reset-password`, `/logout`) | `/reset-password` |
+| Autenticado verificado, sem loja | `/onboarding` (retoma na primeira etapa incompleta) |
+| Autenticado verificado, já é owner (`already_has_store`) | destino conforme status da loja |
+| Uma loja em `onboarding` | `/onboarding` |
+| Uma loja em `pending_payment` | `/pending-payment?store=slug` (informativa, painel bloqueado) |
+| Uma loja `active` | `/dashboard?store=slug` (placeholder — painel real fora do escopo) |
+| Uma loja `suspended` | `/suspended?store=slug` |
+| Múltiplas lojas | `/select-store` (seleção explícita, nunca a primeira silenciosamente) |
+| `?store=` forjado/sem vínculo em qualquer página de estado | redirecionado a `/select-store` (revalida via `resolveAuthorizedStore`, mesma mensagem genérica de "sem acesso") |
+
+### Resultados dos gates
+
+| Gate | Comando | Resultado |
+|---|---|---|
+| Lint | `npm run lint` | OK, sem erros |
+| Typecheck | `npm run typecheck` | OK, sem erros |
+| Testes | `npx vitest run` | **158/158** passando (102 dos módulos novos de auth/onboarding + 14 da guarda de privilégios da 0002 + os 36 herdados da TASK-001, mais os acréscimos da revisão de segurança) |
+| Build | `npm run build` | OK, build de produção concluído (Turbopack) |
+| `npm audit` | `npm audit` | **0 vulnerabilidades** |
+| `npm audit --omit=dev` | `npm audit --omit=dev` | **0 vulnerabilidades** |
+
+Nenhuma dependência nova foi adicionada — mesmo `package.json` da TASK-001 (`@supabase/ssr`, `@supabase/supabase-js`, `zod`, `next`, `react`), já auditado.
+
+### Evidência Supabase/Postgres real (Docker)
+
+**`supabase/tests/isolation_check.sql` (TASK-001, regressão):** 7/7 PASS após `db reset` + reseed com os fixtures novos — sem quebra.
+
+**`supabase/tests/onboarding_isolation_check.sql` (novo, 16 cenários, roda contra Postgres real via Docker, resolve usuários/lojas por e-mail/slug — não depende de colar UUID manualmente):**
+
+| # | Cenário | Resultado |
+|---|---|---|
+| 1 | Usuário lê o próprio `onboarding_progress` | PASS |
+| 2 | `onboarding_progress` de outro usuário invisível mesmo filtrando pelo `user_id` dele | PASS |
+| 3 | Usuário lê o próprio `merchant_profiles` | PASS |
+| 4 | `merchant_profiles` de outro usuário invisível | PASS |
+| 5 | Owner lê o plano da própria loja (`store_plans`) | PASS |
+| 6 | Admin de outra loja não vê o plano de uma loja alheia | PASS |
+| 7 | Usuário com múltiplos memberships vê o plano das 2 lojas vinculadas (não só uma) | PASS |
+| 8 | Anônimo bloqueado em `onboarding_progress`/`merchant_profiles`/`store_plans`/`audit_log` | PASS |
+| 9 | `authenticated` bloqueado em `audit_log` (sem GRANT de select — só `service_role`) | PASS |
+| 10 | INSERT direto forjado em `stores` bloqueado (bypass de `onboarding_complete`) | PASS |
+| 11 | INSERT direto forjado em `store_members` com `role='owner'` bloqueado | PASS |
+| 12 | UPDATE direto forjado em `stores.status` (tentativa de auto-ativação) bloqueado | PASS |
+| 13 | `onboarding_save_plan(999)` (plano forjado fora de 30\|50\|80) rejeitado | PASS |
+| 14 | Slug bloqueado para edição após conclusão do onboarding (T2-DEC-009) | PASS |
+| 15 | Retry de `onboarding_complete()` idempotente — mesma loja, 1 membership `owner`, sem duplicar | PASS |
+| 16 | Anônimo bloqueado em qualquer função `onboarding_*` (sem GRANT EXECUTE) | PASS |
+
+**Concorrência real de slug (`supabase/tests/slug-concurrency-check.ts`, dois usuários reais, duas sessões HTTP independentes, `Promise.all` — não apenas sequencial):** executado 2x, resultado consistente e não-determinístico na ordem do vencedor (prova que é concorrência real, não uma ordem fixa) — exatamente 1 sucesso, exatamente 1 falha com `slug_taken`, exatamente 1 loja gravada no banco em ambas as execuções.
+
+**Testado manualmente ponta a ponta no navegador** (Docker + Mailpit para capturar e-mails reais localmente, sem SMTP/e-mail real): cadastro → e-mail de confirmação capturado no Mailpit → confirmação → onboarding completo (5 etapas incluindo normalização de slug com espaços/maiúsculas/símbolos: `"Loja do Fulano!!"` → `loja-do-fulano`) → `pending_payment` → idempotência (recarregar `/onboarding` após concluído redireciona, não reexibe o formulário) → logout → login com senha errada (mensagem genérica idêntica) → login correto → recuperação de senha completa (e-mail capturado no Mailpit, sessão de recuperação restrita a `/reset-password`/`/logout`, troca de senha, login com a senha nova).
+
+### Achados da revisão de segurança independente e correções aplicadas
+
+Revisão adversarial dedicada (subagente independente, sem acesso ao raciocínio da implementação) sobre toda a superfície de auth/RLS/callbacks/tokens. Resultado: **nenhum CRITICAL, nenhum HIGH**. 3 MEDIUM encontrados e corrigidos nesta sessão:
+
+1. **Usuário autenticado não verificado conseguia acessar `/login`, `/signup`, `/forgot-password`, `/reset-password`** (rotas públicas para anônimo também liberavam sessão não verificada, contrariando T2-DEC-002 — inclusive permitindo trocar a senha em `/reset-password` sem confirmar o e-mail). **Corrigido**: `lib/auth/middleware-policy.ts` agora checa restrições de sessão autenticada (não-verificada/recuperação) *antes* de `PUBLIC_PATHS`, não depois.
+2. **Sessão de recuperação de senha era uma sessão autenticada comum, sem restrição de rota** — clicar o link de recuperação e depois navegar para `/dashboard`/`/onboarding` (computador compartilhado, aba deixada aberta, e-mail encaminhado) dava acesso total à conta, não só à troca de senha. **Corrigido**: `lib/auth/jwt.ts` (novo) decodifica o claim `amr` do access token para detectar `method: "recovery"`; `proxy.ts`/`lib/auth/middleware-policy.ts` restringem essa sessão a `/reset-password` e `/logout`. Validado manualmente no navegador (ver evidência acima) e com 4 testes automatizados novos.
+3. **Checagem de senha vazada (HIBP) rodava antes da verificação de sessão** em `/reset-password` — um visitante sem sessão de recuperação válida ainda disparava a chamada de rede externa (quando `HIBP_PASSWORD_CHECK_ENABLED=true`). **Corrigido**: reordenado para checar a sessão primeiro.
+
+Achados LOW/INFO (aceitos, documentados, não bloqueantes): hash de e-mail em `audit_log` sem pepper (impacto baixo — tabela só acessível por `service_role`); `is_slug_available()` concedida mas não chamada por nenhuma UI ainda (superfície não usada, sem exploração possível); `console.error(error)` bruto em `app/api/stores/[storeSlug]/products/route.ts` é código pré-existente da TASK-001, fora do escopo desta revisão.
+
+**Nota de transparência:** durante o desenvolvimento, um `console.error` temporário chegou a imprimir cookies/JWT de sessão no terminal local para depurar um bug real de propagação de cookie em Route Handler (ver próxima seção). Foi identificado como problema de higiene mesmo sendo saída de terminal local/dev, e removido antes de finalizar — confirmado por leitura do código-fonte final e por uma captura de log limpa (cadastro→confirmação→onboarding) sem nenhuma ocorrência de `password|secret|service_role|bearer|authorization|eyJ|base64-` depois da remoção.
+
+### Bugs reais encontrados e corrigidos durante a implementação (não achados de segurança, bugs de funcionamento)
+
+1. Arquivos `"use server"` só podem exportar funções async — as constantes `initialXState` exportadas junto com as Server Actions quebravam em runtime ("A 'use server' file can only export async functions, found object"). Movidas para `lib/auth/action-state.ts` (fora de qualquer arquivo `"use server"`).
+2. `app/auth/confirm/route.ts` assumia o fluxo antigo (`token_hash`+`type`), mas esta versão do `@supabase/ssr` usa PKCE por padrão — o GoTrue redireciona com `?code=...`. Corrigido para `exchangeCodeForSession`, com `token_hash`/`type` mantido como caminho alternativo por robustez.
+3. Cookies de sessão da troca de código não chegavam ao navegador: o Route Handler usava o helper `createServerSupabaseClient()` (pensado para Server Components/Actions, grava via `cookies()` ambiente do `next/headers`) em vez de vincular os cookies diretamente ao `NextResponse` retornado. Corrigido seguindo o mesmo padrão de `proxy.ts` (cliente Supabase criado com cookies vinculados à resposta explícita).
+4. Comentário JSDoc continha `*/` no meio do texto (`onboarding_save_*/onboarding_ensure_progress`), fechando o comentário cedo e quebrando o parse de `scripts/seed-local.ts`.
+5. `getPublicSupabaseEnv()` lançava antes de qualquer chamada a `cookies()`, então o Next.js tentava pré-renderizar páginas de auth estaticamente no build e falhava sem variáveis de ambiente presentes. Corrigido com `export const dynamic = "force-dynamic"` em toda página que lê sessão por requisição.
+6. `store_plans` das fixtures `store-a`/`store-b` (TASK-001) não existiam, quebrando o teste de múltiplos memberships (uma loja `active` sem plano nunca aconteceria de verdade, já que `active` só existe depois de onboarding). Fixtures corrigidas para incluir plano nas lojas A/B.
+
+### Riscos e limitações conhecidos (não bloqueantes, documentados)
+
+- Rate limiting em memória, por processo — não sobrevive a múltiplas instâncias/restart. Ver checklist de produção acima.
+- CAPTCHA e HIBP preparados mas desativados no dev local (dependem de configuração externa/rede).
+- `app/dashboard` é só um placeholder de guard — painel operacional real é explicitamente fora do escopo da TASK-002.
+- Auditoria (`audit_log`) não tem nenhuma UI de leitura nesta tarefa — só existe para registro mínimo, consulta seria via `service_role` direto.
+
+### Roteiro reproduzível de QA
+
+```bash
+git checkout feat/TASK-002-auth-onboarding
+npm install
+npx supabase start
+npx supabase db reset
+npm run seed:local
+npm run lint && npm run typecheck && npx vitest run && npm run build
+npm audit && npm audit --omit=dev
+
+# RLS/atomicidade/idempotência reais (Postgres via Docker):
+docker exec -i <container_postgres> psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  -f supabase/tests/isolation_check.sql          # 7/7 PASS esperado (regressão TASK-001)
+docker exec -i <container_postgres> psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  -f supabase/tests/onboarding_isolation_check.sql   # 16/16 PASS esperado
+npx tsx supabase/tests/slug-concurrency-check.ts     # PASS esperado (idempotente, roda quantas vezes quiser)
+
+# Fluxo real no navegador (Mailpit em http://127.0.0.1:54324 para capturar e-mails):
+npm run dev -- --port 3000
+# abrir http://127.0.0.1:3000/signup (usar 127.0.0.1, não localhost — precisa bater com
+# NEXT_PUBLIC_SITE_URL/additional_redirect_urls do supabase/config.toml, senão o cookie
+# de sessão não é reconhecido entre a origem do e-mail de confirmação e o app)
+```
+
+Usuários fixture disponíveis após `npm run seed:local` (senha de todos: a mesma constante `DEV_ONLY_PASSWORD` de `scripts/seed-local.ts`, nunca impressa em log): `admin-a@example.test`/`admin-b@example.test` (staff das lojas `active` A/B), `merchant-onboarding@example.test` (meio do onboarding, parado na etapa slug), `merchant-pending@example.test` (loja `pending_payment` completa), `merchant-suspended@example.test` (loja `suspended`), `merchant-multi@example.test` (owner de uma loja + staff de `store-a`, para testar o seletor de múltiplas lojas).
+
+### Confirmações explícitas
+
+- Nenhum merge na `master` foi feito.
+- Nenhum deploy foi realizado.
+- Nenhuma cobrança, Pix, QR Code ou integração Mercado Pago real foi implementada ou simulada.
+- Nenhuma credencial real foi usada — só as chaves de demonstração padrão do Supabase local (mesmas de qualquer instalação `supabase start`, já usadas e documentadas desde a TASK-001).
+- `tasks/in-progress/task-002.md` está com status `IN_PROGRESS` → será atualizado para `REVIEW` nesta mesma sessão, não `DONE`.

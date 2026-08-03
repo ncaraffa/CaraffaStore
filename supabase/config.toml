@@ -14,7 +14,40 @@ port = 54323
 [auth]
 enabled = true
 site_url = "http://127.0.0.1:3000"
+# Único destino real usado como emailRedirectTo (cadastro E recuperação
+# apontam para o mesmo callback, que distingue por `type` na query). O
+# app também valida contra sua própria allowlist (lib/auth/redirects.ts)
+# — defesa em profundidade, este arquivo não é a única barreira contra
+# open redirect.
+additional_redirect_urls = ["http://127.0.0.1:3000/auth/confirm"]
+
+# T2-DEC-011: minimo de 15 caracteres, sem exigir composicao
+# (mai/min/numero/simbolo). O maximo de 64+ e aceito pelo GoTrue por
+# padrao (nao ha campo de maximo aqui).
+minimum_password_length = 15
+password_requirements = ""
+
+[auth.rate_limit]
+# Limites nativos do GoTrue, alem do limiter de aplicacao
+# (lib/auth/rate-limit.ts) que cobre cadastro/login/recuperacao mesmo
+# sem SMTP customizado configurado localmente.
+email_sent = 2
+sign_in_sign_ups = 30
+token_verifications = 30
+
+# Preparado para cadastro e recuperacao, desativado no dev local
+# (T2-DEC-011: "sem obrigacao de ativa-lo no desenvolvimento local").
+# Para ativar: preencher secret via variavel de ambiente e trocar
+# enabled para true. Ver docs/CLAUDE_PROMPT_TASK-002.md e
+# docs/HANDOFF.md (checklist de producao).
+[auth.captcha]
+enabled = false
+provider = "hcaptcha"
+secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"
 
 [auth.email]
 enable_signup = true
-enable_confirmations = false
+# T2-DEC-002: verificacao de e-mail obrigatoria antes da criacao da loja.
+enable_confirmations = true
+# Evita reenvio de confirmacao/recuperacao em looping rapido no dev.
+max_frequency = "10s"

@@ -1,13 +1,17 @@
 # TASK-002 — Autenticação e onboarding inicial do comerciante
 
-**Status:** READY
+**Status:** REVIEW
 
 **Responsável pela implementação:** Claude Code
+**Branch:** feat/TASK-002-auth-onboarding
+**HEAD-base:** ca2435146b9d3cc63ea589410284e9e14d31c034 (master, limpo)
 
 **Aprovação de escopo:** Caraffa, 2026-08-03 (`T2-DEC-001` a `T2-DEC-011` em `docs/DECISIONS.md`)
 
 **Dependência concluída:** TASK-001
 **Deploy:** proibido nesta tarefa
+
+**Entrega para QA:** ver seção "Entrega da TASK-002" em `docs/handoff.md` (2026-08-03) — evidências completas, gates, testes reais Supabase/Postgres, revisão de segurança e roteiro reproduzível de QA. Não mover para `tasks/done/` nem fazer merge até aprovação do Júnior.
 
 ## Objetivo
 

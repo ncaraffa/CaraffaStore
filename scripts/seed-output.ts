@@ -7,6 +7,13 @@ export interface SeedIdentifiers {
   clienteBId: string;
   storeAId: string;
   storeBId: string;
+  merchantOnboardingId: string;
+  merchantPendingId: string;
+  pendingStoreId: string;
+  merchantSuspendedId: string;
+  suspendedStoreId: string;
+  merchantMultiId: string;
+  multiStoreId: string;
 }
 
 /**
@@ -25,7 +32,21 @@ export function logSeedSummary(ids: SeedIdentifiers): void {
   console.log(`  cliente-b (${FIXTURE_USERS.clienteB.email}): ${ids.clienteBId}`);
   console.log(`  store-a: ${ids.storeAId}`);
   console.log(`  store-b: ${ids.storeBId}`);
+  console.log(`  merchant-onboarding (${ONBOARDING_EMAIL.merchantOnboarding}): ${ids.merchantOnboardingId}`);
+  console.log(`  merchant-pending (${ONBOARDING_EMAIL.merchantPending}): ${ids.merchantPendingId}`);
+  console.log(`  loja-pendente-fixture: ${ids.pendingStoreId}`);
+  console.log(`  merchant-suspended (${ONBOARDING_EMAIL.merchantSuspended}): ${ids.merchantSuspendedId}`);
+  console.log(`  loja-suspensa-fixture: ${ids.suspendedStoreId}`);
+  console.log(`  merchant-multi (${ONBOARDING_EMAIL.merchantMulti}): ${ids.merchantMultiId}`);
+  console.log(`  loja-multi-fixture: ${ids.multiStoreId}`);
 }
+
+const ONBOARDING_EMAIL = {
+  merchantOnboarding: "merchant-onboarding@example.test",
+  merchantPending: "merchant-pending@example.test",
+  merchantSuspended: "merchant-suspended@example.test",
+  merchantMulti: "merchant-multi@example.test",
+} as const;
 
 /**
  * Imprime só a mensagem de erro — nunca o objeto/erro completo. Alguns
