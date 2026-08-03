@@ -582,3 +582,69 @@ Claude Code deve ler `AGENTS.md`, `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, `do
 - Comandos e resultados de testes, lint e build.
 - Evidência dos testes de isolamento.
 - Riscos restantes e instruções para QA.
+
+## Verificação administrativa pós-merge da TASK-001 (2026-08-03)
+
+Verificação independente, sem alteração de código e sem deploy:
+
+- branch atual: `master`;
+- HEAD confirmado: `db0ed437804acc67c08f971b69ebdaf6ab7fb0a6`;
+- commit de encerramento informado: `9d4e6f5300347051c760f2d7e420114af4294015`;
+- commit de merge informado: `04f8ea44486de1894257ea8e700aa8b0dfe544ce`;
+- `tasks/done/task-001.md`: presente e com status `DONE`;
+- `qa/reports/TASK-001-RETEST-4.md`: presente;
+- `docs/ROADMAP.md`: fundação multi-tenant marcada como concluída;
+- este handoff já continha encerramento, evidências e histórico da TASK-001;
+- Git status: limpo no início da preparação da TASK-002;
+- deploy: não realizado.
+
+## Preparação da TASK-002 — autenticação e onboarding (2026-08-03)
+
+A TASK-002 foi refinada integralmente e promovida para `tasks/ready/task-002.md`, cobrindo autenticação, recuperação, verificação de e-mail, onboarding persistente, criação atômica da loja/owner/plano/auditoria, slug, registro inicial dos planos R$ 30/R$ 50/R$ 80 sem cobrança, estados da loja, redirecionamentos, múltiplos memberships, auditoria, isolamento e testes negativos.
+
+**Estado: READY.** Caraffa aprovou integralmente as decisões 1 a 10 e aprovou a decisão 11 com política de senha reforçada. As decisões estão registradas como `T2-DEC-001` a `T2-DEC-011` em `docs/DECISIONS.md`.
+
+Prompt executável para o Claude Code, sem placeholders pendentes: `docs/CLAUDE_PROMPT_TASK-002.md`. Ele autoriza implementação somente em branch/worktree própria, sem merge nem deploy.
+
+### Escopo incluído no refinamento
+
+- cadastro, login, logout, verificação e recuperação segura;
+- progresso do onboarding salvo e retomável;
+- primeira loja + vínculo `owner` + plano inicial em operação atômica/idempotente;
+- slug seguro, único e protegido contra concorrência;
+- estados `onboarding`, `pending_payment`, `active`, `suspended`;
+- matriz de redirecionamento e proteção server-side/RLS;
+- usuário sem loja e com múltiplos memberships;
+- auditoria mínima sem segredos;
+- testes Loja A × Loja B, negativos, autorização e Supabase real.
+
+### Fora do escopo preservado
+
+- cobrança/Pix/Mercado Pago reais;
+- renovação, inadimplência ou reativação automática;
+- checkout, pedidos ou catálogo completo;
+- benefícios/limites definitivos de plano;
+- domínio personalizado;
+- deploy/produção;
+- convites de funcionários, salvo decisão explícita que exija novo refinamento.
+
+### Decisões consolidadas
+
+- cadastro por e-mail e senha;
+- verificação obrigatória antes da criação da loja;
+- arquitetura multi-loja, com criação limitada a uma loja própria no MVP;
+- múltiplos memberships tratados; sem convites nesta tarefa;
+- plano após nome/slug e antes da confirmação;
+- conclusão em `pending_payment`; fluxo público nunca chega a `active`;
+- área limitada antes do pagamento e tela de pendência apenas informativa;
+- nome do comerciante, nome da loja, WhatsApp, slug e plano obrigatórios;
+- slug editável durante onboarding e bloqueado depois;
+- senha mínima de 15 caracteres, suporte a pelo menos 64, espaços/passphrases, sem composição arbitrária ou rotação periódica sem comprometimento;
+- proteção contra senhas vazadas, rate limiting e CAPTCHA preparado;
+- redirects internos allowlisted;
+- loja + owner + plano + auditoria atômicos e idempotentes;
+- campos do cliente nunca definem owner, tenant, papel, estado ou permissões.
+
+### Próxima ação
+
+Claude Code pode implementar a TASK-002 seguindo `tasks/ready/task-002.md` e `docs/CLAUDE_PROMPT_TASK-002.md`, em branch/worktree própria. Ao terminar, deve entregar evidências ao Júnior para QA independente; não pode mover para DONE, fazer merge ou deploy.

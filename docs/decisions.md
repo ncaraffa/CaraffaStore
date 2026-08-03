@@ -40,3 +40,34 @@ local/dev.
 
 Detalhes completos, alternativas e evidência de testes: `docs/HANDOFF.md`
 e o resumo de entrega da TASK-001.
+
+## Decisões aprovadas para a TASK-002 — 2026-08-03
+
+Aprovador: Caraffa. As decisões abaixo estão confirmadas e autorizam o refinamento da TASK-002 para `READY`. Não autorizam merge, deploy, cobrança, Pix real ou produção.
+
+| ID | Decisão aprovada | Estado |
+|---|---|---|
+| T2-DEC-001 | Cadastro por **e-mail e senha** no MVP; magic link fora do escopo. | Confirmada |
+| T2-DEC-002 | Verificação de e-mail **obrigatória antes da criação da loja**. Usuário não verificado acessa apenas confirmação/reenvio e logout. | Confirmada |
+| T2-DEC-003 | A arquitetura suporta múltiplas lojas, mas o MVP permite ao usuário criar somente **uma loja própria**. Não impor limitação estrutural incompatível com múltiplos memberships. | Confirmada |
+| T2-DEC-004 | Memberships em lojas de terceiros permanecem suportados e devem ser tratados com segurança; convites e gestão de funcionários ficam fora da TASK-002. | Confirmada |
+| T2-DEC-005 | O plano é escolhido depois de nome/slug e antes da confirmação final. Loja, `owner`, plano e auditoria são persistidos atomicamente na conclusão. | Confirmada |
+| T2-DEC-006 | A loja permanece `onboarding` enquanto incompleta e termina em `pending_payment` ao concluir. O fluxo público da TASK-002 nunca alcança `active`. | Confirmada |
+| T2-DEC-007 | Antes do pagamento, o comerciante acessa somente área limitada de configuração/estado/conta; painel operacional fica bloqueado. A tela `pending_payment` é apenas informativa, sem Pix ou cobrança simulada. | Confirmada |
+| T2-DEC-008 | Dados mínimos: nome do comerciante, nome da loja, WhatsApp, slug e plano inicial; o e-mail vem da conta verificada. | Confirmada |
+| T2-DEC-009 | Slug editável durante `onboarding` e bloqueado após a conclusão/transição para `pending_payment`. | Confirmada |
+| T2-DEC-010 | Sem convites ou gestão de funcionários na TASK-002; ela cria somente o vínculo `owner`. | Confirmada |
+| T2-DEC-011 | Senha com mínimo de **15 caracteres** e suporte a pelo menos **64 caracteres**; espaços e frases-senha permitidos; sem composição obrigatória; preparar/ativar bloqueio de senhas vazadas; sem troca periódica sem evidência de comprometimento; recuperação não enumerável, token expirável/seguro, rate limiting em cadastro/login/recuperação e suporte preparado para CAPTCHA em cadastro/recuperação. | Confirmada |
+
+### Decisões adicionais de implementação aprovadas
+
+- Seeds e testes podem criar lojas `active` exclusivamente para validar proteção e redirecionamentos; o fluxo público não pode fazê-lo.
+- Redirecionamentos de confirmação e recuperação aceitam somente destinos internos previamente autorizados.
+- Criação da loja, vínculo `owner`, plano inicial e auditoria deve ser atômica e idempotente.
+- Usuários com memberships em mais de uma loja exigem tratamento e seleção explícitos, ainda que a criação de uma segunda loja própria esteja bloqueada no MVP.
+- Nenhum campo do cliente pode definir `owner_id`, `store_id`, `role`, `status` ou permissões.
+- Mensagens de cadastro, login e recuperação nunca confirmam se o e-mail já possui conta.
+- Preservar `PROP-001`: slug roteia; autorização deriva de `auth.uid()` × `store_members` e RLS.
+- Preservar papéis `owner|admin|staff`, mas a TASK-002 cria somente `owner`.
+- Registrar o plano inicial como código fechado equivalente a `30|50|80`, sem benefícios, cobrança, assinatura ou entitlement.
+- Progresso do onboarding é server-side, vinculado a `auth.uid()` e não pode ser avançado por campos arbitrários do cliente.
