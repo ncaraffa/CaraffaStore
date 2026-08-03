@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { loginSchema } from "@/lib/auth/schemas";
 import { fieldErrorsFromZod } from "@/lib/auth/form-errors";
-import { checkRateLimit, getClientIp } from "@/lib/auth/rate-limit";
+import { buildRateLimitKey, checkRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 import { safeRedirectTarget } from "@/lib/auth/redirects";
 import { LOGIN_FAILED_MESSAGE, RATE_LIMITED_MESSAGE } from "@/lib/auth/messages";
 
@@ -25,7 +25,8 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   }
 
   const ip = await getClientIp();
-  const rateLimit = checkRateLimit(ip, "login");
+  const key = buildRateLimitKey({ action: "login", ip, email: parsed.data.email });
+  const rateLimit = checkRateLimit(key, "login");
   if (!rateLimit.allowed) {
     return { status: "error", message: RATE_LIMITED_MESSAGE };
   }

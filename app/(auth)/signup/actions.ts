@@ -3,10 +3,9 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { signupSchema } from "@/lib/auth/schemas";
 import { fieldErrorsFromZod } from "@/lib/auth/form-errors";
-import { checkRateLimit, getClientIp } from "@/lib/auth/rate-limit";
+import { buildRateLimitKey, checkRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 import { verifyCaptcha } from "@/lib/auth/captcha";
 import { isPasswordLeaked } from "@/lib/auth/password-policy";
-import { logAuditEvent } from "@/lib/audit/log";
 import { absoluteUrl } from "@/lib/auth/site-url";
 import {
   CAPTCHA_FAILED_MESSAGE,
@@ -31,7 +30,8 @@ export async function signupAction(_prevState: SignupState, formData: FormData):
   }
 
   const ip = await getClientIp();
-  const rateLimit = checkRateLimit(ip, "signup");
+  const key = buildRateLimitKey({ action: "signup", ip, email: parsed.data.email });
+  const rateLimit = checkRateLimit(key, "signup");
   if (!rateLimit.allowed) {
     return { status: "error", message: RATE_LIMITED_MESSAGE };
   }
@@ -52,30 +52,21 @@ export async function signupAction(_prevState: SignupState, formData: FormData):
 
   try {
     const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase.auth.signUp({
+    // "cadastro concluído" não é gravado em public.audit_log: o próprio
+    // GoTrue já registra isso em auth.audit_log_entries (user_signedup),
+    // confirmado contra o Supabase local real. Reimplementar exigiria
+    // aceitar actor_user_id vindo de uma chamada ainda sem sessão
+    // (email_confirmations pendente) — exatamente a forja que a
+    // TASK-002 proíbe (BUG-T2-004, qa/reports/TASK-002.md).
+    await supabase.auth.signUp({
       email: parsed.data.email,
       password: parsed.data.password,
       options: { emailRedirectTo: absoluteUrl("/auth/confirm") },
     });
-
-    // Sinal documentado do GoTrue para "e-mail já registrado": o usuário
-    // retornado vem com identities vazio, sem lançar erro. Não podemos
-    // reagir de forma diferente a esse caso — resultaria em mensagem
-    // diferenciada e permitiria enumerar contas existentes.
-    const alreadyRegistered = !error && !!data.user && data.user.identities?.length === 0;
-
-    if (!error && !alreadyRegistered && data.user) {
-      await logAuditEvent({
-        actorUserId: data.user.id,
-        action: "signup_completed",
-        targetType: "auth_user",
-        targetId: data.user.id,
-      });
-    }
   } catch {
     // Mesma mensagem genérica mesmo em falha técnica: não revelar
     // detalhes que ajudem a diferenciar "conta já existe" de "erro
-    // interno" (ver docs/HANDOFF.md — tradeoff deliberado).
+    // interno" (ver docs/handoff.md — tradeoff deliberado).
   }
 
   return { status: "success", message: SIGNUP_RESULT_MESSAGE };

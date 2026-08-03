@@ -1,7 +1,14 @@
 import { isAllowedRedirect } from "@/lib/auth/redirects";
 
 /** Acessíveis sem sessão (anônimo). */
-export const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/auth/confirm"];
+export const PUBLIC_PATHS = [
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+  "/auth/confirm",
+  "/auth/recovery",
+];
 
 /**
  * T2-DEC-002: conta não verificada fica restrita a confirmação/reenvio e
@@ -14,12 +21,18 @@ export const UNVERIFIED_ALLOWED_PATHS = ["/verify", "/logout", "/auth/confirm"];
 
 /**
  * Uma sessão de recuperação de senha (estabelecida por
- * app/auth/confirm/route.ts ao trocar o código do link de "esqueci minha
- * senha") é uma sessão autenticada comum sob todos os outros aspectos —
- * sem esta restrição, ela daria acesso total (onboarding, painel, etc.)
- * enquanto durar, não só a troca de senha. Isso importa em cenários de
- * computador compartilhado/público, e-mail encaminhado, ou a aba ficar
- * aberta depois do clique.
+ * app/auth/recovery/route.ts ao trocar o código do link de "esqueci
+ * minha senha" — rota SEPARADA de app/auth/confirm/route.ts, que só
+ * trata confirmação de cadastro) é uma sessão autenticada comum sob
+ * todos os outros aspectos — sem esta restrição, ela daria acesso total
+ * (onboarding, painel, etc.) enquanto durar, não só a troca de senha.
+ * Isso importa em cenários de computador compartilhado/público, e-mail
+ * encaminhado, ou a aba ficar aberta depois do clique.
+ *
+ * `isRecoverySession` aqui vem de lib/tenant/recovery-session.ts
+ * (`recovery_grants` + `session_id` do JWT) — NUNCA do claim `amr` do
+ * GoTrue, que não distingue recuperação de confirmação de cadastro
+ * (confirmado contra o Supabase local real, ver lib/auth/jwt.ts).
  */
 export const RECOVERY_SESSION_ALLOWED_PATHS = ["/reset-password", "/logout"];
 

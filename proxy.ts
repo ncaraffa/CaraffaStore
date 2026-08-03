@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 import { resolveMiddlewareDecision } from "@/lib/auth/middleware-policy";
-import { isRecoverySession } from "@/lib/auth/jwt";
+import { isCurrentSessionRecovery } from "@/lib/tenant/recovery-session";
 
 /**
  * Camada de defesa em profundidade: refresca a sessão SSR e bloqueia
@@ -42,18 +42,11 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // getUser() já validou a sessão contra o servidor; getSession() aqui só
-  // lê o token já validado (mesmo cookie, sem round-trip extra) para
-  // inspecionar o claim `amr` — necessário para distinguir uma sessão de
-  // recuperação de senha de uma sessão normal (ver
-  // lib/auth/middleware-policy.ts RECOVERY_SESSION_ALLOWED_PATHS).
-  let isRecovery = false;
-  if (user) {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    isRecovery = session ? isRecoverySession(session.access_token) : false;
-  }
+  // Distingue sessão de recuperação de senha de sessão normal via
+  // recovery_grants (lib/tenant/recovery-session.ts) — nunca via claim
+  // `amr` do GoTrue, que não diferencia recuperação de confirmação de
+  // cadastro (confirmado contra o Supabase local real).
+  const isRecovery = user ? await isCurrentSessionRecovery(supabase) : false;
 
   const decision = resolveMiddlewareDecision({
     pathname: request.nextUrl.pathname,

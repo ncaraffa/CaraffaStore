@@ -818,3 +818,133 @@ Usuários fixture disponíveis após `npm run seed:local` (senha de todos: a mes
 - Nenhuma cobrança, Pix, QR Code ou integração Mercado Pago real foi implementada ou simulada.
 - Nenhuma credencial real foi usada — só as chaves de demonstração padrão do Supabase local (mesmas de qualquer instalação `supabase start`, já usadas e documentadas desde a TASK-001).
 - `tasks/in-progress/task-002.md` está com status `IN_PROGRESS` → será atualizado para `REVIEW` nesta mesma sessão, não `DONE`.
+
+## Remediação pós-QA da TASK-002 (2026-08-03) — REPROVADO, corrigido nesta sessão
+
+**QA do Júnior:** `qa/reports/TASK-002.md` (não alterado — arquivo do Júnior), commit avaliado `42e36dfb11be3aa77bc351608c4b77dde6a1252f`. Resultado: **REPROVADO**. RLS real e testes existentes passaram, mas 5 bugs de autorização (2 ALTA, 3 MÉDIA) e 1 ressalva foram encontrados. Todos corrigidos nesta sessão, com nova validação real completa (Postgres + navegador). **Status ao final desta remediação: continua REVIEW — esta entrega não se autoaprova; QA independente do Júnior decide.**
+
+### Bugs corrigidos
+
+#### BUG-T2-001 (ALTA) — guards de estado contornáveis por acesso direto à URL
+
+**Causa-raiz:** cada página de estado (`/dashboard`, `/pending-payment`, `/suspended`, `/onboarding`) reimplementava sua própria resolução de loja via `resolveOptionalStoreName` (`lib/tenant/resolve-optional-store.ts`, removido nesta remediação). Sem `?store=` na URL, essa função retornava `null` silenciosamente em vez de resolver a loja real do usuário, e a página renderizava seu conteúdo genérico sem checar se o status real da loja combinava com a rota — qualquer usuário autenticado digitando `/dashboard` direto na URL, independente do status real da sua loja, via essa lacuna.
+
+**Correção:** camada única de guards em `lib/tenant/access-control.ts` (novo), usada por todas as páginas de estado:
+- `requireVerifiedSession(supabase)`: resolve sessão, redireciona anônimo→`/login`, não verificado→`/verify`, sessão de recuperação→`/reset-password`.
+- `requireStoreStatus(supabase, requiredStatus, requestedSlug?)`: sempre resolve a loja real — com `?store=` válido, revalida via `resolveAuthorizedStore` (RLS-backed, TASK-001); sem `?store=`, resolve via `resolveMembershipSituation` (nunca `null` silencioso: `none`→`/onboarding`, `multiple`→`/select-store`, `one`→a loja real). Status resolvido diferente do exigido pela rota → redireciona para o destino real, nunca renderiza a rota errada.
+- `requireOnboardingAccess(supabase)`: mesma resolução; permite `none` e `onboarding`, qualquer outro status redireciona para o destino real.
+- `resolveMembershipSituation` (extraído de `lib/tenant/membership.ts`) é a única fonte de verdade sobre "quantas lojas o usuário tem e em que estado" — usada tanto pelos guards quanto pelo resolvedor de destino pós-login.
+
+#### BUG-T2-002 + BUG-T2-003 (ALTA + MÉDIA) — sessão de recuperação comum acessível/aberta a redirect via `next`
+
+**Investigação empírica (Supabase local real, antes de implementar):** a hipótese original de usar o claim `amr` do JWT para diferenciar recuperação de login comum foi checada diretamente contra o GoTrue local — confirmação de cadastro e recuperação de senha produzem exatamente `amr=[{"method":"otp"}]`, indistinguíveis. Abandonada.
+
+**Causa-raiz real:** um único callback (`app/auth/confirm/route.ts`) tratava cadastro e recuperação, usando um parâmetro `next` client-controlled para decidir se a sessão resultante era "de recuperação" — contornável pelo cliente (BUG-T2-003) e sem prova real de proveniência (BUG-T2-002): login comum podia chegar em `/reset-password` e trocar a senha sem ter passado pelo fluxo de recuperação.
+
+**Correção:**
+- Rotas separadas por fluxo: `app/auth/confirm/route.ts` (só cadastro, sempre → `/`) e `app/auth/recovery/route.ts` (novo, só recuperação, sempre → `/reset-password`, **sem nenhum parâmetro `next`/`type` configurável pelo cliente**). É a rota executada — decidida só pelo `redirectTo` configurado no servidor ao disparar o e-mail — que classifica o fluxo, nunca uma query string.
+- Prova real de proveniência: tabela `recovery_grants` (`supabase/migrations/0003_recovery_session.sql`) — `session_id` gravado automaticamente do JWT da própria sessão (`DEFAULT ((auth.jwt()->>'session_id')::uuid)`), reforçado por **CHECK constraint** (`session_id = (auth.jwt()->>'session_id')::uuid`) que impede o cliente de forjar um `session_id` diferente mesmo enviando o campo explicitamente — descoberto durante smoke test próprio (o DEFAULT sozinho é contornável se o cliente informa a coluna). RLS: só o próprio usuário lê/escreve sua linha.
+- `lib/tenant/recovery-session.ts` (novo): `isCurrentSessionRecovery(supabase)` compara o `session_id` do JWT atual com o gravado em `recovery_grants`; só `true` se baterem exatamente. `consumeRecoveryGrant(supabase)` apaga o grant após o uso.
+- `proxy.ts`/`lib/tenant/access-control.ts` usam `isCurrentSessionRecovery` (não mais `amr`) para restringir a sessão a `/reset-password`/`/logout`.
+- Ao concluir a troca de senha (`app/(auth)/reset-password/actions.ts`): grava auditoria, **consome o grant** e **encerra a sessão** (`supabase.auth.signOut()`) antes de redirecionar a `/login` — não sobrevive à troca nem é reaproveitável.
+
+#### BUG-T2-004 (MÉDIA) — service role em fluxo de usuário, auditoria não append-only, catch vazio
+
+**Causa-raiz:** `lib/audit/log.ts` (removido) usava cliente **service role** dentro de um Route Handler que responde requisição de usuário, dentro de um `catch` que engolia erros silenciosamente. `audit_log` também não bloqueava `UPDATE`/`DELETE` por `service_role`.
+
+**Correção:**
+- `lib/audit/log.ts` deletado inteiramente (confirmado por grep — sem referências restantes).
+- Dois eventos novos (`email_verification_completed`, `password_recovery_completed`) como funções `SECURITY DEFINER` de **zero parâmetros de negócio** (`supabase/migrations/0004_account_audit.sql`) — `auth.uid()` lido internamente, nunca recebido como argumento. `GRANT EXECUTE` só para `authenticated`.
+- `signup_completed`/`password_recovery_requested` removidos do `audit_log_action_check`: já registrados nativamente por `auth.audit_log_entries` do GoTrue (só `service_role`) — decisão de não duplicar, documentada na migração.
+- **Append-only real:** `revoke update, delete on public.audit_log from service_role` — antes só `authenticated`/`anon` eram bloqueados.
+- `console.error` nos dois pontos de chamada loga só a mensagem (nunca o objeto completo) e não bloqueia o fluxo principal (a ação já aconteceu no GoTrue, sem rollback possível) — documentado no código.
+
+#### BUG-T2-005 (MÉDIA) — rate limiter em memória com IP forjável
+
+**Causa-raiz:** `getClientIp()` confiava incondicionalmente em `x-forwarded-for`/`x-real-ip`, forjáveis pelo próprio cliente sem um proxy reverso real reescrevendo-os.
+
+**Correção:**
+- `TRUSTED_PROXY_ENABLED` (novo, `.env.example`, default `false`): só quando `true` (ambiente atrás de proxy real que sobrescreve o cabeçalho) `getClientIp()` lê `x-forwarded-for`/`x-real-ip`; caso contrário sempre `"untrusted-origin"`.
+- `buildRateLimitKey` prioriza `userId` > `email` (hash SHA-256 truncado, `lib/security/hash.ts`, novo) + IP > IP sozinho — nunca e-mail em texto puro.
+- Interface `RateLimitBackend` pluggável (`hit`/`reset`/`clear`), `InMemoryRateLimitBackend` como padrão, `setRateLimitBackend()` para trocar por backend compartilhado em produção — pendência já documentada.
+
+#### RESSALVA-T2-001 (BAIXA) — testes SQL alegando mais cobertura do que testavam
+
+- Caso 13: comentário corrigido (`invalid_plan` é o erro real observado, não `slug_required`).
+- Caso 16: expandido de 1 para as 7 funções `onboarding_*` (16a–16g).
+- Casos 17–21 (novos): `session_id` auto-preenchido pelo JWT; CHECK bloqueia valor forjado; anônimo bloqueado em `recovery_grants`; as duas funções de auditoria novas atribuem `auth.uid()` sem parâmetro forjável; `audit_log` append-only para `authenticated` **e** `service_role`.
+- Cabeçalho do arquivo atualizado para os 21 cenários reais.
+
+### Testes de regressão adicionados
+
+| Arquivo | Casos | Cobre |
+|---|---|---|
+| `lib/tenant/access-control.test.ts` (novo) | 19 | Todas as combinações de guard do BUG-T2-001 |
+| `lib/tenant/recovery-session.test.ts` (novo) | 8 | `isCurrentSessionRecovery`/`consumeRecoveryGrant` |
+| `lib/tenant/membership.test.ts` (novo) | 8 | `resolveMembershipSituation`/`resolveUserDestination` |
+| `supabase/migrations/0003_recovery_session.privileges.test.ts` (novo) | 5 | Grants/RLS/CHECK de `recovery_grants` |
+| `supabase/migrations/0004_account_audit.privileges.test.ts` (novo) | 6 | Grants/append-only/funções de auditoria |
+| `lib/supabase/admin-usage.test.ts` (novo) | 1 | Nenhum arquivo fora de `lib/supabase/admin.ts` importa o cliente service role |
+| `lib/security/hash.test.ts` (novo) | 5 | `hashIdentifier` |
+| `lib/auth/rate-limit.test.ts` (reescrito) | ampliado | `buildRateLimitKey`, `getClientIp` com/sem proxy confiável |
+| `lib/auth/jwt.test.ts` (reescrito) | ajustado | `getSessionId` (substitui os testes do `isRecoverySession` removido) |
+| `supabase/tests/onboarding_isolation_check.sql` | 21 (de 16) | Ver RESSALVA-T2-001 |
+
+`lib/audit/log.test.ts` removido (código correspondente deletado).
+
+### Resultados dos gates (processo limpo, após a remediação)
+
+| Gate | Comando | Resultado |
+|---|---|---|
+| Lint | `npm run lint` | OK, sem erros |
+| Typecheck | `npm run typecheck` | OK, sem erros |
+| Testes | `npm test` | **213/213** passando (23 arquivos) |
+| Build | `npm run build` | OK, `/auth/recovery` e `/auth/confirm` como rotas separadas |
+| `npm audit` | `npm audit` | 0 vulnerabilidades |
+| `npm audit --omit=dev` | `npm audit --omit=dev` | 0 vulnerabilidades |
+
+### Validação real (Docker/Supabase reiniciado do zero após as migrações novas)
+
+`npx supabase stop` + `npx supabase start` (recarrega `config.toml`, incluindo o `additional_redirect_urls` novo de `/auth/recovery`) + `npm run seed:local` antes de validar.
+
+- `supabase/tests/isolation_check.sql` (TASK-001, regressão): **7/7 PASS**.
+- `supabase/tests/onboarding_isolation_check.sql` (21 cenários): **29/29 asserts PASS**, 0 FAIL, 0 ERROR (Caso 16 sozinho tem 7 sub-verificações).
+- `supabase/tests/slug-concurrency-check.ts` (corrida real, duas sessões HTTP independentes): PASS — exatamente 1 sucesso, 1 falha `slug_taken`, 1 linha gravada.
+- **Navegador real (Docker + Mailpit), guards de estado — todas as combinações do relatório do Júnior reproduzidas e confirmadas corrigidas:**
+
+| Cenário direto por URL | Resultado |
+|---|---|
+| `pending_payment` → `/dashboard` | bloqueado, volta para `/pending-payment` |
+| `pending_payment` → `/suspended` | bloqueado, volta para `/pending-payment` |
+| `active` → `/pending-payment` | bloqueado, volta para `/dashboard` |
+| `active` → `/suspended` | bloqueado, volta para `/dashboard` |
+| `suspended` → `/dashboard` | bloqueado, volta para `/suspended` |
+| usuário sem loja → `/dashboard` | bloqueado, volta para `/onboarding` |
+| `onboarding` (loja incompleta) → `/dashboard`, inclusive com `?store=` da própria loja | bloqueado, volta para `/onboarding` |
+
+- **Navegador real, fluxo de recuperação (BUG-T2-002/003) — 2 rodadas completas independentes**, a segunda após `supabase stop`+`start` completo: `forgot-password` → e-mail real no Mailpit → `/auth/recovery` (troca PKCE real) → `/reset-password` → senha alterada → sessão encerrada → login com a senha nova funciona → **sessão comum bloqueada de `GET /reset-password`** (mesma mensagem genérica) → **reuso do link consumido rejeitado pelo GoTrue** (`otp_expired`).
+
+### Achado ambiental (não é bug de código, documentado por transparência)
+
+Ao seguir o link de recuperação por navegação direta no navegador de automação usado nesta validação, o destino às vezes aparece rotulado como `localhost:3000` em vez de `127.0.0.1:3000`. Investigado: `curl -D -` confirma que o `Location` que o próprio GoTrue devolve está sempre correto, em `127.0.0.1:3000` (`site_url`/`additional_redirect_urls` de `supabase/config.toml` só referenciam `127.0.0.1`). Navegar explicitamente para `http://127.0.0.1:3000/reset-password` logo em seguida sempre mostra a sessão de recuperação válida — a aplicação está correta; o rótulo `localhost` é uma característica da ferramenta de navegador desta validação, mesma ressalva "usar 127.0.0.1, não localhost" já documentada na entrega original da TASK-002. QA deve repetir sempre com `127.0.0.1` explícito.
+
+### Scan de segredos nos logs
+
+Log completo do servidor de desenvolvimento desta sessão e as capturas do Mailpit revisados manualmente. Nenhuma senha, token de acesso/refresh, cookie, cabeçalho `Authorization` ou chave `service_role` foi impresso pela aplicação. Único item de transparência: o log padrão do `next dev` (comportamento do framework, não código nosso) inclui o `code` PKCE de uso único na linha de acesso (`GET /auth/recovery?code=...`) — código de uso único, expira, inútil sem o `code_verifier` correspondente (nunca logado, só em cookie do navegador).
+
+### Limitações e riscos restantes (não bloqueantes, já documentados)
+
+- Rate limiting em memória por padrão — backend pluggable existe, mas nenhum backend compartilhado foi implementado nesta sessão; pendência de produção multi-instância.
+- CAPTCHA e HIBP continuam desativados no dev local.
+- `app/dashboard` continua placeholder.
+- `TRUSTED_PROXY_ENABLED` precisa do cabeçalho certo identificado antes de deploy atrás de proxy real.
+
+### Instruções para o próximo QA do Júnior
+
+1. Commit a validar: hash informado ao final desta sessão (`git log feat/TASK-002-auth-onboarding`).
+2. `npx supabase stop && npx supabase start && npx supabase db reset && npm run seed:local` (reinício completo recomendado, não só `db reset`, para garantir `config.toml` — incluindo `additional_redirect_urls` de `/auth/recovery` — carregado).
+3. `npm run lint && npm run typecheck && npx vitest run && npm run build && npm audit && npm audit --omit=dev`.
+4. `docker exec -i <container_postgres> psql -U postgres -d postgres -f supabase/tests/isolation_check.sql` (7/7 esperado) e `-f supabase/tests/onboarding_isolation_check.sql` (21 cenários, todos PASS).
+5. `npx tsx supabase/tests/slug-concurrency-check.ts`.
+6. Navegador real, sempre `http://127.0.0.1:3000` (nunca `localhost`): repetir as 7 combinações de acesso direto por URL da tabela acima; repetir o fluxo de recuperação completo e confirmar que sessão comum não acessa `/reset-password` e que o link usado não é reaproveitável.
+7. **Esta remediação não deve ser considerada aprovada por esta entrega** — cabe exclusivamente ao QA independente do Júnior decidir o resultado.

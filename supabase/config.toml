@@ -14,12 +14,16 @@ port = 54323
 [auth]
 enabled = true
 site_url = "http://127.0.0.1:3000"
-# Único destino real usado como emailRedirectTo (cadastro E recuperação
-# apontam para o mesmo callback, que distingue por `type` na query). O
-# app também valida contra sua própria allowlist (lib/auth/redirects.ts)
-# — defesa em profundidade, este arquivo não é a única barreira contra
+# Callbacks SEPARADOS por fluxo (correção pós-QA, BUG-T2-003): /auth/confirm
+# só confirmação de cadastro, /auth/recovery só recuperação de senha — a
+# rota em si classifica o fluxo, nunca um parâmetro de query. O app
+# também valida contra sua própria allowlist (lib/auth/redirects.ts) —
+# defesa em profundidade, este arquivo não é a única barreira contra
 # open redirect.
-additional_redirect_urls = ["http://127.0.0.1:3000/auth/confirm"]
+additional_redirect_urls = [
+  "http://127.0.0.1:3000/auth/confirm",
+  "http://127.0.0.1:3000/auth/recovery",
+]
 
 # T2-DEC-011: minimo de 15 caracteres, sem exigir composicao
 # (mai/min/numero/simbolo). O maximo de 64+ e aceito pelo GoTrue por

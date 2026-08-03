@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { resolveOptionalStoreName } from "@/lib/tenant/resolve-optional-store";
+import { requireStoreStatus } from "@/lib/tenant/access-control";
 import { LogoutButton } from "@/app/logout/logout-button";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +9,11 @@ export const dynamic = "force-dynamic";
  * configuração) é explicitamente fora do escopo da TASK-002. Esta rota
  * existe só para provar o guard de estado `active`: no fluxo público
  * desta tarefa nenhuma loja chega a `active` (só via seed/teste).
+ *
+ * requireStoreStatus exige uma loja `active` de verdade — sem `?store=`
+ * resolve pela situação real de memberships (nunca libera acesso
+ * genérico por ausência do parâmetro; corrige BUG-T2-001,
+ * qa/reports/TASK-002.md).
  */
 export default async function DashboardPage({
   searchParams,
@@ -18,21 +22,12 @@ export default async function DashboardPage({
 }) {
   const { store: storeSlug } = await searchParams;
   const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  if (!user.email_confirmed_at) redirect("/verify");
-
-  const storeName = await resolveOptionalStoreName(supabase, user.id, storeSlug);
+  const { store } = await requireStoreStatus(supabase, "active", storeSlug);
 
   return (
     <main>
       <h1>Painel</h1>
-      <p>
-        {storeName ? `Loja "${storeName}" ativa.` : "Loja ativa."} Painel operacional completo fora
-        do escopo desta tarefa.
-      </p>
+      <p>Loja &quot;{store.name}&quot; ativa. Painel operacional completo fora do escopo desta tarefa.</p>
       <LogoutButton />
     </main>
   );

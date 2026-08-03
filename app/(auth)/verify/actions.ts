@@ -1,7 +1,7 @@
 "use server";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { checkRateLimit } from "@/lib/auth/rate-limit";
+import { buildRateLimitKey, checkRateLimit } from "@/lib/auth/rate-limit";
 import { absoluteUrl } from "@/lib/auth/site-url";
 import { RATE_LIMITED_MESSAGE, RESEND_VERIFICATION_MESSAGE } from "@/lib/auth/messages";
 
@@ -22,7 +22,8 @@ export async function resendVerificationAction(_prevState: ResendState): Promise
 
   // Cooldown por usuário (auth.uid()), não só por IP — evita reenvio em
   // looping mesmo atrás de um proxy/NAT compartilhado.
-  const rateLimit = checkRateLimit(user.id, "resend_verification");
+  const key = buildRateLimitKey({ action: "resend_verification", userId: user.id });
+  const rateLimit = checkRateLimit(key, "resend_verification");
   if (!rateLimit.allowed) {
     return { status: "error", message: RATE_LIMITED_MESSAGE };
   }

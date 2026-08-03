@@ -5,7 +5,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { resetPasswordSchema } from "@/lib/auth/schemas";
 import { fieldErrorsFromZod } from "@/lib/auth/form-errors";
 import { isPasswordLeaked } from "@/lib/auth/password-policy";
-import { logAuditEvent } from "@/lib/audit/log";
+import { consumeRecoveryGrant, isCurrentSessionRecovery } from "@/lib/tenant/recovery-session";
 import { GENERIC_UNEXPECTED_ERROR_MESSAGE, RESET_LINK_INVALID_MESSAGE } from "@/lib/auth/messages";
 
 export interface ResetPasswordState {
@@ -18,17 +18,20 @@ export async function resetPasswordAction(
   _prevState: ResetPasswordState,
   formData: FormData,
 ): Promise<ResetPasswordState> {
-  // Checa a sessão ANTES de validar/consultar a senha: um visitante sem
-  // sessão de recuperação válida (link expirado/reutilizado, ou acesso
-  // direto sem passar pelo link) não deve disparar a checagem de senha
-  // vazada (chamada de rede externa quando HIBP_PASSWORD_CHECK_ENABLED
-  // estiver ativo) nem qualquer outro trabalho além de mostrar o erro.
+  // Checa a sessão de recuperação ANTES de validar/consultar a senha: um
+  // visitante sem grant de recuperação válido (login normal, link
+  // expirado/reutilizado, ou acesso direto sem passar pelo link) não
+  // deve disparar a checagem de senha vazada (chamada de rede externa
+  // quando HIBP_PASSWORD_CHECK_ENABLED estiver ativo) nem qualquer outro
+  // trabalho além de mostrar o erro. Mesma checagem exata da página —
+  // não depende só dela (BUG-T2-002, qa/reports/TASK-002.md).
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  const authorized = user ? await isCurrentSessionRecovery(supabase) : false;
+  if (!user || !authorized) {
     return { status: "error", message: RESET_LINK_INVALID_MESSAGE };
   }
 
@@ -50,15 +53,17 @@ export async function resetPasswordAction(
     return { status: "error", message: GENERIC_UNEXPECTED_ERROR_MESSAGE };
   }
 
-  await logAuditEvent({
-    actorUserId: user.id,
-    action: "password_recovery_completed",
-    targetType: "auth_user",
-    targetId: user.id,
-  });
+  // Auditoria via função SECURITY DEFINER (nunca service role — lê
+  // auth.uid() da própria sessão que acabou de trocar a senha).
+  const { error: auditError } = await supabase.rpc("log_password_recovery_completed");
+  if (auditError) {
+    console.error("[reset-password] falha ao registrar auditoria:", auditError.message);
+  }
 
-  // Encerra a sessão de recuperação e força novo login com a senha nova
-  // — não deixa a sessão de recuperação "aberta" reutilizável depois.
+  // Encerra o contexto especial de recuperação: apaga o grant (dupla
+  // garantia, além do signOut() abaixo) e derruba a sessão — o token não
+  // pode ser reutilizado, e a próxima autenticação exige a senha nova.
+  await consumeRecoveryGrant(supabase);
   await supabase.auth.signOut();
   redirect("/login");
 }

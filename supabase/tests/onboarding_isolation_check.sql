@@ -25,11 +25,17 @@
 --   4. psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
 --        -v ON_ERROR_STOP=1 -f supabase/tests/onboarding_isolation_check.sql
 --
--- 16 cenários cobrindo: isolamento de onboarding_progress/merchant_profiles/
--- store_plans entre usuários e entre lojas, múltiplos memberships,
--- audit_log inacessível para anon/authenticated, escrita direta forjada
--- em stores/store_members bloqueada (sem GRANT), plano forjado rejeitado
--- pela função, slug bloqueado após conclusão, e idempotência do retry.
+-- 21 cenários (16 originais + 5 adicionados na correção pós-QA,
+-- qa/reports/TASK-002.md) cobrindo: isolamento de onboarding_progress/
+-- merchant_profiles/store_plans entre usuários e entre lojas, múltiplos
+-- memberships, audit_log inacessível para anon/authenticated, escrita
+-- direta forjada em stores/store_members bloqueada (sem GRANT), plano
+-- forjado rejeitado pela função, slug bloqueado após conclusão,
+-- idempotência do retry, anon bloqueado em TODAS as 7 funções
+-- onboarding_* (Caso 16 — RESSALVA-T2-001), session_id de
+-- recovery_grants protegido por CHECK contra o JWT (Casos 17–19), e
+-- audit_log verdadeiramente append-only + funções de auditoria de conta
+-- sem ator forjável (Casos 20–21 — BUG-T2-004).
 
 \set ON_ERROR_STOP on
 
@@ -325,9 +331,14 @@ rollback to savepoint case_12;
 -- ------------------------------------------------------------
 -- Caso 13: onboarding_save_plan com código forjado fora de 30|50|80 ->
 -- rejeitado (não é uma checagem só de UI, é validação no servidor/banco).
--- merchant-onboarding ainda não tem slug definido, então o erro esperado
--- é slug_required (a etapa anterior é validada primeiro) — prova que a
--- validação de etapa roda antes mesmo de olhar o valor do plano.
+-- A função valida o FORMATO do plano antes de checar os pré-requisitos
+-- da etapa anterior — por isso o erro observado na prática é
+-- invalid_plan (não slug_required, apesar de merchant-onboarding ainda
+-- não ter slug definido nesta fixture). O teste aceita qualquer um dos
+-- dois códigos como PASS de propósito: o que este caso prova é que 999
+-- é SEMPRE rejeitado, nunca aceito — não a ordem interna exata de
+-- validação, que é detalhe de implementação e não deveria quebrar o
+-- teste se mudar.
 -- ------------------------------------------------------------
 savepoint case_13;
 set local role authenticated;
@@ -401,8 +412,11 @@ end $$;
 rollback to savepoint case_15;
 
 -- ------------------------------------------------------------
--- Caso 16: anônimo não consegue executar nenhuma função onboarding_*
--- (sem GRANT EXECUTE)
+-- Caso 16: anônimo não consegue executar NENHUMA das 7 funções
+-- onboarding_* (sem GRANT EXECUTE) — testa as 7 de verdade, não só uma
+-- (RESSALVA-T2-001, qa/reports/TASK-002.md: o comentário anterior
+-- alegava cobrir "qualquer função onboarding_*" mas só chamava
+-- onboarding_ensure_progress()).
 -- ------------------------------------------------------------
 savepoint case_16;
 set local role anon;
@@ -415,10 +429,214 @@ begin
     raise exception 'FAIL - Caso 16: anonimo executou onboarding_ensure_progress()';
   exception
     when insufficient_privilege then
-      raise notice 'PASS - Caso 16: anonimo bloqueado em onboarding_ensure_progress() (sem GRANT EXECUTE)';
+      raise notice 'PASS - Caso 16a: anonimo bloqueado em onboarding_ensure_progress()';
+  end;
+
+  begin
+    perform public.onboarding_save_profile('Forjado', '+5511900000000');
+    raise exception 'FAIL - Caso 16: anonimo executou onboarding_save_profile()';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 16b: anonimo bloqueado em onboarding_save_profile()';
+  end;
+
+  begin
+    perform public.onboarding_save_store_name('Loja Forjada');
+    raise exception 'FAIL - Caso 16: anonimo executou onboarding_save_store_name()';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 16c: anonimo bloqueado em onboarding_save_store_name()';
+  end;
+
+  begin
+    perform public.onboarding_save_slug('slug-forjado-anon');
+    raise exception 'FAIL - Caso 16: anonimo executou onboarding_save_slug()';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 16d: anonimo bloqueado em onboarding_save_slug()';
+  end;
+
+  begin
+    perform public.onboarding_save_plan(30);
+    raise exception 'FAIL - Caso 16: anonimo executou onboarding_save_plan()';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 16e: anonimo bloqueado em onboarding_save_plan()';
+  end;
+
+  begin
+    perform public.onboarding_complete();
+    raise exception 'FAIL - Caso 16: anonimo executou onboarding_complete()';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 16f: anonimo bloqueado em onboarding_complete()';
+  end;
+
+  begin
+    perform public.is_slug_available('qualquer-slug');
+    raise exception 'FAIL - Caso 16: anonimo executou is_slug_available()';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 16g: anonimo bloqueado em is_slug_available()';
   end;
 end $$;
 rollback to savepoint case_16;
+
+-- ------------------------------------------------------------
+-- Caso 17: recovery_grants — session_id é sempre preenchido a partir do
+-- JWT da própria requisição (DEFAULT), nunca precisa vir do cliente
+-- (correção do BUG-T2-002/003, qa/reports/TASK-002.md).
+-- ------------------------------------------------------------
+savepoint case_17;
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', current_setting('app.merchant_onboarding_id'),
+    'session_id', 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'
+  )::text,
+  true
+);
+
+do $$
+declare
+  v_session_id uuid;
+begin
+  insert into public.recovery_grants (user_id) values (current_setting('app.merchant_onboarding_id')::uuid);
+  select session_id into v_session_id from public.recovery_grants where user_id = current_setting('app.merchant_onboarding_id')::uuid;
+
+  if v_session_id = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa' then
+    raise notice 'PASS - Caso 17: session_id de recovery_grants preenchido automaticamente a partir do JWT';
+  else
+    raise exception 'FAIL - Caso 17: session_id esperado aaaaaaaa..., obtido %', v_session_id;
+  end if;
+end $$;
+rollback to savepoint case_17;
+
+-- ------------------------------------------------------------
+-- Caso 18: tentativa de forjar session_id explicitamente no INSERT de
+-- recovery_grants -> bloqueada pelo CHECK constraint, não pelo DEFAULT
+-- sozinho (o DEFAULT só protege quando a coluna é omitida — testado
+-- durante o desenvolvimento que um valor explícito o contorna sem o
+-- CHECK).
+-- ------------------------------------------------------------
+savepoint case_18;
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', current_setting('app.merchant_onboarding_id'),
+    'session_id', 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb'
+  )::text,
+  true
+);
+
+do $$
+begin
+  begin
+    insert into public.recovery_grants (user_id, session_id)
+      values (current_setting('app.merchant_onboarding_id')::uuid, 'cccccccc-3333-4333-8333-cccccccccccc');
+    raise exception 'FAIL - Caso 18: insert com session_id forjado explicitamente foi aceito';
+  exception
+    when check_violation then
+      raise notice 'PASS - Caso 18: CHECK constraint bloqueou session_id forjado (recovery_grants)';
+  end;
+end $$;
+rollback to savepoint case_18;
+
+-- ------------------------------------------------------------
+-- Caso 19: anônimo não acessa recovery_grants (nem select nem insert)
+-- ------------------------------------------------------------
+savepoint case_19;
+set local role anon;
+select set_config('request.jwt.claims', '', true);
+
+do $$
+begin
+  begin
+    perform count(*) from public.recovery_grants;
+    raise exception 'FAIL - Caso 19: anonimo leu recovery_grants';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 19: anonimo bloqueado em recovery_grants';
+  end;
+end $$;
+rollback to savepoint case_19;
+
+-- ------------------------------------------------------------
+-- Caso 20: log_email_verification_completed()/log_password_recovery_completed()
+-- gravam actor_user_id = auth.uid() da própria sessão — zero parâmetros,
+-- nada para um cliente forjar (correção do BUG-T2-004,
+-- qa/reports/TASK-002.md).
+-- ------------------------------------------------------------
+savepoint case_20;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_pending_id'))::text, true);
+
+do $$
+begin
+  perform public.log_email_verification_completed();
+  perform public.log_password_recovery_completed();
+end $$;
+
+-- audit_log não tem SELECT para authenticated — confere como
+-- postgres/superusuario, ainda dentro do savepoint case_20 (as linhas
+-- gravadas acima continuam visíveis até o rollback no final do caso).
+reset role;
+do $$
+declare
+  qtd int;
+begin
+  select count(*) into qtd from public.audit_log
+    where actor_user_id = current_setting('app.merchant_pending_id')::uuid
+      and action in ('email_verification_completed', 'password_recovery_completed')
+      and target_id = current_setting('app.merchant_pending_id');
+  if qtd = 2 then
+    raise notice 'PASS - Caso 20: as duas funcoes de auditoria de conta gravaram com actor_user_id = auth.uid(), sem parametro forjavel';
+  else
+    raise exception 'FAIL - Caso 20: esperado 2 eventos de auditoria de conta, obtido %', qtd;
+  end if;
+end $$;
+rollback to savepoint case_20;
+
+-- ------------------------------------------------------------
+-- Caso 21: audit_log é append-only de verdade — nem authenticated nem
+-- service_role conseguem UPDATE/DELETE (correção do BUG-T2-004: antes
+-- service_role tinha UPDATE/DELETE, o que contradizia "append-only").
+-- ------------------------------------------------------------
+savepoint case_21;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_pending_id'))::text, true);
+do $$
+begin
+  begin
+    update public.audit_log set metadata = '{}'::jsonb;
+    raise exception 'FAIL - Caso 21a: authenticated conseguiu UPDATE em audit_log';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 21a: authenticated bloqueado em UPDATE audit_log';
+  end;
+end $$;
+reset role;
+set local role service_role;
+do $$
+begin
+  begin
+    update public.audit_log set metadata = '{}'::jsonb;
+    raise exception 'FAIL - Caso 21b: service_role conseguiu UPDATE em audit_log';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 21b: service_role tambem bloqueado em UPDATE audit_log (append-only real, nem uso administrativo altera)';
+  end;
+  begin
+    delete from public.audit_log;
+    raise exception 'FAIL - Caso 21c: service_role conseguiu DELETE em audit_log';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 21c: service_role tambem bloqueado em DELETE audit_log';
+  end;
+end $$;
+rollback to savepoint case_21;
 
 -- Nenhuma alteração persiste: garante execução repetível a qualquer momento.
 rollback;

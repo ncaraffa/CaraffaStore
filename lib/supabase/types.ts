@@ -9,9 +9,7 @@ export type OnboardingStep =
   | "completed";
 export type PlanCode = 30 | 50 | 80;
 export type AuditAction =
-  | "signup_completed"
   | "email_verification_completed"
-  | "password_recovery_requested"
   | "password_recovery_completed"
   | "store_created"
   | "owner_assigned"
@@ -20,10 +18,10 @@ export type AuditAction =
   | "access_denied";
 
 /**
- * Minimal hand-written mirror of `supabase/migrations/0001_init.sql` and
- * `supabase/migrations/0002_auth_onboarding.sql`. Kept small on purpose —
- * only what TASK-001/TASK-002 actually created, not the full future
- * catalog/billing schema.
+ * Minimal hand-written mirror of `supabase/migrations/0001_init.sql`
+ * through `0004_account_audit.sql`. Kept small on purpose — only what
+ * TASK-001/TASK-002 actually created, not the full future catalog/
+ * billing schema.
  */
 export interface Database {
   public: {
@@ -246,6 +244,24 @@ export interface Database {
           },
         ];
       };
+      recovery_grants: {
+        Row: {
+          user_id: string;
+          session_id: string;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          session_id?: string;
+          created_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          session_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -276,6 +292,14 @@ export interface Database {
       is_slug_available: {
         Args: { p_slug: string };
         Returns: boolean;
+      };
+      log_email_verification_completed: {
+        Args: Record<string, never>;
+        Returns: void;
+      };
+      log_password_recovery_completed: {
+        Args: Record<string, never>;
+        Returns: void;
       };
     };
   };

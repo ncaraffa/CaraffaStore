@@ -5,6 +5,7 @@ import { OnboardingError } from "@/lib/onboarding/service";
 import { onboardingErrorMessage } from "@/lib/onboarding/messages";
 import { resolveOnboardingView } from "@/lib/onboarding/steps";
 import { resolveUserDestination } from "@/lib/tenant/membership";
+import { requireOnboardingAccess } from "@/lib/tenant/access-control";
 import { ProfileStep } from "./profile-step";
 import { StoreNameStep } from "./store-name-step";
 import { SlugStep } from "./slug-step";
@@ -20,21 +21,18 @@ export default async function OnboardingPage({
 }) {
   const { step: requestedStep } = await searchParams;
   const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  // Defesa em profundidade: middleware já garante isto, esta página não
-  // confia só nele.
-  if (!user) redirect("/login");
-  if (!user.email_confirmed_at) redirect("/verify");
+  // Único guard: usuário verificado, sessão não é de recuperação, e
+  // (sem loja OU loja em `onboarding`) — qualquer outro estado já é
+  // redirecionado aqui dentro (lib/tenant/access-control.ts).
+  const { userId } = await requireOnboardingAccess(supabase);
 
   let progress;
   try {
     progress = await onboarding.ensureOnboardingProgress(supabase);
   } catch (error) {
     if (error instanceof OnboardingError && error.code === "already_has_store") {
-      const destination = await resolveUserDestination(supabase, user.id);
+      const destination = await resolveUserDestination(supabase, userId);
       redirect(destination.path);
     }
     return (

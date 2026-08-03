@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { resolveOptionalStoreName } from "@/lib/tenant/resolve-optional-store";
+import { requireStoreStatus } from "@/lib/tenant/access-control";
 import { LogoutButton } from "@/app/logout/logout-button";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +9,10 @@ export const dynamic = "force-dynamic";
  * sem Pix/QR Code/cobrança simulada. Painel operacional permanece
  * bloqueado (nem esta página nem nenhuma outra desta tarefa expõe
  * catálogo/pedidos/configuração de loja).
+ *
+ * requireStoreStatus exige uma loja `pending_payment` de verdade — uma
+ * loja `active` não acessa esta página por URL direta (corrige
+ * BUG-T2-001, qa/reports/TASK-002.md).
  */
 export default async function PendingPaymentPage({
   searchParams,
@@ -18,21 +21,15 @@ export default async function PendingPaymentPage({
 }) {
   const { store: storeSlug } = await searchParams;
   const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  if (!user.email_confirmed_at) redirect("/verify");
-
-  const storeName = await resolveOptionalStoreName(supabase, user.id, storeSlug);
+  const { store } = await requireStoreStatus(supabase, "pending_payment", storeSlug);
 
   return (
     <main>
       <h1>Cadastro concluído — pagamento pendente</h1>
       <p>
-        {storeName ? `A loja "${storeName}"` : "Sua loja"} está com o cadastro concluído. O painel
-        operacional será liberado após a ativação da cobrança, em uma etapa futura. Nenhuma cobrança
-        foi gerada nesta etapa.
+        A loja &quot;{store.name}&quot; está com o cadastro concluído. O painel operacional será
+        liberado após a ativação da cobrança, em uma etapa futura. Nenhuma cobrança foi gerada nesta
+        etapa.
       </p>
       <LogoutButton />
     </main>
