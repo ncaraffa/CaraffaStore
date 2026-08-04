@@ -73,15 +73,22 @@ describe("supabase/migrations/0003_recovery_session.sql — password_recovery_gr
     expect(sql).not.toMatch(/create policy[^;]*password_recovery_grants/);
   });
 
-  it("expires_at/session_id/nonce_hash são NOT NULL; um grant por usuário (unique)", () => {
+  it("expires_at/session_id são NOT NULL; um grant por usuário (unique) — já garante no máximo um grant claimed-não-concluído por usuário sem precisar de índice único parcial adicional", () => {
     expect(sql).toMatch(/expires_at timestamptz not null/);
     expect(sql).toContain("session_id uuid not null");
-    expect(sql).toContain("nonce_hash text not null");
     expect(sql).toContain("constraint password_recovery_grants_user_unique unique (user_id)");
   });
 
-  it("nonce_hash tem uma constraint de formato (hex sha256) — nunca aceita o nonce em texto puro", () => {
-    expect(sql).toMatch(/constraint password_recovery_grants_nonce_hash_format check \(nonce_hash ~/);
+  it("nonce_hash é NULLABLE (limpo no claim — BUG-CLAUDE-VERIF2-001) mas tem constraint de formato quando presente (hex sha256, nunca o nonce em texto puro)", () => {
+    expect(sql).toContain("nonce_hash text,");
+    expect(sql).not.toMatch(/nonce_hash text not null/);
+    expect(sql).toMatch(/constraint password_recovery_grants_nonce_hash_format check \(nonce_hash is null or nonce_hash ~/);
+  });
+
+  it("máquina de estados: claimed_at/completed_at/revoked_at existem como colunas nullable de timestamp", () => {
+    expect(sql).toContain("claimed_at timestamptz,");
+    expect(sql).toContain("completed_at timestamptz,");
+    expect(sql).toContain("revoked_at timestamptz,");
   });
 });
 
@@ -127,8 +134,27 @@ describe("reivindicação/leitura — requisito BUG-CLAUDE-001: nonce + session_
     expect(sql).toContain("v_session_id uuid := nullif(auth.jwt() ->> 'session_id', '')::uuid");
   });
 
-  it("claim exige nonce_hash correto no WHERE do DELETE — sem ele, uma sessão com grant pendente de verdade ainda não reivindica nada", () => {
+  it("claim exige nonce_hash correto no WHERE do UPDATE — sem ele, uma sessão com grant pendente de verdade ainda não reivindica nada", () => {
     expect(sql).toMatch(/and nonce_hash = encode\(extensions\.digest\(p_nonce, 'sha256'\), 'hex'\)/);
+  });
+
+  it("claim exige claimed_at/completed_at/revoked_at todos null no WHERE — não reivindica um grant já claimed, completed ou revoked", () => {
+    const claimFn = sql.slice(
+      sql.indexOf("create or replace function public.claim_recovery_grant_for_password_change"),
+      sql.indexOf("comment on function public.claim_recovery_grant_for_password_change"),
+    );
+    expect(claimFn).toMatch(/and claimed_at is null/);
+    expect(claimFn).toMatch(/and completed_at is null/);
+    expect(claimFn).toMatch(/and revoked_at is null/);
+  });
+
+  it("BUG-CLAUDE-VERIF2-001: claim NUNCA grava password_recovery_completed — só password_recovery_authorization_claimed", () => {
+    const claimFn = sql.slice(
+      sql.indexOf("create or replace function public.claim_recovery_grant_for_password_change"),
+      sql.indexOf("comment on function public.claim_recovery_grant_for_password_change"),
+    );
+    expect(claimFn).toContain("password_recovery_authorization_claimed");
+    expect(claimFn).not.toContain("'password_recovery_completed'");
   });
 
   it("is_current_session_recovery_grant não aceita NENHUM parâmetro", () => {
@@ -158,10 +184,15 @@ describe("reivindicação/leitura — requisito BUG-CLAUDE-001: nonce + session_
   });
 });
 
-describe("atomicidade — DELETE único, sem consultar-depois-agir, auditoria dentro da mesma transação", () => {
-  it("claim_recovery_grant_for_password_change faz um DELETE condicional único (session_id + nonce_hash + expires_at) — sem SELECT prévio separado", () => {
-    expect(sql).toContain("delete from public.password_recovery_grants");
-    expect(sql).toMatch(/and nonce_hash = encode\(extensions\.digest\(p_nonce, 'sha256'\), 'hex'\)\s*\n\s*and expires_at > now\(\)/);
+describe("atomicidade — UPDATE único (pending -> claimed), sem consultar-depois-agir, auditoria dentro da mesma transação", () => {
+  it("claim_recovery_grant_for_password_change faz um UPDATE condicional único (set claimed_at/nonce_hash) — sem SELECT prévio separado, e NÃO apaga a linha (precisa sobreviver para a trigger de conclusão correlacionar depois)", () => {
+    expect(sql).toContain("update public.password_recovery_grants");
+    expect(sql).toContain("set claimed_at = now(),\n      nonce_hash = null");
+    const claimFn = sql.slice(
+      sql.indexOf("create or replace function public.claim_recovery_grant_for_password_change"),
+      sql.indexOf("comment on function public.claim_recovery_grant_for_password_change"),
+    );
+    expect(claimFn).not.toContain("delete from");
   });
 
   it("auditoria é inserida DENTRO da mesma função (sem exception handler ao redor) — falha no insert derruba a função inteira", () => {

@@ -52,13 +52,35 @@ mv "$MIGRATIONS_DIR/0004_account_audit.sql" "$STASH_DIR/"
 echo "==> supabase db reset (só 0001+0002)"
 npx supabase db reset --local
 
-echo "==> Inserindo linha histórica real (action='signup_completed', só válida sob a 0002)"
-HISTORICAL_ID=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -q -t -A -c "
-  insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
-  values (null, null, 'signup_completed', 'auth_user', 'historico-teste-upgrade', '{}'::jsonb)
+echo "==> Inserindo múltiplos eventos históricos variados (todos os action/combinações permitidos pela 0002)"
+# Quarta correção pós-QA (revisão externa sobre
+# qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, Ponto 10): "eventos
+# históricos variados, não somente uma linha" — cobre store_id
+# preenchido/nulo, actor_id preenchido/nulo, details vazio/preenchido,
+# e os principais action values que a 0002 já permitia (inclusive os
+# dois que a aplicação nunca escreveu, signup_completed/
+# password_recovery_requested, mas que precisam continuar válidos para
+# uma linha histórica pré-existente).
+docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "
+  insert into public.stores (id, slug, name, status)
+  values ('11111111-1111-4111-8111-111111111111', 'loja-historica-upgrade', 'Loja Histórica Upgrade', 'active');
+"
+HISTORICAL_IDS_RAW=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -q -t -A -c "
+  insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata, created_at) values
+    (null, null, 'signup_completed', 'auth_user', 'historico-signup-1', '{}'::jsonb, now() - interval '10 days'),
+    (null, null, 'password_recovery_requested', 'auth_user', 'historico-recovery-req-1', '{}'::jsonb, now() - interval '9 days'),
+    ('22222222-2222-4222-8222-222222222222', null, 'email_verification_completed', 'auth_user', '22222222-2222-4222-8222-222222222222', '{}'::jsonb, now() - interval '8 days'),
+    ('22222222-2222-4222-8222-222222222222', null, 'password_recovery_completed', 'auth_user', '22222222-2222-4222-8222-222222222222', '{\"note\":\"historico com details preenchido\"}'::jsonb, now() - interval '7 days'),
+    ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'store_created', 'store', '11111111-1111-4111-8111-111111111111', '{}'::jsonb, now() - interval '6 days'),
+    ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'owner_assigned', 'store', '11111111-1111-4111-8111-111111111111', '{}'::jsonb, now() - interval '5 days'),
+    ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'plan_selected', 'store', '11111111-1111-4111-8111-111111111111', '{\"plan_code\":50}'::jsonb, now() - interval '4 days'),
+    ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'onboarding_completed', 'store', '11111111-1111-4111-8111-111111111111', '{}'::jsonb, now() - interval '3 days'),
+    (null, null, 'access_denied', 'store', 'historico-access-denied-1', '{\"reason\":\"nao_autenticado\"}'::jsonb, now() - interval '2 days')
   returning id;
-" | head -1)
-echo "    id da linha histórica: $HISTORICAL_ID"
+")
+HISTORICAL_IDS=$(echo "$HISTORICAL_IDS_RAW" | tr -d ' ')
+HISTORICAL_COUNT=$(echo "$HISTORICAL_IDS_RAW" | grep -c '.')
+echo "    $HISTORICAL_COUNT linhas históricas inseridas (9 action values distintos, store_id/actor_id/details variados)"
 
 echo "==> Devolvendo 0003/0004 para supabase/migrations/"
 mv "$STASH_DIR/0003_recovery_session.sql" "$MIGRATIONS_DIR/"
@@ -67,16 +89,28 @@ mv "$STASH_DIR/0004_account_audit.sql" "$MIGRATIONS_DIR/"
 echo "==> supabase migration up (aplica 0003+0004 SOBRE o banco com dado histórico, sem reset)"
 npx supabase migration up --local
 
-echo "==> Verificando: linha histórica sobreviveu intacta"
-SURVIVED=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
-  select count(*) from public.audit_log
-    where id = '$HISTORICAL_ID' and action = 'signup_completed' and target_id = 'historico-teste-upgrade';
+echo "==> Verificando: TODAS as 9 linhas históricas variadas sobreviveram intactas (actions/store_id/actor_id/details/timestamps inalterados)"
+SURVIVED_COUNT=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from public.audit_log where id::text = any(string_to_array('$HISTORICAL_IDS', E'\n'));
 ")
-if [ "$SURVIVED" != "1" ]; then
-  echo "FAIL - linha histórica não sobreviveu intacta ao upgrade (esperado 1, obtido $SURVIVED)"
+if [ "$SURVIVED_COUNT" != "$HISTORICAL_COUNT" ]; then
+  echo "FAIL - nem todas as linhas históricas sobreviveram intactas (esperado $HISTORICAL_COUNT, obtido $SURVIVED_COUNT)"
   exit 1
 fi
-echo "PASS - linha histórica com action='signup_completed' sobreviveu intacta ao upgrade da 0002 para o schema final"
+echo "PASS - todas as $SURVIVED_COUNT linhas históricas variadas sobreviveram intactas ao upgrade da 0002 para o schema final"
+
+SPECIFIC_CHECK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from public.audit_log
+    where target_id = 'historico-signup-1' and action = 'signup_completed' and actor_user_id is null and store_id is null
+  union all
+  select count(*) from public.audit_log
+    where target_id = '11111111-1111-4111-8111-111111111111' and action = 'plan_selected' and metadata = '{\"plan_code\":50}'::jsonb;
+" | tr '\n' ',')
+if [ "$SPECIFIC_CHECK" != "1,1," ]; then
+  echo "FAIL - valores específicos (action/actor_user_id/store_id/metadata) de linhas históricas mudaram silenciosamente (esperado 1,1, obtido $SPECIFIC_CHECK)"
+  exit 1
+fi
+echo "PASS - actions/actor_user_id/store_id/metadata das linhas históricas conferem exatamente (nenhuma alteração silenciosa)"
 
 echo "==> Verificando: schema final (password_recovery_grants, funções) existe e responde"
 # Terceira correção pós-QA (qa/reports/TASK-002-CLAUDE-VERIFICATION.md,
@@ -84,16 +118,41 @@ echo "==> Verificando: schema final (password_recovery_grants, funções) existe
 # request_password_recovery_grant foram removidos por completo —
 # substituídos por issue_password_recovery_grant (só service_role) +
 # claim_recovery_grant_for_password_change(nonce) +
-# is_current_session_recovery_grant().
+# is_current_session_recovery_grant(). Quarta correção pós-QA (revisão
+# externa sobre qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md,
+# BUG-CLAUDE-VERIF2-001): handle_password_recovery_completion() (trigger
+# em auth.users.encrypted_password) também precisa sobreviver ao upgrade.
 FUNCS_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
   select count(*) from pg_proc
-    where proname in ('issue_password_recovery_grant', 'claim_recovery_grant_for_password_change', 'is_current_session_recovery_grant', 'handle_email_confirmed_audit');
+    where proname in ('issue_password_recovery_grant', 'claim_recovery_grant_for_password_change', 'is_current_session_recovery_grant', 'handle_email_confirmed_audit', 'handle_password_recovery_completion');
 ")
-if [ "$FUNCS_OK" != "4" ]; then
-  echo "FAIL - nem todas as funções da 0003/0004 existem após o upgrade (esperado 4, obtido $FUNCS_OK)"
+if [ "$FUNCS_OK" != "5" ]; then
+  echo "FAIL - nem todas as funções da 0003/0004 existem após o upgrade (esperado 5, obtido $FUNCS_OK)"
   exit 1
 fi
-echo "PASS - as 4 funções de password_recovery_grants/auditoria de confirmação existem após o upgrade"
+echo "PASS - as 5 funções de password_recovery_grants/auditoria de confirmação/conclusão existem após o upgrade"
+
+TRIGGER_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from pg_trigger where tgname = 'on_auth_user_password_changed' and not tgisinternal;
+")
+if [ "$TRIGGER_OK" != "1" ]; then
+  echo "FAIL - trigger on_auth_user_password_changed não existe após o upgrade (esperado 1, obtido $TRIGGER_OK)"
+  exit 1
+fi
+echo "PASS - trigger on_auth_user_password_changed existe após o upgrade"
+
+ACTION_CHECK_WIDENED=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select pg_get_constraintdef(oid) from pg_constraint where conname = 'audit_log_action_check';
+")
+if ! echo "$ACTION_CHECK_WIDENED" | grep -q "password_recovery_authorization_claimed"; then
+  echo "FAIL - audit_log_action_check não inclui password_recovery_authorization_claimed após o upgrade"
+  exit 1
+fi
+if ! echo "$ACTION_CHECK_WIDENED" | grep -q "signup_completed"; then
+  echo "FAIL - audit_log_action_check perdeu um valor histórico (signup_completed) após o upgrade"
+  exit 1
+fi
+echo "PASS - audit_log_action_check foi alargado (password_recovery_authorization_claimed) sem perder nenhum valor histórico"
 
 OLD_FUNCS_GONE=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
   select count(*) from pg_proc

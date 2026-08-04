@@ -1,3 +1,4 @@
+import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 import { getPublicSupabaseEnv, getServiceRoleEnv } from "@/lib/supabase/env";
@@ -8,6 +9,13 @@ import { getPublicSupabaseEnv, getServiceRoleEnv } from "@/lib/supabase/env";
  * de `supabase.auth.verifyOtp({ type: "recovery", token_hash })` ter
  * sucesso REAL em app/auth/recovery/route.ts — o ÚNICO lugar que deve
  * importar este arquivo.
+ *
+ * `import "server-only"` (pacote oficial do Next.js) faz o BUILD
+ * inteiro falhar caso este módulo algum dia seja acidentalmente
+ * alcançado pelo grafo de imports de um Client Component — proteção em
+ * tempo de build, além da guarda em tempo de execução já existente em
+ * `getServiceRoleEnv()` (revisão externa sobre
+ * qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, Ponto 1).
  *
  * `issue_password_recovery_grant` no banco só concede EXECUTE a
  * `service_role` (supabase/migrations/0003_recovery_session.sql) —

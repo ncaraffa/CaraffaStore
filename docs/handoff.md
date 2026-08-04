@@ -1199,3 +1199,105 @@ nesta sessão — a sessão persiste e o onboarding renderiza corretamente.
    (`/login`) e onboarding funcionam normalmente em navegador real.
 9. **Esta remediação não deve ser considerada aprovada por esta entrega** — cabe exclusivamente à revisão externa
    decidir o resultado. Não fazer merge, não mover TASK-002 para DONE.
+
+---
+
+## Quarta correção pós-QA — revisão externa sobre qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md (BUG-CLAUDE-VERIF2-001)
+
+### Causa-raiz confirmada (ALTA — integridade de auditoria, não escalação de privilégio)
+
+`claim_recovery_grant_for_password_change` gravava `password_recovery_completed` DENTRO do próprio claim —
+ou seja, ANTES de `supabase.auth.updateUser({password})` ser chamado em `app/(auth)/reset-password/actions.ts`.
+Reproduzido empiricamente (`qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md`, §8): uma sessão revogada entre o
+claim e o updateUser fazia o updateUser falhar (a senha nunca mudava de fato — a senha antiga continuava
+válida), mas a auditoria já afirmava conclusão mesmo assim.
+
+### Arquitetura final do grant: pending → claimed → completed
+
+`public.password_recovery_grants` ganhou três colunas de timestamp (`claimed_at`, `completed_at`,
+`revoked_at`) e `nonce_hash` passou a ser nullable. `unique(user_id)` (inalterado) já garante sozinho "no
+máximo um grant claimed-não-concluído por usuário" — não foi necessário nenhum índice único parcial
+adicional.
+
+- **pending**: `issue_password_recovery_grant` (só `service_role`, inalterado) — três timestamps de estado
+  `null`.
+- **claimed**: `claim_recovery_grant_for_password_change(nonce)` faz um `UPDATE` atômico (não mais `DELETE`
+  — a linha precisa sobreviver para a trigger de conclusão correlacionar depois) marcando `claimed_at` e
+  limpando `nonce_hash`. Grava **`password_recovery_authorization_claimed`** (evento novo) — nunca mais
+  `password_recovery_completed`.
+- **completed**: a trigger `on_auth_user_password_changed` (`AFTER UPDATE OF encrypted_password ON auth.users`,
+  `supabase/migrations/0004_account_audit.sql`), disparada pelo próprio GoTrue na MESMA transação Postgres
+  que grava a senha nova (confirmado empiricamente com uma trigger de teste descartável que sempre lança
+  exceção: `updateUser()` falha por completo, a senha não muda — prova que a trigger roda na mesma
+  transação, não depois dela), correlaciona pelo `auth.users.id` sendo atualizado contra o único grant
+  `claimed`-não-`completed`-não-`revoked` daquele usuário (a unicidade da tabela garante que não há
+  ambiguidade) e só então marca `completed_at` + grava `password_recovery_completed`.
+
+Se `updateUser()` nunca for chamado ou falhar, a linha permanece `claimed` para sempre — não pode ser
+reivindicada de novo (`claimed_at is null` no `WHERE` do claim) nem concluída por engano. Uma troca de
+senha sem nenhum grant `claimed` correspondente (fora do escopo atual da TASK-002, que não tem "trocar
+senha logado") não fabrica `password_recovery_completed` — a atualização do trigger simplesmente não afeta
+nenhuma linha.
+
+### Falha da própria trigger de conclusão
+
+Se o `INSERT` de auditoria dentro da trigger falhar (testado com uma trigger de bloqueio descartável), a
+troca de senha inteira sofre rollback — `encrypted_password` não muda, a senha antiga continua válida. Não
+existe estado possível em que a senha mudou mas a conclusão não foi registrada.
+
+### Server-only reforçado (Ponto 1 da revisão externa)
+
+`lib/supabase/service-only/recovery-grant-issuer.ts` ganhou `import "server-only";` (pacote oficial do
+Next.js, instalado via `npm install server-only`) como primeira linha — falha o **build** (não só uma
+exceção em runtime) se o módulo for alcançado por um Client Component. Novo teste estático
+(`lib/supabase/service-only/recovery-grant-issuer.test.ts`) comprova: a diretiva está presente; nenhum
+outro arquivo em `app/`/`lib/` importa o módulo além de `app/auth/recovery/route.ts`; nenhuma variável
+`*SERVICE_ROLE*` usa prefixo `NEXT_PUBLIC_`. Confirmado manualmente nesta sessão (`grep` em
+`.next/static`/`.next/server` pós-`npm run build`): a chave não aparece em nenhum artefato de build,
+cliente ou servidor.
+
+### Privilégios SQL — o que mudou nesta rodada
+
+| Objeto | Antes | Depois |
+|---|---|---|
+| `claim_recovery_grant_for_password_change(text)` | `DELETE` da linha; gravava `password_recovery_completed` | `UPDATE` (marca `claimed_at`, limpa `nonce_hash`); grava `password_recovery_authorization_claimed` |
+| `handle_password_recovery_completion()` (trigger, nova) | — | `SECURITY DEFINER`, `search_path=''`, zero `EXECUTE` para qualquer papel — só o trigger `on_auth_user_password_changed` a invoca |
+| `audit_log_action_check` | 9 valores (sem `password_recovery_authorization_claimed`) | 10 valores — só ALARGADO, nunca estreitado (mesma política das rodadas anteriores) |
+| `password_recovery_grants.nonce_hash` | `NOT NULL` | `NULL` (limpo no claim) |
+| `password_recovery_grants` | sem `claimed_at`/`completed_at`/`revoked_at` | as três colunas adicionadas |
+
+### Arquivos criados/modificados
+
+- **Criados**: `supabase/tests/bug-claude-verif2-001-regression-check.ts` (reproduz sucesso real, falha
+  forçada entre claim e updateUser, e concorrência real com 5 senhas — os três cenários exigidos pela
+  revisão externa); `lib/supabase/service-only/recovery-grant-issuer.test.ts`.
+- **Modificados**: `supabase/migrations/0003_recovery_session.sql` (máquina de estados); `0004_account_audit.sql`
+  (trigger de conclusão + widening do constraint); `lib/supabase/service-only/recovery-grant-issuer.ts`
+  (`server-only`); `app/(auth)/reset-password/actions.ts` (só comentários — a ordem claim→updateUser→signOut
+  já estava correta, só a semântica do que o claim grava mudou, no banco); `lib/supabase/types.ts`;
+  `package.json`/`package-lock.json` (dependência `server-only`); `supabase/tests/onboarding_isolation_check.sql`
+  (Casos 30-33 novos, Caso 26 fortalecido); `supabase/tests/migration-upgrade-check.sh` (9 eventos históricos
+  variados em vez de 1, checagem da trigger nova e do constraint alargado);
+  `supabase/tests/recovery-claim-concurrency-check.ts` (nome do evento corrigido);
+  `supabase/migrations/0003_recovery_session.privileges.test.ts`/`0004_account_audit.privileges.test.ts`
+  (cobertura da máquina de estados e da trigger nova).
+
+### Resultados reais desta rodada
+
+| Gate | Resultado |
+|---|---|
+| `npm test` | **235/235** (23 arquivos) |
+| `npm run lint` / `npx tsc --noEmit` / `npm run build` | OK |
+| `npm audit` / `npm audit --omit=dev` | 0 vulnerabilidades |
+| `supabase/tests/onboarding_isolation_check.sql` | **33 cenários, todos PASS** (Casos 30-33 novos) |
+| `supabase/tests/migration-upgrade-check.sh` | PASS — 9 eventos históricos variados sobrevivem intactos |
+| `supabase/tests/bug-claude-verif2-001-regression-check.ts` (novo) | **PASS** — sucesso real, falha forçada, concorrência 5x |
+| `supabase/tests/bug-claude-001-regression-check.ts`, `auth-flow-purpose-check.ts`, `recovery-claim-concurrency-check.ts`, `slug-concurrency-check.ts`, `isolation_check.sql` (TASK-001) | PASS, reexecutados |
+| Navegador real (`npm run start`, host `localhost` consistente) | signup→confirm→onboarding→forgot-password→recovery→reset-password→login funcionando; `audit_log` mostra `claimed` antes de `completed`, na ordem correta, confirmado via consulta direta ao Postgres depois de cada etapa |
+
+### Limitações remanescentes
+
+- O quirk `127.0.0.1`/`localhost` documentado na rodada anterior continua presente (ambiente local, não é
+  regressão desta correção) — mitigado testando com host consistente.
+- `revoked_at` existe na tabela mas nenhum caminho desta correção o define ainda — reservado para uma
+  futura revogação administrativa explícita.

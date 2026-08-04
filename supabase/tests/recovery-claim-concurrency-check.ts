@@ -7,9 +7,15 @@
  * (`Promise.all` — duas conexões de rede reais e independentes ao
  * Postgres local via PostgREST, não apenas "uma depois da outra").
  *
- * Só o DELETE condicional atômico dentro da função (mesma linha do
- * WHERE: usuário, sessão, hash do nonce, não expirado) pode garantir que
- * exatamente UMA das duas obtenha `true`.
+ * Só o UPDATE condicional atômico dentro da função (mesma linha do
+ * WHERE: usuário, sessão, hash do nonce, não expirado, claimed_at/
+ * completed_at/revoked_at todos null) pode garantir que exatamente UMA
+ * das duas obtenha `true` — a linha NÃO é apagada (fica no estado
+ * `claimed`), só marcada; a concorrência completa (claim + updateUser +
+ * verificação de qual senha final funciona) tem um teste dedicado em
+ * supabase/tests/bug-claude-verif2-001-regression-check.ts (Cenário 3).
+ * Este script cobre especificamente a atomicidade do PASSO DE CLAIM
+ * isolado.
  *
  * IMPORTANTE (terceira correção pós-QA, revisão externa sobre
  * qa/reports/TASK-002-CLAUDE-VERIFICATION.md, BUG-CLAUDE-001): o setup
@@ -26,6 +32,15 @@
  * contra um `token_hash` REAL (via `admin.auth.admin.generateLink`,
  * que faz o GoTrue emitir um token genuíno sem precisar do servidor
  * Next.js rodando nem de round-trip por e-mail/Mailpit).
+ *
+ * IMPORTANTE (quarta correção pós-QA, revisão externa sobre
+ * qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, BUG-CLAUDE-VERIF2-001):
+ * o claim grava `password_recovery_authorization_claimed`, NUNCA
+ * `password_recovery_completed` — este teste não chama `updateUser()`,
+ * então o evento verificado abaixo é o de autorização reivindicada, não
+ * o de conclusão (que só a trigger `on_auth_user_password_changed`,
+ * correlacionada a uma troca real de senha em `auth.users`, pode
+ * gravar).
  *
  * Como rodar:
  *   npx supabase start && npx supabase db reset && npm run seed:local
@@ -148,11 +163,17 @@ async function main() {
     .from("audit_log")
     .select("id")
     .eq("actor_user_id", session.user.id)
-    .eq("action", "password_recovery_completed");
+    .eq("action", "password_recovery_authorization_claimed");
+
+  const { data: grantRows } = await admin
+    .from("password_recovery_grants")
+    .select("claimed_at, completed_at")
+    .eq("user_id", session.user.id);
 
   const checks = {
     exatamenteUmaAutorizacao: successes.length === 1,
     exatamenteUmEventoDeAuditoria: (auditRows ?? []).length === 1,
+    grantClaimedNaoCompleted: Boolean(grantRows?.[0]?.claimed_at) && !grantRows?.[0]?.completed_at,
   };
 
   console.log("\nResultado:");
@@ -160,7 +181,10 @@ async function main() {
     `  Exatamente 1 autorizacao bem-sucedida: ${checks.exatamenteUmaAutorizacao ? "PASS" : "FAIL"} (${successes.length})`,
   );
   console.log(
-    `  Exatamente 1 evento de auditoria (sem duplicar): ${checks.exatamenteUmEventoDeAuditoria ? "PASS" : "FAIL"} (${(auditRows ?? []).length})`,
+    `  Exatamente 1 evento password_recovery_authorization_claimed (sem duplicar): ${checks.exatamenteUmEventoDeAuditoria ? "PASS" : "FAIL"} (${(auditRows ?? []).length})`,
+  );
+  console.log(
+    `  Grant no estado claimed, completed_at ainda null (updateUser não foi chamado neste teste): ${checks.grantClaimedNaoCompleted ? "PASS" : "FAIL"} (${JSON.stringify(grantRows?.[0])})`,
   );
 
   const { data: userAfter } = await admin.auth.admin.getUserById(session.user.id);
@@ -168,12 +192,12 @@ async function main() {
     await admin.auth.admin.deleteUser(userAfter.user.id);
   }
 
-  if (!checks.exatamenteUmaAutorizacao || !checks.exatamenteUmEventoDeAuditoria) {
+  if (!checks.exatamenteUmaAutorizacao || !checks.exatamenteUmEventoDeAuditoria || !checks.grantClaimedNaoCompleted) {
     throw new Error("Teste de concorrência da reivindicação de recuperação FALHOU — ver detalhes acima.");
   }
 
   console.log(
-    "\nPASS - concorrência da troca de senha: DELETE condicional atômico garantiu exatamente uma autorização sob corrida real, com grant emitido pelo caminho real (verifyOtp + issue_password_recovery_grant, sem bypass).",
+    "\nPASS - concorrência do claim: UPDATE condicional atômico garantiu exatamente uma autorização sob corrida real, com grant emitido pelo caminho real (verifyOtp + issue_password_recovery_grant, sem bypass). password_recovery_completed corretamente ausente (updateUser não foi chamado por este teste — ver bug-claude-verif2-001-regression-check.ts para o fluxo completo).",
   );
 }
 

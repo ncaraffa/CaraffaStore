@@ -54,17 +54,28 @@ export async function resetPasswordAction(
   }
 
   // Reivindicação atômica IMEDIATAMENTE ANTES da troca de senha — nunca
-  // depois (qa/reports/TASK-002-RETEST.md, BUG-RT2-002). O DELETE
-  // condicional dentro da função é o que garante que, sob duas
-  // requisições concorrentes com a mesma sessão, exatamente uma
-  // consegue prosseguir: a segunda encontra 0 linhas (a primeira já
-  // apagou) e recebe `false` aqui, sem nunca chamar updateUser().
+  // depois (qa/reports/TASK-002-RETEST.md, BUG-RT2-002). O UPDATE
+  // condicional dentro da função (estado pending -> claimed) é o que
+  // garante que, sob duas requisições concorrentes com a mesma sessão,
+  // exatamente uma consegue prosseguir: a segunda encontra 0 linhas
+  // elegíveis (claimed_at já não é mais null) e recebe `false` aqui,
+  // sem nunca chamar updateUser().
   //
   // Terceira correção pós-QA (qa/reports/TASK-002-CLAUDE-VERIFICATION.md,
   // BUG-CLAUDE-001): a reivindicação agora também exige o nonce bruto
   // devolvido por app/auth/recovery/route.ts num cookie HttpOnly — sem
   // ele, mesmo uma sessão com um grant pendente de verdade não consegue
   // reivindicar nada.
+  //
+  // Quarta correção pós-QA (revisão externa sobre
+  // qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, BUG-CLAUDE-VERIF2-001):
+  // o claim NÃO grava mais `password_recovery_completed` — só
+  // `password_recovery_authorization_claimed` (a senha ainda não mudou
+  // neste ponto). A linha do grant permanece no estado `claimed`
+  // (não é apagada) para que a trigger `on_auth_user_password_changed`
+  // (supabase/migrations/0004_account_audit.sql) consiga correlacioná-la
+  // corretamente depois, SE E SOMENTE SE `updateUser()` abaixo realmente
+  // tiver sucesso.
   const cookieStore = await cookies();
   const nonce = cookieStore.get(RECOVERY_NONCE_COOKIE)?.value;
   const claimed = await claimRecoveryGrantForPasswordChange(supabase, nonce);
@@ -75,19 +86,30 @@ export async function resetPasswordAction(
 
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
   if (error) {
-    // O grant já foi consumido pela reivindicação acima — não há como
-    // "devolvê-lo" com segurança (reabriria a mesma janela de reuso que
-    // a atomicidade acima fecha). Falha segura: encerra a sessão e exige
-    // uma nova recuperação, em vez de permitir nova tentativa com o
-    // mesmo grant.
+    // O grant já foi reivindicado (estado claimed) pela chamada acima —
+    // não há como "devolvê-lo" com segurança (reabriria a mesma janela
+    // de reuso que a atomicidade acima fecha): completed_at permanece
+    // null PARA SEMPRE nesta linha, então nenhuma tentativa futura pode
+    // reivindicá-la de novo nem concluí-la. `password_recovery_completed`
+    // nunca é gravado neste caminho, porque encrypted_password nunca
+    // mudou de fato (fecha BUG-CLAUDE-VERIF2-001,
+    // qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md — reproduzido
+    // empiricamente forçando updateUser() a falhar depois de um claim
+    // bem-sucedido). Falha segura: encerra a sessão e exige uma nova
+    // recuperação (novo verifyOtp real), em vez de permitir nova
+    // tentativa com o mesmo grant.
     await supabase.auth.signOut();
     return { status: "error", message: RESET_LINK_INVALID_MESSAGE };
   }
 
-  // Auditoria já gravada dentro de claim_recovery_grant_for_password_change()
-  // (mesma transação atômica do consumo do grant) — nenhuma RPC de
-  // auditoria separada e chamável isoladamente existe para este evento
-  // (BUG-RT2-005, qa/reports/TASK-002-RETEST.md).
+  // updateUser() teve sucesso real: a trigger `on_auth_user_password_changed`
+  // (AFTER UPDATE OF encrypted_password em auth.users, mesma transação
+  // Postgres que o GoTrue usou para gravar a nova senha — confirmado
+  // empiricamente) já marcou completed_at e gravou
+  // `password_recovery_completed` sozinha, correlacionando pelo próprio
+  // auth.users.id — nenhuma chamada adicional é necessária aqui. Não
+  // existe nenhuma RPC de auditoria separada e chamável isoladamente
+  // para este evento (BUG-RT2-005, qa/reports/TASK-002-RETEST.md).
   await supabase.auth.signOut();
   redirect("/login");
 }

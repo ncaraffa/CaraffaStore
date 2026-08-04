@@ -10,6 +10,7 @@ export type OnboardingStep =
 export type PlanCode = 30 | 50 | 80;
 export type AuditAction =
   | "email_verification_completed"
+  | "password_recovery_authorization_claimed"
   | "password_recovery_completed"
   | "store_created"
   | "owner_assigned"
@@ -249,25 +250,34 @@ export interface Database {
           id: string;
           user_id: string;
           session_id: string;
-          nonce_hash: string;
+          nonce_hash: string | null;
           created_at: string;
           expires_at: string;
+          claimed_at: string | null;
+          completed_at: string | null;
+          revoked_at: string | null;
         };
         Insert: {
           id?: string;
           user_id: string;
           session_id: string;
-          nonce_hash: string;
+          nonce_hash?: string | null;
           created_at?: string;
           expires_at: string;
+          claimed_at?: string | null;
+          completed_at?: string | null;
+          revoked_at?: string | null;
         };
         Update: {
           id?: string;
           user_id?: string;
           session_id?: string;
-          nonce_hash?: string;
+          nonce_hash?: string | null;
           created_at?: string;
           expires_at?: string;
+          claimed_at?: string | null;
+          completed_at?: string | null;
+          revoked_at?: string | null;
         };
         Relationships: [];
       };
