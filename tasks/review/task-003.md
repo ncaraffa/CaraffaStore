@@ -1,7 +1,13 @@
 # TASK-003 — Catálogo, produtos e categorias
 
-**Status:** BACKLOG  
-**Responsável:** Claude Code (após refinamento)
+**Status:** IN_PROGRESS
+**Responsável:** Claude Code
+**Branch:** feat/TASK-003-catalog-products
+**HEAD-base:** b7e10c315e94b98293395a8d814e0fdfb0c2b7ca (master, TASK-001/002 DONE)
+
+**Decisões aprovadas por Caraffa (2026-08-04):** sem variantes nesta tarefa (preço/estoque únicos por
+produto); até 5 imagens por produto via Supabase Storage com capa/ordenação; estoque nunca negativo,
+ajuste atômico, produto publicado com estoque zero permanece visível como "Esgotado".
 
 ## Objetivo
 

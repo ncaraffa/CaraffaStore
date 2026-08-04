@@ -1,6 +1,13 @@
 import { isAllowedRedirect } from "@/lib/auth/redirects";
 
-/** Acessíveis sem sessão (anônimo). */
+/**
+ * Acessíveis sem sessão (anônimo). `/loja` foi adicionado pela TASK-003
+ * (catálogo público) — a mesma decisão aprovada que concede SELECT a
+ * `anon` em stores/categories/products/product_images (só linhas
+ * `active`/`published`/`is_active`, ver supabase/migrations/0005_catalog.sql).
+ * Sem isso, um visitante anônimo seria redirecionado para /login antes
+ * de qualquer página de loja carregar.
+ */
 export const PUBLIC_PATHS = [
   "/login",
   "/signup",
@@ -8,6 +15,7 @@ export const PUBLIC_PATHS = [
   "/reset-password",
   "/auth/confirm",
   "/auth/recovery",
+  "/loja",
 ];
 
 /**

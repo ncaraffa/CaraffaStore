@@ -231,9 +231,20 @@ end $$;
 rollback to savepoint case_6;
 
 -- ------------------------------------------------------------
--- Caso 7: Anônimo (sem claims) não acessa nenhuma tabela
--- Trata tanto bloqueio por ausência de GRANT quanto bloqueio por RLS
--- como PASS — em ambos os casos o resultado é "nenhum dado visível".
+-- Caso 7: Anônimo (sem claims) não acessa nenhum dado ADMINISTRATIVO.
+--
+-- Atualizado pela TASK-003 (supabase/migrations/0005_catalog.sql):
+-- 0001_init.sql previa explicitamente que um catálogo público futuro
+-- exigiria uma decisão separada e aprovada para conceder SELECT a
+-- anon em `stores` — a TASK-003 é essa decisão (Caraffa, 2026-08-04),
+-- restrita a `status = 'active'` (store-a/store-b, fixtures desta
+-- mesma TASK-001, são exatamente as duas lojas `active` do seed).
+-- `products` continua com ZERO linhas visíveis para anon aqui: a
+-- policy pública de products exige `status = 'published'`, e as
+-- fixtures de produto da TASK-001 nunca têm esse status (nascem
+-- `draft`, default de 0005_catalog.sql) — não há alteração alguma no
+-- isolamento real, só a superfície de "loja ativa é publicamente
+-- visível" que antes nem existia.
 -- ------------------------------------------------------------
 savepoint case_7;
 
@@ -244,7 +255,7 @@ select current_user as papel_ativo;
 do $$
 declare
   qtd_products int;
-  qtd_stores int;
+  qtd_stores_active int;
 begin
   begin
     select count(*) into qtd_products from public.products;
@@ -253,15 +264,15 @@ begin
   end;
 
   begin
-    select count(*) into qtd_stores from public.stores;
+    select count(*) into qtd_stores_active from public.stores where slug in ('store-a', 'store-b');
   exception when insufficient_privilege then
-    qtd_stores := 0;
+    qtd_stores_active := 0;
   end;
 
-  if qtd_products = 0 and qtd_stores = 0 then
-    raise notice 'PASS - Caso 7: anonimo nao ve produtos nem lojas (0 e 0)';
+  if qtd_products = 0 and qtd_stores_active = 2 then
+    raise notice 'PASS - Caso 7: anonimo nao ve nenhum produto (0, todos draft) e ve exatamente as 2 lojas active do catalogo publico (store-a/store-b) — TASK-003, nenhuma loja onboarding/pending_payment/suspended vazou';
   else
-    raise exception 'FAIL - Caso 7: anonimo deveria ver 0 produtos e 0 lojas, obteve % produtos e % lojas', qtd_products, qtd_stores;
+    raise exception 'FAIL - Caso 7: esperado 0 produtos e 2 lojas active visiveis (catalogo publico), obteve % produtos e % lojas', qtd_products, qtd_stores_active;
   end if;
 end $$;
 

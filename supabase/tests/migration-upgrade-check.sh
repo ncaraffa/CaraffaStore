@@ -31,23 +31,23 @@ cd "$(dirname "$0")/../.."
 MIGRATIONS_DIR="supabase/migrations"
 STASH_DIR="$(mktemp -d)"
 
-# Sempre devolve 0003/0004 para o lugar antes de limpar o diretório
+# Sempre devolve 0003/0004/0005 para o lugar antes de limpar o diretório
 # temporário, mesmo se o script falhar no meio — nunca deixa os
 # arquivos de migração "presos" só no stash.
 restore_migrations() {
-  if [ -f "$STASH_DIR/0003_recovery_session.sql" ]; then
-    mv "$STASH_DIR/0003_recovery_session.sql" "$MIGRATIONS_DIR/"
-  fi
-  if [ -f "$STASH_DIR/0004_account_audit.sql" ]; then
-    mv "$STASH_DIR/0004_account_audit.sql" "$MIGRATIONS_DIR/"
-  fi
+  for f in 0003_recovery_session.sql 0004_account_audit.sql 0005_catalog.sql; do
+    if [ -f "$STASH_DIR/$f" ]; then
+      mv "$STASH_DIR/$f" "$MIGRATIONS_DIR/"
+    fi
+  done
   rm -rf "$STASH_DIR"
 }
 trap restore_migrations EXIT
 
-echo "==> Movendo 0003/0004 para fora de supabase/migrations/ (simula estado pós-0002)"
+echo "==> Movendo 0003/0004/0005 para fora de supabase/migrations/ (simula estado pós-0002)"
 mv "$MIGRATIONS_DIR/0003_recovery_session.sql" "$STASH_DIR/"
 mv "$MIGRATIONS_DIR/0004_account_audit.sql" "$STASH_DIR/"
+mv "$MIGRATIONS_DIR/0005_catalog.sql" "$STASH_DIR/"
 
 echo "==> supabase db reset (só 0001+0002)"
 npx supabase db reset --local
@@ -82,7 +82,7 @@ HISTORICAL_IDS=$(echo "$HISTORICAL_IDS_RAW" | tr -d ' ')
 HISTORICAL_COUNT=$(echo "$HISTORICAL_IDS_RAW" | grep -c '.')
 echo "    $HISTORICAL_COUNT linhas históricas inseridas (9 action values distintos, store_id/actor_id/details variados)"
 
-echo "==> Devolvendo 0003/0004 para supabase/migrations/"
+echo "==> Devolvendo 0003/0004 para supabase/migrations/ (0005 continua fora por enquanto)"
 mv "$STASH_DIR/0003_recovery_session.sql" "$MIGRATIONS_DIR/"
 mv "$STASH_DIR/0004_account_audit.sql" "$MIGRATIONS_DIR/"
 
@@ -182,9 +182,94 @@ if [ "$(echo "$RESTRICT_OK" | tr -d '[:space:]')" != "r" ]; then
 fi
 echo "PASS - audit_log.store_id está ON DELETE RESTRICT após o upgrade"
 
+echo "==> TASK-003: simulando o estado real da master atual (0001-0004 aplicadas, TASK-002 concluída)"
+# Insere eventos históricos no estilo TASK-002 (0004 já aplicada nesta
+# altura) ANTES de trazer a 0005 — é exatamente o estado real da
+# master no momento em que a TASK-003 começou (b7e10c3, ver
+# docs/handoff.md).
+TASK002_STYLE_IDS_RAW=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -q -t -A -c "
+  insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata, created_at) values
+    ('22222222-2222-4222-8222-222222222222', null, 'password_recovery_grant_issued', 'auth_user', 'historico-recovery-issued-1', '{}'::jsonb, now() - interval '1 day'),
+    ('22222222-2222-4222-8222-222222222222', null, 'password_recovery_authorization_claimed', 'auth_user', 'historico-recovery-claimed-1', '{}'::jsonb, now() - interval '1 day')
+  returning id;
+")
+TASK002_STYLE_IDS=$(echo "$TASK002_STYLE_IDS_RAW" | tr -d ' ')
+TASK002_STYLE_COUNT=$(echo "$TASK002_STYLE_IDS_RAW" | grep -c '.')
+echo "    $TASK002_STYLE_COUNT linhas históricas adicionais (estilo TASK-002, pós-0004) inseridas"
+
+echo "==> Devolvendo 0005 para supabase/migrations/"
+mv "$STASH_DIR/0005_catalog.sql" "$MIGRATIONS_DIR/"
+
+echo "==> supabase migration up (aplica 0005 SOBRE o banco com TODO o histórico anterior, sem reset)"
+npx supabase migration up --local
+
+echo "==> Verificando: histórico completo (0002 + TASK-002) sobrevive intacto ao upgrade da TASK-003"
+ALL_HISTORICAL_IDS="$HISTORICAL_IDS
+$TASK002_STYLE_IDS"
+ALL_HISTORICAL_COUNT=$((HISTORICAL_COUNT + TASK002_STYLE_COUNT))
+SURVIVED_ALL=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from public.audit_log where id::text = any(string_to_array('$ALL_HISTORICAL_IDS', E'\n'));
+")
+if [ "$SURVIVED_ALL" != "$ALL_HISTORICAL_COUNT" ]; then
+  echo "FAIL - histórico incompleto sobreviveu ao upgrade da TASK-003 (esperado $ALL_HISTORICAL_COUNT, obtido $SURVIVED_ALL)"
+  exit 1
+fi
+echo "PASS - todo o histórico (0002 + TASK-002, $SURVIVED_ALL linhas) sobreviveu intacto ao upgrade da TASK-003"
+
+CATALOG_SCHEMA_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from pg_proc
+    where proname in ('catalog_create_category', 'catalog_update_category', 'catalog_set_category_active',
+      'catalog_create_product', 'catalog_update_product', 'catalog_set_product_status', 'catalog_adjust_stock',
+      'catalog_add_product_image', 'catalog_remove_product_image', 'catalog_set_cover_image', 'catalog_move_product_image');
+")
+if [ "$CATALOG_SCHEMA_OK" != "11" ]; then
+  echo "FAIL - nem todas as 11 funções catalog_* existem após o upgrade (esperado 11, obtido $CATALOG_SCHEMA_OK)"
+  exit 1
+fi
+echo "PASS - as 11 funções catalog_* existem após o upgrade"
+
+CATALOG_TABLES_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from information_schema.tables where table_schema = 'public' and table_name in ('categories', 'product_images');
+")
+if [ "$CATALOG_TABLES_OK" != "2" ]; then
+  echo "FAIL - tabelas categories/product_images não existem após o upgrade (esperado 2, obtido $CATALOG_TABLES_OK)"
+  exit 1
+fi
+echo "PASS - tabelas categories/product_images existem após o upgrade"
+
+BUCKET_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from storage.buckets where id = 'product-images' and public = true;
+")
+if [ "$BUCKET_OK" != "1" ]; then
+  echo "FAIL - bucket product-images não existe/não está público após o upgrade (esperado 1, obtido $BUCKET_OK)"
+  exit 1
+fi
+echo "PASS - bucket product-images existe e está público após o upgrade"
+
+CATALOG_ACTION_CHECK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select pg_get_constraintdef(oid) from pg_constraint where conname = 'audit_log_action_check';
+")
+for expected_action in category_created product_created product_stock_adjusted product_image_added password_recovery_authorization_claimed signup_completed; do
+  if ! echo "$CATALOG_ACTION_CHECK" | grep -q "$expected_action"; then
+    echo "FAIL - audit_log_action_check não inclui $expected_action após o upgrade da TASK-003"
+    exit 1
+  fi
+done
+echo "PASS - audit_log_action_check inclui os eventos de catálogo sem perder nenhum valor histórico anterior"
+
+PRODUCTS_EXTENDED_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name = 'products' and column_name in ('category_id', 'slug', 'price_cents', 'sku', 'status');
+")
+if [ "$PRODUCTS_EXTENDED_OK" != "5" ]; then
+  echo "FAIL - products não foi estendida corretamente após o upgrade (esperado 5 colunas novas, obtido $PRODUCTS_EXTENDED_OK)"
+  exit 1
+fi
+echo "PASS - public.products foi estendida em ALTER TABLE (nunca recriada) — colunas novas presentes após o upgrade"
+
 echo "==> Restaurando o ambiente para o estado normal de teste (reset completo + reseed)"
 npx supabase db reset --local
 npm run seed:local
 
 echo ""
-echo "PASS - upgrade real desde a migration 0002 (com dados históricos) até o schema final: sem erro, dado histórico preservado, schema final funcional."
+echo "PASS - upgrade real desde a migration 0002 (com dados históricos, TASK-002 e TASK-003) até o schema final: sem erro, dado histórico preservado, schema final funcional."

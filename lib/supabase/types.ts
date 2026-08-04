@@ -18,7 +18,20 @@ export type AuditAction =
   | "owner_assigned"
   | "plan_selected"
   | "onboarding_completed"
-  | "access_denied";
+  | "access_denied"
+  | "category_created"
+  | "category_updated"
+  | "category_archived"
+  | "product_created"
+  | "product_updated"
+  | "product_published"
+  | "product_unpublished"
+  | "product_archived"
+  | "product_stock_adjusted"
+  | "product_image_added"
+  | "product_image_removed"
+  | "product_cover_changed";
+export type ProductStatus = "draft" | "published" | "archived";
 
 /**
  * Minimal hand-written mirror of `supabase/migrations/0001_init.sql`
@@ -92,23 +105,44 @@ export interface Database {
         Row: {
           id: string;
           store_id: string;
+          category_id: string | null;
           name: string;
+          slug: string | null;
+          description: string | null;
+          price_cents: number;
+          sku: string | null;
           stock: number;
+          status: ProductStatus;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
           store_id: string;
+          category_id?: string | null;
           name: string;
+          slug?: string | null;
+          description?: string | null;
+          price_cents?: number;
+          sku?: string | null;
           stock?: number;
+          status?: ProductStatus;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
           store_id?: string;
+          category_id?: string | null;
           name?: string;
+          slug?: string | null;
+          description?: string | null;
+          price_cents?: number;
+          sku?: string | null;
           stock?: number;
+          status?: ProductStatus;
           created_at?: string;
+          updated_at?: string;
         };
         Relationships: [
           {
@@ -116,6 +150,102 @@ export interface Database {
             columns: ["store_id"];
             isOneToOne: false;
             referencedRelation: "stores";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "products_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      categories: {
+        Row: {
+          id: string;
+          store_id: string;
+          name: string;
+          slug: string;
+          description: string | null;
+          display_order: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          store_id: string;
+          name: string;
+          slug: string;
+          description?: string | null;
+          display_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          store_id?: string;
+          name?: string;
+          slug?: string;
+          description?: string | null;
+          display_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "categories_store_id_fkey";
+            columns: ["store_id"];
+            isOneToOne: false;
+            referencedRelation: "stores";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      product_images: {
+        Row: {
+          id: string;
+          store_id: string;
+          product_id: string;
+          storage_path: string;
+          position: number;
+          is_cover: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          store_id: string;
+          product_id: string;
+          storage_path: string;
+          position?: number;
+          is_cover?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          store_id?: string;
+          product_id?: string;
+          storage_path?: string;
+          position?: number;
+          is_cover?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "product_images_store_id_fkey";
+            columns: ["store_id"];
+            isOneToOne: false;
+            referencedRelation: "stores";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "product_images_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
             referencedColumns: ["id"];
           },
         ];
@@ -345,6 +475,79 @@ export interface Database {
       complete_password_recovery_attempt: {
         Args: { p_attempt_id: string; p_capability: string };
         Returns: boolean;
+      };
+      catalog_create_category: {
+        Args: {
+          p_store_id: string;
+          p_name: string;
+          p_slug: string;
+          p_description?: string | null;
+          p_display_order?: number;
+        };
+        Returns: Database["public"]["Tables"]["categories"]["Row"];
+      };
+      catalog_update_category: {
+        Args: {
+          p_category_id: string;
+          p_name: string;
+          p_slug: string;
+          p_description?: string | null;
+          p_display_order?: number;
+        };
+        Returns: Database["public"]["Tables"]["categories"]["Row"];
+      };
+      catalog_set_category_active: {
+        Args: { p_category_id: string; p_is_active: boolean };
+        Returns: Database["public"]["Tables"]["categories"]["Row"];
+      };
+      catalog_create_product: {
+        Args: {
+          p_store_id: string;
+          p_name: string;
+          p_slug: string;
+          p_price_cents: number;
+          p_stock: number;
+          p_category_id?: string | null;
+          p_description?: string | null;
+          p_sku?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["products"]["Row"];
+      };
+      catalog_update_product: {
+        Args: {
+          p_product_id: string;
+          p_name: string;
+          p_slug: string;
+          p_price_cents: number;
+          p_category_id?: string | null;
+          p_description?: string | null;
+          p_sku?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["products"]["Row"];
+      };
+      catalog_set_product_status: {
+        Args: { p_product_id: string; p_status: ProductStatus };
+        Returns: Database["public"]["Tables"]["products"]["Row"];
+      };
+      catalog_adjust_stock: {
+        Args: { p_product_id: string; p_delta: number; p_reason: string; p_reference?: string | null };
+        Returns: number;
+      };
+      catalog_add_product_image: {
+        Args: { p_product_id: string; p_storage_path: string; p_is_cover?: boolean };
+        Returns: Database["public"]["Tables"]["product_images"]["Row"];
+      };
+      catalog_remove_product_image: {
+        Args: { p_image_id: string };
+        Returns: void;
+      };
+      catalog_set_cover_image: {
+        Args: { p_image_id: string };
+        Returns: void;
+      };
+      catalog_move_product_image: {
+        Args: { p_image_id: string; p_direction: "up" | "down" };
+        Returns: void;
       };
     };
   };

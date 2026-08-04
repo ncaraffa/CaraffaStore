@@ -1,15 +1,11 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireStoreStatus } from "@/lib/tenant/access-control";
 import { LogoutButton } from "@/app/logout/logout-button";
+import { DashboardNav } from "@/app/dashboard/dashboard-nav";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Placeholder do painel operacional — o painel real (catálogo, pedidos,
- * configuração) é explicitamente fora do escopo da TASK-002. Esta rota
- * existe só para provar o guard de estado `active`: no fluxo público
- * desta tarefa nenhuma loja chega a `active` (só via seed/teste).
- *
  * requireStoreStatus exige uma loja `active` de verdade — sem `?store=`
  * resolve pela situação real de memberships (nunca libera acesso
  * genérico por ausência do parâmetro; corrige BUG-T2-001,
@@ -27,7 +23,11 @@ export default async function DashboardPage({
   return (
     <main>
       <h1>Painel</h1>
-      <p>Loja &quot;{store.name}&quot; ativa. Painel operacional completo fora do escopo desta tarefa.</p>
+      <p>
+        Loja &quot;{store.name}&quot; ativa. Catálogo público em{" "}
+        <a href={`/loja/${store.slug}`}>/loja/{store.slug}</a>.
+      </p>
+      <DashboardNav storeSlug={store.slug} />
       <LogoutButton />
     </main>
   );
