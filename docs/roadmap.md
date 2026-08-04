@@ -17,6 +17,8 @@
 
 - Personalização, produtos, categorias, estoque e loja pública.
 - Carrinho, checkout, pedidos e painel do comerciante.
+- **Catálogo, produtos, categorias e estoque: em revisão** (TASK-003, `tasks/review/task-003.md`,
+  branch `feat/TASK-003-catalog-products`, aguardando aprovação externa — ver `docs/handoff.md`).
 
 ## Fase 3 — Pix
 

@@ -1427,3 +1427,123 @@ tentativas passadas (completed/revoked) de coexistir.
 - Estratégia de retry da completion pós-`updateUser()` é local à requisição (sem fila/job assíncrono) — se
   os `COMPLETION_RETRY_ATTEMPTS` (2) falharem, o evento de conclusão fica ausente até uma reconciliação
   manual; documentado explicitamente como aceitável (nunca fabricar um evento falso é a prioridade).
+
+## Entrega da TASK-003 — Catálogo, produtos, categorias e estoque (2026-08-04)
+
+**Branch:** `feat/TASK-003-catalog-products` (não mesclada — aguardando revisão externa)
+**Decisões aprovadas por Caraffa:** sem variantes (produto tem preço/estoque únicos); até 5 imagens por
+produto via Supabase Storage com capa/ordenação; estoque nunca negativo, ajuste atômico.
+
+### Arquitetura
+
+`public.products` (criada na TASK-001 como "prova mínima de isolamento") foi **estendida em `ALTER TABLE`**,
+nunca recriada — todas as colunas novas (`category_id`, `slug`, `description`, `price_cents`, `sku`,
+`status`, `updated_at`) são opcionais/têm default, então o INSERT mínimo de `scripts/seed-local.ts` e de
+`supabase/tests/isolation_check.sql` continuam funcionando sem alteração (TASK-001 RLS permanece 7/7).
+`slug`/`sku` são `UNIQUE(store_id, ...)` mas NULLABLE — NULLs não colidem entre si (semântica SQL padrão),
+então fixtures antigas sem slug convivem com produtos reais do catálogo, que sempre preenchem um slug
+válido. Novas tabelas: `categories` (sem exclusão física — só `is_active` toggle) e `product_images`
+(máximo 5 por produto e no máximo 1 capa, ambos garantidos por trigger/índice único parcial no banco, não
+só na aplicação).
+
+**Todas as escritas de catálogo passam por funções `SECURITY DEFINER`** (`catalog_create_category`,
+`catalog_update_category`, `catalog_set_category_active`, `catalog_create_product`,
+`catalog_update_product`, `catalog_set_product_status`, `catalog_adjust_stock`, `catalog_add_product_image`,
+`catalog_remove_product_image`, `catalog_set_cover_image`, `catalog_move_product_image`) — mesmo padrão das
+funções `onboarding_*`/`catalog_*` da TASK-002: cada uma reautoriza via `is_store_admin(store_id)` usando
+`auth.uid()`, nunca confia em `store_id`/papel vindo do cliente, e grava o evento de auditoria verdadeiro
+na MESMA transação da escrita (nenhum evento fabricável, nenhuma lacuna causal como o BUG-CLAUDE-VERIF3-001
+da TASK-002).
+
+**Estoque:** `catalog_adjust_stock` faz o ajuste atômico direto no `WHERE` (`stock + delta >= 0`), nunca
+`SELECT`-depois-`UPDATE` — testado sob concorrência real (`supabase/tests/stock-concurrency-check.ts`, 5
+ajustes concorrentes de -3 sobre estoque=10: exatamente 3 sucedem, estoque final 1, nunca negativo).
+
+**Imagens:** bucket Storage `product-images` **público** (leitura direta por URL, caminho
+`<store_id>/<product_id>/<uuid>.<ext>` — 3 segmentos de UUID aleatório, não enumerável, equivalente a um
+link "não listado"); a ESCRITA (upload/exclusão) é protegida por RLS real em `storage.objects`, restrita a
+owner/admin da loja dona do caminho (`storage.foldername(name)[1]` = `store_id`, checado via
+`is_store_admin`). `TRUNCATE` revogado de `anon`/`authenticated` em `storage.objects`/`storage.buckets`
+(mesma classe de risco documentada na TASK-001 para `stores`/`products`).
+
+**Catálogo público:** `anon` ganha `SELECT` em `stores`/`categories`/`products`/`product_images`, sempre
+restrito a `status='active'`/`is_active`/`status='published'` — decisão que `0001_init.sql` já previa
+explicitamente como "requer aprovação separada"; esta é essa aprovação.
+
+### Bug real encontrado e corrigido durante o smoke test manual
+
+As quatro policies públicas foram escritas inicialmente como `to anon` — funcionavam para um visitante
+verdadeiramente anônimo, mas um usuário **autenticado sem vínculo** com a loja visitada (ex.: dono de outra
+loja navegando o catálogo público alheio) via **0 resultados**, porque a policy de membro exige vínculo e a
+policy `to anon` não se aplica a uma sessão `authenticated`. Reproduzido ao navegar logado como admin-a para
+`/loja/store-b` (404). Corrigido trocando as quatro policies para `to public` (aplica a `anon` E
+`authenticated`) — `stores_select_public`, `categories_select_public`, `products_select_public`,
+`product_images_select_public`. Regressão coberta permanentemente pelo Caso 28 de
+`supabase/tests/catalog_isolation_check.sql` (autenticado sem nenhum vínculo continua vendo o catálogo
+público) e pelo Caso 6 reformulado (autenticado sem vínculo NÃO vê uma categoria **inativa** — a distinção
+correta agora é ativo/público vs. inativo/administrativo, não "tem sessão" vs. "não tem sessão").
+
+### Rotas
+
+**Painel** (`/dashboard/categories`, `/dashboard/categories/new`, `/dashboard/categories/[id]/edit`,
+`/dashboard/products`, `/dashboard/products/new`, `/dashboard/products/[id]/edit` — esta última também
+concentra publicação/estoque/imagens, por simplicidade): todas chamam `requireStoreStatus(supabase,
+"active", storeSlug)` exatamente como `app/dashboard/page.tsx` já fazia — guards da TASK-002
+(`pending_payment`/`suspended`/`onboarding`) preservados sem nenhuma alteração.
+
+**Pública** (`/loja/[storeSlug]`, `/loja/[storeSlug]/produto/[productSlug]`): adicionada a `PUBLIC_PATHS`
+em `lib/auth/middleware-policy.ts` (senão o middleware redirecionaria todo visitante anônimo para
+`/login` antes mesmo da página carregar). Busca (`?q=`) e filtro por categoria (`?category=`) via
+`ilike`/join simples — sem paginação nem índice de busca dedicado (fora de escopo do MVP).
+
+### Auditoria
+
+12 eventos novos (`category_created`, `category_updated`, `category_archived`, `product_created`,
+`product_updated`, `product_published`, `product_unpublished`, `product_archived`,
+`product_stock_adjusted`, `product_image_added`, `product_image_removed`, `product_cover_changed`) —
+`audit_log_action_check` só ALARGADO (todos os 12 valores anteriores da TASK-002 permanecem).
+`catalog_update_product` deliberadamente nunca altera `stock`/`status` (só `catalog_adjust_stock`/
+`catalog_set_product_status` fazem isso), preservando a semântica exata de cada evento.
+
+### Arquivos criados/modificados
+
+- **Criados**: `supabase/migrations/0005_catalog.sql` (+ `.privileges.test.ts`);
+  `supabase/tests/catalog_isolation_check.sql` (21 cenários), `supabase/tests/stock-concurrency-check.ts`;
+  `lib/catalog/{service,schemas,messages,slugify,format,image-validation}.ts`; todas as páginas/actions sob
+  `app/dashboard/categories/`, `app/dashboard/products/`, `app/loja/`.
+- **Modificados**: `lib/supabase/types.ts` (tabelas/funções novas); `lib/auth/middleware-policy.ts`
+  (`/loja` público) + teste; `app/dashboard/page.tsx` (nav); `app/globals.css` (estilos do painel/loja
+  pública); `supabase/tests/isolation_check.sql` (Caso 7 atualizado — anon agora vê as 2 lojas `active` do
+  catálogo público, 0 produtos porque as fixtures da TASK-001 continuam `draft`);
+  `supabase/tests/migration-upgrade-check.sh` (nova fase: upgrade da master atual, com TASK-002 já aplicada,
+  até a TASK-003).
+
+### Resultados reais desta rodada
+
+| Gate | Resultado |
+|---|---|
+| `npm test` | **275/275** (25 arquivos) |
+| `npm run lint` | OK (3 warnings `no-img-element`, aceitos — sem `next/image` para manter o MVP simples) |
+| `npx tsc --noEmit` / `npm run build` | OK |
+| `npm audit` / `npm audit --omit=dev` | 0 vulnerabilidades |
+| `supabase/tests/isolation_check.sql` (TASK-001 RLS) | 7/7 PASS |
+| `supabase/tests/onboarding_isolation_check.sql` (TASK-002) | 56/56 asserts PASS |
+| `supabase/tests/catalog_isolation_check.sql` (TASK-003, novo) | **21/21 PASS** |
+| `supabase/tests/migration-upgrade-check.sh` | PASS — banco novo, upgrade desde 0002, e upgrade da master atual (0001-0004 já aplicadas) até a TASK-003, todos sem erro, histórico preservado |
+| `supabase/tests/stock-concurrency-check.ts` (novo) | **PASS** — 5 ajustes concorrentes, estoque nunca negativo; Storage isola upload/remoção por loja |
+| `bug-claude-001/verif2/verif3-001-regression-check.ts`, `auth-flow-purpose-check.ts`, `recovery-claim-concurrency-check.ts`, `slug-concurrency-check.ts` (TASK-002) | PASS, reexecutados sem regressão |
+| Navegador real (`npm run start`) — painel | login → criar categoria → criar produto → editar → ajustar estoque (15→13, evento `product_stock_adjusted` correto) → publicar → produto `stock=0` mostra "Esgotado" no catálogo público |
+| Navegador real — catálogo público | `/loja/store-a` mostra só produtos `published`; busca (`?q=`) e categoria (`?category=`) filtram corretamente; produto não publicado não aparece; `/loja/store-b` (loja diferente, sem produtos publicados) mostra estado vazio corretamente para o mesmo visitante autenticado |
+| Responsivo (375×812 mobile) | sem overflow horizontal na página; tabela do painel rola só dentro do próprio contêiner (`.table-wrap`) |
+| Scan de segredos (bundle `.next/static`, logs) | Nenhuma ocorrência de `SERVICE_ROLE`/`service_role` |
+
+### Limitações remanescentes
+
+- Bucket de imagens é público (leitura por URL direta) — mitigado por caminho com UUID aleatório
+  (equivalente a link não-listado), não por controle de acesso real; aceito como decisão de simplicidade do
+  MVP, documentado explicitamente no comentário da migração.
+- Busca é `ilike` simples, sem paginação — adequado à escala de catálogo pequeno do MVP; catálogos maiores
+  exigiriam paginação e/ou um índice de busca dedicado.
+- Ordenação de imagens é só "mover para cima/baixo" (sem arrastar-e-soltar) — suficiente para até 5 imagens.
+- `<img>` nativo em vez de `next/image` (3 warnings de lint aceitos) — evita a complexidade de configurar
+  `remotePatterns` para o domínio do Storage; pode ser revisitado se performance de imagem virar prioridade.
