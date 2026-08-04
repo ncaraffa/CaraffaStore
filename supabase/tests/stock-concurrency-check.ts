@@ -10,6 +10,14 @@
  *   - Storage: admin da própria loja consegue enviar/remover imagem no
  *     próprio caminho; admin de OUTRA loja não consegue enviar nem
  *     remover no caminho da loja alheia (RLS de storage.objects).
+ *   - Concorrência de imagens (correção pós-QA, BUG-CLAUDE-003-003):
+ *     4 imagens + 2 inserções concorrentes (exatamente 1 sucede, total
+ *     final 5), 0 imagens + 6 concorrentes (nunca mais de 5), 5 imagens
+ *     + 1 nova (sempre rejeitada) — só o `select ... for update` em
+ *     catalog_add_product_image (0005_catalog.sql) serializa a corrida
+ *     que antes permitia ultrapassar o limite; cross-tenant e
+ *     pending_payment/suspended também são cobertos aqui, além da
+ *     regressão de capa única/promoção determinística.
  *
  * Diferente de supabase/tests/catalog_isolation_check.sql (SAVEPOINTs
  * numa única sessão psql, sequencial por natureza), este script usa
@@ -137,19 +145,186 @@ async function storageIsolation(admin: ReturnType<typeof createAdminSupabaseClie
   await admin.storage.from(BUCKET).remove([path, otherPath]);
 }
 
+/**
+ * Correção pós-QA (qa/reports/TASK-003-CLAUDE-VERIFICATION.md,
+ * BUG-CLAUDE-003-003): o limite de 5 imagens por produto era garantido
+ * só por um SELECT COUNT(*) antes do INSERT (trigger
+ * check_product_image_constraints), um TOCTOU (check-then-act)
+ * clássico — reproduzido 3/3 vezes com 2 inserções concorrentes e 4
+ * imagens já existentes, resultando em 6 imagens. Corrigido em
+ * catalog_add_product_image (0005_catalog.sql) com um
+ * `select ... for update` na linha do produto, que serializa qualquer
+ * concorrência de inserção de imagem para o MESMO produto. Este teste
+ * cobre exatamente os 3 cenários exigidos na correção: 4+2, 0+6 e 5+1.
+ */
+async function imageConcurrency(admin: ReturnType<typeof createAdminSupabaseClient>) {
+  const { data: storeA } = await admin.from("stores").select("id").eq("slug", "store-a").single();
+  const { data: storeB } = await admin.from("stores").select("id").eq("slug", "store-b").single();
+  const { data: pendingStore } = await admin.from("stores").select("id").eq("slug", "loja-pendente-fixture").single();
+  const { data: suspendedStore } = await admin.from("stores").select("id").eq("slug", "loja-suspensa-fixture").single();
+  if (!storeA || !storeB || !pendingStore || !suspendedStore) throw new Error("fixtures ausentes — rode npm run seed:local");
+
+  const clientA = await signIn("admin-a@example.test");
+  const clientB = await signIn("admin-b@example.test");
+  const clientPending = await signIn("merchant-pending@example.test");
+  const clientSuspended = await signIn("merchant-suspended@example.test");
+
+  async function siblingClient(of: Awaited<ReturnType<typeof signIn>>) {
+    const env = getPublicSupabaseEnv();
+    const c = createClient<Database>(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+    const {
+      data: { session },
+    } = await of.auth.getSession();
+    if (!session) throw new Error("sessão ausente para clonar");
+    await c.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+    return c;
+  }
+
+  async function createProduct(client: Awaited<ReturnType<typeof signIn>>, storeId: string, name: string) {
+    const { data, error } = await client.rpc("catalog_create_product", {
+      p_store_id: storeId,
+      p_name: name,
+      p_slug: name.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now(),
+      p_price_cents: 100,
+      p_stock: 1,
+    });
+    if (error || !data) throw new Error(`criação do produto (${name}) falhou: ${error?.message}`);
+    return data as { id: string };
+  }
+
+  // Cenário 1: 4 imagens já existentes + 2 inserções concorrentes -> exatamente 1 sucede, total final 5.
+  {
+    const product = await createProduct(clientA, storeA.id, "Img Concorrencia 4mais2");
+    for (let i = 0; i < 4; i++) {
+      const { error } = await clientA.rpc("catalog_add_product_image", {
+        p_product_id: product.id,
+        p_storage_path: `${storeA.id}/${product.id}/seed-${i}.jpg`,
+      });
+      if (error) throw new Error(`seed de imagem ${i} falhou: ${error.message}`);
+    }
+    const c1 = await siblingClient(clientA);
+    const c2 = await siblingClient(clientA);
+    const [r1, r2] = await Promise.all([
+      c1.rpc("catalog_add_product_image", { p_product_id: product.id, p_storage_path: `${storeA.id}/${product.id}/conc-x.jpg` }),
+      c2.rpc("catalog_add_product_image", { p_product_id: product.id, p_storage_path: `${storeA.id}/${product.id}/conc-y.jpg` }),
+    ]);
+    const successes = [r1, r2].filter((r) => !r.error).length;
+    const { data: finalImages } = await admin.from("product_images").select("id").eq("product_id", product.id);
+    record(
+      "4 imagens + 2 inserções concorrentes: exatamente 1 sucede, total final 5",
+      successes === 1 && (finalImages ?? []).length === 5,
+      `sucessos=${successes} total=${(finalImages ?? []).length}`,
+    );
+    await admin.from("products").delete().eq("id", product.id);
+  }
+
+  // Cenário 2: 0 imagens + 6 inserções concorrentes -> nunca mais de 5 sucedem, total nunca ultrapassa 5.
+  {
+    const product = await createProduct(clientA, storeA.id, "Img Concorrencia 0mais6");
+    const clients = await Promise.all(Array.from({ length: 6 }, () => siblingClient(clientA)));
+    const outcomes = await Promise.all(
+      clients.map((c, i) => c.rpc("catalog_add_product_image", { p_product_id: product.id, p_storage_path: `${storeA.id}/${product.id}/six-${i}.jpg` })),
+    );
+    const successes = outcomes.filter((o) => !o.error).length;
+    const { data: finalImages } = await admin.from("product_images").select("id").eq("product_id", product.id);
+    record(
+      "0 imagens + 6 inserções concorrentes: no máximo 5 sucessos, total nunca ultrapassa 5",
+      successes <= 5 && (finalImages ?? []).length <= 5,
+      `sucessos=${successes} total=${(finalImages ?? []).length}`,
+    );
+    await admin.from("products").delete().eq("id", product.id);
+  }
+
+  // Cenário 3: 5 imagens já existentes + nova inserção -> sempre rejeitada, total continua 5.
+  {
+    const product = await createProduct(clientA, storeA.id, "Img Concorrencia 5mais1");
+    for (let i = 0; i < 5; i++) {
+      const { error } = await clientA.rpc("catalog_add_product_image", {
+        p_product_id: product.id,
+        p_storage_path: `${storeA.id}/${product.id}/seed-${i}.jpg`,
+      });
+      if (error) throw new Error(`seed de imagem ${i} falhou: ${error.message}`);
+    }
+    const { error: overflowError } = await clientA.rpc("catalog_add_product_image", {
+      p_product_id: product.id,
+      p_storage_path: `${storeA.id}/${product.id}/overflow.jpg`,
+    });
+    const { data: finalImages } = await admin.from("product_images").select("id").eq("product_id", product.id);
+    record(
+      "5 imagens existentes + nova inserção: rejeitada, total continua 5",
+      Boolean(overflowError) && (finalImages ?? []).length === 5,
+      `error=${overflowError?.message ?? "nenhum — deveria ter falhado"} total=${(finalImages ?? []).length}`,
+    );
+    await admin.from("products").delete().eq("id", product.id);
+  }
+
+  // Loja B não insere imagem em produto da Loja A.
+  {
+    const product = await createProduct(clientA, storeA.id, "Img Cross Tenant");
+    const { error } = await clientB.rpc("catalog_add_product_image", { p_product_id: product.id, p_storage_path: `${storeA.id}/${product.id}/invasao.jpg` });
+    record("Admin B NÃO insere imagem em produto da Loja A", Boolean(error), `error=${error?.message ?? "nenhum — deveria ter falhado"}`);
+    await admin.from("products").delete().eq("id", product.id);
+  }
+
+  // pending_payment/suspended não inserem imagem (BUG-CLAUDE-003-001) —
+  // produto criado via service_role (a própria criação via RPC já é
+  // negada para essas lojas, ver supabase/tests/catalog_isolation_check.sql
+  // Casos 29-38; aqui o alvo é especificamente catalog_add_product_image).
+  for (const [label, client, store] of [
+    ["pending_payment", clientPending, pendingStore] as const,
+    ["suspended", clientSuspended, suspendedStore] as const,
+  ]) {
+    const { data: product, error: seedError } = await admin
+      .from("products")
+      .insert({ store_id: store.id, name: `Img ${label} setup`, stock: 1, price_cents: 100 })
+      .select("id")
+      .single();
+    if (seedError || !product) throw new Error(`seed de produto para ${label} falhou: ${seedError?.message}`);
+    const { error } = await client.rpc("catalog_add_product_image", { p_product_id: product.id, p_storage_path: `${store.id}/${product.id}/x.jpg` });
+    record(`Loja ${label} NÃO insere imagem (catalog_add_product_image)`, Boolean(error), `error=${error?.message ?? "nenhum — deveria ter falhado"}`);
+    await admin.from("products").delete().eq("id", product.id);
+  }
+
+  // Regressão: capa única e promoção determinística da próxima imagem
+  // ao remover a capa continuam corretas após o fix de concorrência.
+  {
+    const product = await createProduct(clientA, storeA.id, "Img Cover Regressao");
+    const images: { id: string; is_cover: boolean }[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { data } = await clientA.rpc("catalog_add_product_image", { p_product_id: product.id, p_storage_path: `${storeA.id}/${product.id}/c-${i}.jpg` });
+      images.push(data as { id: string; is_cover: boolean });
+    }
+    const cover = images.find((i) => i.is_cover)!;
+    const { error: removeError } = await clientA.rpc("catalog_remove_product_image", { p_image_id: cover.id });
+    const { data: remaining } = await admin.from("product_images").select("id,position,is_cover").eq("product_id", product.id).order("position");
+    const newCover = (remaining ?? []).find((i) => i.is_cover);
+    const expectedNext = [...(remaining ?? [])].sort((a, b) => a.position - b.position)[0];
+    record(
+      "remoção da capa promove deterministicamente a próxima imagem (menor position)",
+      !removeError && Boolean(newCover) && Boolean(expectedNext) && newCover?.id === expectedNext?.id,
+      `capa=${newCover?.id} esperado=${expectedNext?.id}`,
+    );
+    record("no máximo 1 capa após a promoção", (remaining ?? []).filter((i) => i.is_cover).length === 1, `capas=${(remaining ?? []).filter((i) => i.is_cover).length}`);
+    await admin.from("products").delete().eq("id", product.id);
+  }
+}
+
 async function main() {
   loadLocalEnv();
   const admin = createAdminSupabaseClient();
 
   await stockConcurrency(admin);
   await storageIsolation(admin);
+  await imageConcurrency(admin);
 
   const failed = results.filter((r) => !r.pass);
   if (failed.length > 0) {
     throw new Error(`${failed.length} verificação(ões) falharam — ver detalhes acima.`);
   }
 
-  console.log("\nPASS - estoque nunca fica negativo sob concorrência real; Storage isola upload/remoção por loja.");
+  console.log(
+    "\nPASS - estoque nunca fica negativo sob concorrência real; Storage isola upload/remoção por loja; limite de 5 imagens nunca é ultrapassado sob concorrência real.",
+  );
 }
 
 main().catch((error) => {

@@ -17,7 +17,8 @@
 -- nenhuma loja), merchant-multi (staff em store-a, owner em
 -- loja-multi-fixture — pending_payment).
 --
--- Cobre (numeração livre, mapeada aos 35 casos obrigatórios da tarefa):
+-- Cobre (numeração livre, mapeada aos 35 casos obrigatórios da tarefa
+-- + 14 casos da correção pós-QA, qa/reports/TASK-003-CLAUDE-VERIFICATION.md):
 --   1-11: categorias/produtos — isolamento Loja A x Loja B, slug único
 --         por loja (não globalmente), papel staff sem escrita.
 --   12-19: publicação — draft/archived nunca públicos, published só de
@@ -30,6 +31,18 @@
 --   34-35: migrations/regressões cobertas por
 --         supabase/tests/isolation_check.sql (Caso 7 atualizado) e
 --         supabase/tests/migration-upgrade-check.sh.
+--   29-38 (correção BUG-CLAUDE-003-001): matriz de status da loja x RPC
+--         direta — pending_payment/suspended negados em todas as
+--         famílias de operação (categoria/produto/publicar/estoque/
+--         imagem); active (controle positivo) continua funcionando.
+--   39-42 (correção BUG-CLAUDE-003-002): DML direto em products como
+--         authenticated (INSERT/UPDATE/DELETE) negado; leitura e RPC
+--         legítima continuam funcionando.
+--   Concorrência de imagens (BUG-CLAUDE-003-003, 4+2/0+6/5+1) exige
+--         conexões HTTP reais e independentes — coberta em
+--         supabase/tests/stock-concurrency-check.ts, não aqui (mesmo
+--         motivo pelo qual a concorrência de estoque também não está
+--         neste arquivo de SAVEPOINTs de uma única sessão).
 
 \set ON_ERROR_STOP on
 
@@ -41,8 +54,12 @@ begin
   perform set_config('app.admin_b_id', (select id::text from auth.users where email = 'admin-b@example.test'), true);
   perform set_config('app.cliente_a_id', (select id::text from auth.users where email = 'cliente-a@example.test'), true);
   perform set_config('app.merchant_multi_id', (select id::text from auth.users where email = 'merchant-multi@example.test'), true);
+  perform set_config('app.merchant_pending_id', (select id::text from auth.users where email = 'merchant-pending@example.test'), true);
+  perform set_config('app.merchant_suspended_id', (select id::text from auth.users where email = 'merchant-suspended@example.test'), true);
   perform set_config('app.store_a_id', (select id::text from public.stores where slug = 'store-a'), true);
   perform set_config('app.store_b_id', (select id::text from public.stores where slug = 'store-b'), true);
+  perform set_config('app.pending_store_id', (select id::text from public.stores where slug = 'loja-pendente-fixture'), true);
+  perform set_config('app.suspended_store_id', (select id::text from public.stores where slug = 'loja-suspensa-fixture'), true);
 end $$;
 
 -- ------------------------------------------------------------
@@ -389,6 +406,17 @@ rollback to savepoint case_12;
 -- Caso 15: produto published de uma loja NÃO active (loja-multi-fixture,
 -- pending_payment) continua invisivel para anon — publicação de
 -- produto sozinha não basta, a loja também precisa estar active.
+--
+-- Setup via INSERT direto como superusuário (não mais via RPC como
+-- merchant_multi): desde a correção de BUG-CLAUDE-003-001, uma loja
+-- pending_payment é negada em catalog_create_product/
+-- catalog_set_product_status (ver Casos 29-38 abaixo) — não é mais
+-- possível chegar a este estado pela RPC. O cenário real que este caso
+-- protege é outro, e continua válido: uma loja que ESTAVA active,
+-- publicou produtos, e depois passou a pending_payment/suspended — os
+-- produtos já publicados não podem "vazar" no catálogo público. O
+-- INSERT direto aqui simula esse estado final (histórico), não o
+-- caminho de escrita (que é o que os Casos 29-38 testam).
 -- ------------------------------------------------------------
 savepoint case_15;
 do $$
@@ -396,16 +424,8 @@ begin
   perform set_config('app.multi_store_id', (select id::text from public.stores where slug = 'loja-multi-fixture'), true);
 end $$;
 
-set local role authenticated;
-select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_multi_id'))::text, true);
-do $$
-declare
-  v_prod public.products;
-begin
-  select * into v_prod from public.catalog_create_product(current_setting('app.multi_store_id')::uuid, 'Produto Pendente', 'produto-pendente', 100, 1, null, null, null);
-  perform public.catalog_set_product_status(v_prod.id, 'published');
-end $$;
-reset role;
+insert into public.products (store_id, name, slug, price_cents, stock, status)
+values (current_setting('app.multi_store_id')::uuid, 'Produto Pendente', 'produto-pendente', 100, 1, 'published');
 
 set local role anon;
 select set_config('request.jwt.claims', '', true);
@@ -675,6 +695,317 @@ begin
   end if;
 end $$;
 rollback to savepoint case_28;
+
+-- ------------------------------------------------------------
+-- Casos 29-38 (correção pós-QA, qa/reports/TASK-003-CLAUDE-VERIFICATION.md,
+-- BUG-CLAUDE-003-001/002): loja pending_payment/suspended NEGADA em
+-- TODAS as famílias de operação de catálogo via RPC direta — antes da
+-- correção, is_store_admin() não checava stores.status e todas
+-- passavam. Agora can_manage_store_catalog() exige owner/admin E loja
+-- active. Setup de produtos usa INSERT direto como superusuário
+-- (sessão ainda não trocou de role aqui), só para existir uma linha a
+-- manipular — não é o vetor testado.
+-- ------------------------------------------------------------
+savepoint case_29_38_setup;
+insert into public.products (store_id, name, slug, price_cents, stock, status)
+values
+  (current_setting('app.pending_store_id')::uuid, 'Produto Pendente Setup', 'produto-pendente-setup', 500, 5, 'draft'),
+  (current_setting('app.suspended_store_id')::uuid, 'Produto Suspenso Setup', 'produto-suspenso-setup', 500, 5, 'draft');
+
+do $$
+begin
+  perform set_config('app.pending_product_id', (select id::text from public.products where slug = 'produto-pendente-setup'), true);
+  perform set_config('app.suspended_product_id', (select id::text from public.products where slug = 'produto-suspenso-setup'), true);
+end $$;
+
+-- Caso 29: pending_payment (merchant-pending, owner) NÃO cria categoria.
+savepoint case_29;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_pending_id'))::text, true);
+do $$
+begin
+  begin
+    perform public.catalog_create_category(current_setting('app.pending_store_id')::uuid, 'Cat Pendente', 'cat-pendente-c29', null, 1);
+    raise exception 'FAIL - Caso 29: pending_payment conseguiu criar categoria';
+  exception
+    when others then
+      if sqlerrm = 'insufficient_privilege' then
+        raise notice 'PASS - Caso 29: pending_payment negado em catalog_create_category';
+      else
+        raise exception 'FAIL - Caso 29: erro inesperado: %', sqlerrm;
+      end if;
+  end;
+end $$;
+rollback to savepoint case_29;
+
+-- Caso 30: pending_payment NÃO cria produto.
+savepoint case_30;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_pending_id'))::text, true);
+do $$
+begin
+  begin
+    perform public.catalog_create_product(current_setting('app.pending_store_id')::uuid, 'Prod Pendente', 'prod-pendente-c30', 100, 1, null, null, null);
+    raise exception 'FAIL - Caso 30: pending_payment conseguiu criar produto';
+  exception
+    when others then
+      if sqlerrm = 'insufficient_privilege' then
+        raise notice 'PASS - Caso 30: pending_payment negado em catalog_create_product';
+      else
+        raise exception 'FAIL - Caso 30: erro inesperado: %', sqlerrm;
+      end if;
+  end;
+end $$;
+rollback to savepoint case_30;
+
+-- Caso 31: pending_payment NÃO publica produto (catalog_set_product_status).
+savepoint case_31;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_pending_id'))::text, true);
+do $$
+begin
+  begin
+    perform public.catalog_set_product_status(current_setting('app.pending_product_id')::uuid, 'published');
+    raise exception 'FAIL - Caso 31: pending_payment conseguiu publicar produto';
+  exception
+    when others then
+      if sqlerrm = 'insufficient_privilege' then
+        raise notice 'PASS - Caso 31: pending_payment negado em catalog_set_product_status';
+      else
+        raise exception 'FAIL - Caso 31: erro inesperado: %', sqlerrm;
+      end if;
+  end;
+end $$;
+rollback to savepoint case_31;
+
+-- Caso 32: pending_payment NÃO ajusta estoque.
+savepoint case_32;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_pending_id'))::text, true);
+do $$
+begin
+  begin
+    perform public.catalog_adjust_stock(current_setting('app.pending_product_id')::uuid, -1, 'teste bloqueador 1');
+    raise exception 'FAIL - Caso 32: pending_payment conseguiu ajustar estoque';
+  exception
+    when others then
+      if sqlerrm = 'insufficient_privilege' then
+        raise notice 'PASS - Caso 32: pending_payment negado em catalog_adjust_stock';
+      else
+        raise exception 'FAIL - Caso 32: erro inesperado: %', sqlerrm;
+      end if;
+  end;
+end $$;
+rollback to savepoint case_32;
+
+-- Caso 33: pending_payment NÃO adiciona imagem.
+savepoint case_33;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_pending_id'))::text, true);
+do $$
+declare
+  v_path text;
+begin
+  v_path := current_setting('app.pending_store_id') || '/' || current_setting('app.pending_product_id') || '/x.jpg';
+  begin
+    perform public.catalog_add_product_image(current_setting('app.pending_product_id')::uuid, v_path, false);
+    raise exception 'FAIL - Caso 33: pending_payment conseguiu adicionar imagem';
+  exception
+    when others then
+      if sqlerrm = 'insufficient_privilege' then
+        raise notice 'PASS - Caso 33: pending_payment negado em catalog_add_product_image';
+      else
+        raise exception 'FAIL - Caso 33: erro inesperado: %', sqlerrm;
+      end if;
+  end;
+end $$;
+rollback to savepoint case_33;
+
+-- Caso 34: suspended (merchant-suspended, owner) NÃO cria categoria.
+savepoint case_34;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_suspended_id'))::text, true);
+do $$
+begin
+  begin
+    perform public.catalog_create_category(current_setting('app.suspended_store_id')::uuid, 'Cat Suspensa', 'cat-suspensa-c34', null, 1);
+    raise exception 'FAIL - Caso 34: suspended conseguiu criar categoria';
+  exception
+    when others then
+      if sqlerrm = 'insufficient_privilege' then
+        raise notice 'PASS - Caso 34: suspended negado em catalog_create_category';
+      else
+        raise exception 'FAIL - Caso 34: erro inesperado: %', sqlerrm;
+      end if;
+  end;
+end $$;
+rollback to savepoint case_34;
+
+-- Caso 35: suspended NÃO publica produto.
+savepoint case_35;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_suspended_id'))::text, true);
+do $$
+begin
+  begin
+    perform public.catalog_set_product_status(current_setting('app.suspended_product_id')::uuid, 'published');
+    raise exception 'FAIL - Caso 35: suspended conseguiu publicar produto';
+  exception
+    when others then
+      if sqlerrm = 'insufficient_privilege' then
+        raise notice 'PASS - Caso 35: suspended negado em catalog_set_product_status';
+      else
+        raise exception 'FAIL - Caso 35: erro inesperado: %', sqlerrm;
+      end if;
+  end;
+end $$;
+rollback to savepoint case_35;
+
+-- Caso 36: suspended NÃO ajusta estoque.
+savepoint case_36;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_suspended_id'))::text, true);
+do $$
+begin
+  begin
+    perform public.catalog_adjust_stock(current_setting('app.suspended_product_id')::uuid, -1, 'teste bloqueador 1');
+    raise exception 'FAIL - Caso 36: suspended conseguiu ajustar estoque';
+  exception
+    when others then
+      if sqlerrm = 'insufficient_privilege' then
+        raise notice 'PASS - Caso 36: suspended negado em catalog_adjust_stock';
+      else
+        raise exception 'FAIL - Caso 36: erro inesperado: %', sqlerrm;
+      end if;
+  end;
+end $$;
+rollback to savepoint case_36;
+
+-- Caso 37: suspended NÃO adiciona imagem.
+savepoint case_37;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.merchant_suspended_id'))::text, true);
+do $$
+declare
+  v_path text;
+begin
+  v_path := current_setting('app.suspended_store_id') || '/' || current_setting('app.suspended_product_id') || '/x.jpg';
+  begin
+    perform public.catalog_add_product_image(current_setting('app.suspended_product_id')::uuid, v_path, false);
+    raise exception 'FAIL - Caso 37: suspended conseguiu adicionar imagem';
+  exception
+    when others then
+      if sqlerrm = 'insufficient_privilege' then
+        raise notice 'PASS - Caso 37: suspended negado em catalog_add_product_image';
+      else
+        raise exception 'FAIL - Caso 37: erro inesperado: %', sqlerrm;
+      end if;
+  end;
+end $$;
+rollback to savepoint case_37;
+
+-- Caso 38 (controle positivo): active (admin-a, owner) continua
+-- conseguindo criar categoria/produto/publicar/ajustar estoque/
+-- adicionar imagem normalmente — a correção não quebrou o fluxo
+-- legítimo.
+savepoint case_38;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.admin_a_id'))::text, true);
+do $$
+declare
+  v_cat public.categories;
+  v_prod public.products;
+  v_path text;
+begin
+  select * into v_cat from public.catalog_create_category(current_setting('app.store_a_id')::uuid, 'Cat Controle 38', 'cat-controle-c38', null, 1);
+  select * into v_prod from public.catalog_create_product(current_setting('app.store_a_id')::uuid, 'Prod Controle 38', 'prod-controle-c38', 100, 5, v_cat.id, null, null);
+  perform public.catalog_set_product_status(v_prod.id, 'published');
+  perform public.catalog_adjust_stock(v_prod.id, -1, 'controle positivo c38');
+  v_path := current_setting('app.store_a_id') || '/' || v_prod.id || '/x.jpg';
+  perform public.catalog_add_product_image(v_prod.id, v_path, true);
+  raise notice 'PASS - Caso 38: active (owner) continua com escrita administrativa completa apos a correcao';
+end $$;
+rollback to savepoint case_38;
+rollback to savepoint case_29_38_setup;
+
+-- ------------------------------------------------------------
+-- Casos 39-42 (correção pós-QA, BUG-CLAUDE-003-002): DML direto em
+-- products como authenticated é negado — GRANT insert/update/delete/
+-- truncate revogado, policies antigas de escrita (products_insert_admin/
+-- update_admin/delete_admin, herdadas de 0001_init.sql) derrubadas.
+-- ------------------------------------------------------------
+savepoint case_39;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.admin_a_id'))::text, true);
+do $$
+begin
+  begin
+    insert into public.products (store_id, name, stock) values (current_setting('app.store_a_id')::uuid, 'DML Direto Caso 39', 1);
+    raise exception 'FAIL - Caso 39: INSERT direto em products foi aceito';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 39: INSERT direto em products negado (permission denied)';
+  end;
+end $$;
+rollback to savepoint case_39;
+
+savepoint case_40;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.admin_a_id'))::text, true);
+do $$
+declare
+  v_any_product_id uuid;
+begin
+  select id into v_any_product_id from public.products where store_id = current_setting('app.store_a_id')::uuid limit 1;
+  begin
+    update public.products set price_cents = 1 where id = v_any_product_id;
+    raise exception 'FAIL - Caso 40: UPDATE direto em products foi aceito';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 40: UPDATE direto em products negado (permission denied)';
+  end;
+end $$;
+rollback to savepoint case_40;
+
+savepoint case_41;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.admin_a_id'))::text, true);
+do $$
+declare
+  v_any_product_id uuid;
+begin
+  select id into v_any_product_id from public.products where store_id = current_setting('app.store_a_id')::uuid limit 1;
+  begin
+    delete from public.products where id = v_any_product_id;
+    raise exception 'FAIL - Caso 41: DELETE direto em products foi aceito';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 41: DELETE direto em products negado (permission denied)';
+  end;
+end $$;
+rollback to savepoint case_41;
+
+-- Caso 42: mesmo authenticated com escrita direta negada, a leitura
+-- (SELECT) continua funcionando e a RPC legitima continua criando
+-- produtos normalmente — a correcao so fecha o desvio, nao quebra o
+-- caminho oficial.
+savepoint case_42;
+set local role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('app.admin_a_id'))::text, true);
+do $$
+declare
+  v_count int;
+  v_prod public.products;
+begin
+  select count(*) into v_count from public.products where store_id = current_setting('app.store_a_id')::uuid;
+  select * into v_prod from public.catalog_create_product(current_setting('app.store_a_id')::uuid, 'Prod Pos Fix Caso 42', 'prod-pos-fix-c42', 100, 1, null, null, null);
+  if v_count > 0 and v_prod.id is not null then
+    raise notice 'PASS - Caso 42: SELECT em products e RPC catalog_create_product continuam funcionando';
+  else
+    raise exception 'FAIL - Caso 42: leitura ou RPC legitima quebrou junto com o DML direto';
+  end if;
+end $$;
+rollback to savepoint case_42;
 
 -- Nenhuma alteração persiste: garante execução repetível a qualquer momento.
 rollback;

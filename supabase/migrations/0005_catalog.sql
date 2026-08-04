@@ -24,12 +24,56 @@
 -- arquivar categoria e produto, ajustar estoque, gerenciar imagens)
 -- passam por funções SECURITY DEFINER dedicadas (mesmo padrão das
 -- funções onboarding_* da TASK-002) — cada uma faz sua própria
--- verificação via is_store_admin(store_id) usando auth.uid(), nunca
--- confia em store_id/role vindo do cliente para autorizar, e grava o
+-- verificação via can_manage_store_catalog(store_id) usando auth.uid()
+-- (owner/admin da loja E loja status=active — ver seção 0 abaixo),
+-- nunca confia em store_id/role vindo do cliente para autorizar, e grava o
 -- evento de auditoria correspondente na MESMA transação da escrita.
 -- Isso evita a classe de bug do BUG-CLAUDE-VERIF3-001 (TASK-002):
 -- nenhum evento de auditoria pode ser fabricado por um cliente nem
 -- ficar dessincronizado do estado real.
+
+-- ============================================================
+-- 0. can_manage_store_catalog — autorização operacional do catálogo
+-- ============================================================
+-- BUG-CLAUDE-003-001 (qa/reports/TASK-003-CLAUDE-VERIFICATION.md):
+-- is_store_admin (0001_init.sql) checa só vínculo de papel
+-- (owner/admin), nunca o estado da loja. Os guards de página/Server
+-- Action (requireStoreStatus, TASK-002) exigem loja `active`, mas
+-- nenhuma função catalog_* nem policy de storage.objects replicava
+-- essa exigência no banco — uma chamada direta à RPC/Storage (sem
+-- passar pela página) bypassava o guard por completo, permitindo que
+-- lojas pending_payment/suspended administrassem o catálogo.
+--
+-- can_manage_store_catalog() é a autorização operacional específica do
+-- catálogo: owner/admin (mesma regra de is_store_admin) E loja
+-- status = 'active'. Não altera is_store_admin em si (usada também no
+-- onboarding e em outros fluxos que não devem exigir loja já ativa) —
+-- só centraliza a regra "escrita de catálogo exige loja active" num
+-- único lugar, usado por TODAS as 11 funções catalog_* e pelas 2
+-- policies de escrita de storage.objects abaixo.
+create or replace function public.can_manage_store_catalog(target_store_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select exists (
+    select 1
+    from public.store_members sm
+    join public.stores s on s.id = sm.store_id
+    where sm.store_id = target_store_id
+      and sm.user_id = auth.uid()
+      and sm.role in ('owner', 'admin')
+      and s.status = 'active'
+  );
+$$;
+
+comment on function public.can_manage_store_catalog(uuid) is
+  'Autorização operacional do catálogo: owner/admin da loja E loja status=active. Diferente de is_store_admin (0001_init.sql), que não checa estado da loja e continua usada por onboarding/outros fluxos que não exigem loja já ativa. Usada por todas as funções catalog_* e pelas policies de escrita de storage.objects — fecha BUG-CLAUDE-003-001.';
+
+revoke all on function public.can_manage_store_catalog(uuid) from public;
+grant execute on function public.can_manage_store_catalog(uuid) to authenticated;
 
 -- ============================================================
 -- 1. categories
@@ -163,6 +207,39 @@ create policy products_select_public
   );
 
 grant select on public.products to anon;
+
+-- BUG-CLAUDE-003-002 (qa/reports/TASK-003-CLAUDE-VERIFICATION.md):
+-- 0001_init.sql concedeu select/insert/update/delete em products a
+-- authenticated (correto para a TASK-001, quando a tabela só tinha
+-- store_id/name/stock e a única forma de escrita era esse próprio
+-- GRANT). A TASK-003 estendeu products com colunas sensíveis
+-- (status/price_cents/stock/category_id/slug/sku) e introduziu as
+-- funções catalog_* como o caminho oficial de escrita, mas nunca
+-- revisou o GRANT nem as 3 policies de escrita antigas
+-- (products_insert_admin/update_admin/delete_admin, que também só
+-- checavam is_store_admin, sem exigir loja active) — um authenticated
+-- conseguia fazer INSERT/UPDATE/DELETE cru na tabela, contornando toda
+-- validação/auditoria/checagem de estado das RPCs.
+--
+-- Fecha revogando o GRANT de escrita direta de authenticated (mantendo
+-- SELECT, coberto pelas policies de leitura acima/existentes) e
+-- derrubando as 3 policies de escrita antigas de 0001_init.sql — a
+-- tabela nunca é recriada, então DROP POLICY aqui é a forma correta de
+-- neutralizá-las sem tocar na migration já mesclada da TASK-001. Toda
+-- mutação administrativa de products passa a ser possível SOMENTE via
+-- catalog_create_product/catalog_update_product/
+-- catalog_set_product_status/catalog_adjust_stock (SECURITY DEFINER,
+-- can_manage_store_catalog). service_role mantém select/insert/update/
+-- delete (seed local, uso administrativo) — não afetado por este
+-- REVOKE, que é específico do papel authenticated.
+revoke insert, update, delete, truncate on public.products from authenticated;
+
+drop policy if exists products_insert_admin on public.products;
+drop policy if exists products_update_admin on public.products;
+drop policy if exists products_delete_admin on public.products;
+
+comment on table public.products is
+  'Estendida pela TASK-003 (0005_catalog.sql) a partir da tabela mínima da TASK-001. Escrita administrativa exclusivamente via catalog_create_product/catalog_update_product/catalog_set_product_status/catalog_adjust_stock — authenticated não tem mais nenhum GRANT de INSERT/UPDATE/DELETE/TRUNCATE direto (revogado nesta migração; as policies de escrita antigas de 0001_init.sql foram derrubadas). Leitura continua via products_select_member (membro da loja) e products_select_public (catálogo público, published/active).';
 
 -- ============================================================
 -- 3. stores — leitura pública mínima (catálogo)
@@ -306,7 +383,7 @@ begin
     raise exception 'product_not_found' using errcode = '23503';
   end if;
 
-  if not public.is_store_admin(v_store_id) then
+  if not public.can_manage_store_catalog(v_store_id) then
     raise exception 'insufficient_privilege' using errcode = '42501';
   end if;
 
@@ -376,8 +453,12 @@ revoke all on storage.objects from anon;
 
 -- Caminho convencionado <store_id>/<product_id>/<arquivo> — o primeiro
 -- segmento do path (storage.foldername(name)[1]) é sempre o store_id,
--- checado contra is_store_member/is_store_admin exatamente como
--- qualquer outra tabela multi-tenant deste projeto.
+-- checado contra is_store_member/can_manage_store_catalog exatamente
+-- como qualquer outra tabela multi-tenant deste projeto. Leitura
+-- (SELECT) continua usando is_store_member (sem exigir loja active —
+-- um membro de uma loja suspensa ainda pode ver as próprias imagens no
+-- painel); ESCRITA (INSERT/DELETE) usa can_manage_store_catalog, que
+-- exige loja active — fecha BUG-CLAUDE-003-001 também para o Storage.
 create policy product_images_storage_select_member
   on storage.objects
   for select
@@ -388,13 +469,13 @@ create policy product_images_storage_insert_admin
   on storage.objects
   for insert
   to authenticated
-  with check (bucket_id = 'product-images' and public.is_store_admin(((storage.foldername(name))[1])::uuid));
+  with check (bucket_id = 'product-images' and public.can_manage_store_catalog(((storage.foldername(name))[1])::uuid));
 
 create policy product_images_storage_delete_admin
   on storage.objects
   for delete
   to authenticated
-  using (bucket_id = 'product-images' and public.is_store_admin(((storage.foldername(name))[1])::uuid));
+  using (bucket_id = 'product-images' and public.can_manage_store_catalog(((storage.foldername(name))[1])::uuid));
 
 -- ============================================================
 -- 7. Funções de catálogo — categorias
@@ -417,7 +498,7 @@ declare
   v_slug text := nullif(trim(p_slug), '');
   v_row public.categories;
 begin
-  if not public.is_store_admin(p_store_id) then
+  if not public.can_manage_store_catalog(p_store_id) then
     raise exception 'insufficient_privilege' using errcode = '42501';
   end if;
 
@@ -466,7 +547,7 @@ begin
   if v_store_id is null then
     raise exception 'category_not_found' using errcode = '02000';
   end if;
-  if not public.is_store_admin(v_store_id) then
+  if not public.can_manage_store_catalog(v_store_id) then
     raise exception 'insufficient_privilege' using errcode = '42501';
   end if;
 
@@ -515,7 +596,7 @@ begin
   if v_store_id is null then
     raise exception 'category_not_found' using errcode = '02000';
   end if;
-  if not public.is_store_admin(v_store_id) then
+  if not public.can_manage_store_catalog(v_store_id) then
     raise exception 'insufficient_privilege' using errcode = '42501';
   end if;
 
@@ -568,7 +649,7 @@ declare
   v_sku text := nullif(trim(p_sku), '');
   v_row public.products;
 begin
-  if not public.is_store_admin(p_store_id) then
+  if not public.can_manage_store_catalog(p_store_id) then
     raise exception 'insufficient_privilege' using errcode = '42501';
   end if;
 
@@ -626,7 +707,7 @@ begin
   if v_store_id is null then
     raise exception 'product_not_found' using errcode = '23503';
   end if;
-  if not public.is_store_admin(v_store_id) then
+  if not public.can_manage_store_catalog(v_store_id) then
     raise exception 'insufficient_privilege' using errcode = '42501';
   end if;
 
@@ -690,7 +771,7 @@ begin
   if v_store_id is null then
     raise exception 'product_not_found' using errcode = '23503';
   end if;
-  if not public.is_store_admin(v_store_id) then
+  if not public.can_manage_store_catalog(v_store_id) then
     raise exception 'insufficient_privilege' using errcode = '42501';
   end if;
 
@@ -744,11 +825,22 @@ declare
   v_make_cover boolean;
   v_row public.product_images;
 begin
-  select store_id into v_store_id from public.products where id = p_product_id;
+  -- BUG-CLAUDE-003-003 (qa/reports/TASK-003-CLAUDE-VERIFICATION.md):
+  -- `for update` trava a linha do PRODUTO (não de product_images, que
+  -- ainda nem existe a linha a inserir) para toda a duração desta
+  -- transação. Duas chamadas concorrentes para o mesmo p_product_id
+  -- serializam aqui: a segunda só prossegue depois que a primeira
+  -- confirma (ou desfaz) — quando ela finalmente conta as imagens
+  -- existentes, já enxerga o INSERT da primeira. Sem isso, o
+  -- `select count(*)` abaixo era um clássico TOCTOU (check-then-act):
+  -- duas transações liam count=4 antes de qualquer uma commitar seu
+  -- INSERT, e as duas passavam do limite de 5 — reproduzido 3/3 vezes
+  -- na verificação adversarial.
+  select store_id into v_store_id from public.products where id = p_product_id for update;
   if v_store_id is null then
     raise exception 'product_not_found' using errcode = '23503';
   end if;
-  if not public.is_store_admin(v_store_id) then
+  if not public.can_manage_store_catalog(v_store_id) then
     raise exception 'insufficient_privilege' using errcode = '42501';
   end if;
   if p_storage_path is null or p_storage_path !~ ('^' || v_store_id::text || '/' || p_product_id::text || '/') then
@@ -759,8 +851,9 @@ begin
     into v_existing_count, v_next_position
     from public.product_images where product_id = p_product_id;
 
-  -- A própria trigger product_images_insert_check rejeita a 6a imagem;
-  -- checar aqui também só evita uma viagem desnecessária ao trigger.
+  -- A própria trigger product_images_insert_check rejeita a 6a imagem
+  -- (defesa em profundidade); com o lock acima, esta checagem já é, por
+  -- si só, segura sob concorrência real.
   if v_existing_count >= 5 then
     raise exception 'max_images_reached' using errcode = '23514';
   end if;
@@ -803,7 +896,7 @@ begin
   if v_product_id is null then
     raise exception 'image_not_found' using errcode = '02000';
   end if;
-  if not public.is_store_admin(v_store_id) then
+  if not public.can_manage_store_catalog(v_store_id) then
     raise exception 'insufficient_privilege' using errcode = '42501';
   end if;
 
@@ -843,7 +936,7 @@ begin
   if v_product_id is null then
     raise exception 'image_not_found' using errcode = '02000';
   end if;
-  if not public.is_store_admin(v_store_id) then
+  if not public.can_manage_store_catalog(v_store_id) then
     raise exception 'insufficient_privilege' using errcode = '42501';
   end if;
 
@@ -878,7 +971,7 @@ begin
   if v_product_id is null then
     raise exception 'image_not_found' using errcode = '02000';
   end if;
-  if not public.is_store_admin(v_store_id) then
+  if not public.can_manage_store_catalog(v_store_id) then
     raise exception 'insufficient_privilege' using errcode = '42501';
   end if;
 

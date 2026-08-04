@@ -17,6 +17,80 @@ const sql = raw
   .map((line) => line.replace(/--.*$/, ""))
   .join("\n");
 
+describe("can_manage_store_catalog — autorização operacional (owner/admin E loja active)", () => {
+  it("checa role owner/admin E stores.status = 'active' na mesma query", () => {
+    const fn = sql.slice(
+      sql.indexOf("create or replace function public.can_manage_store_catalog"),
+      sql.indexOf("comment on function public.can_manage_store_catalog"),
+    );
+    expect(fn).toContain("sm.role in ('owner', 'admin')");
+    expect(fn).toContain("s.status = 'active'");
+  });
+
+  it("SECURITY DEFINER, search_path vazio, revogada de public, EXECUTE só para authenticated", () => {
+    expect(sql).toContain(
+      "revoke all on function public.can_manage_store_catalog(uuid) from public",
+    );
+    expect(sql).toContain(
+      "grant execute on function public.can_manage_store_catalog(uuid) to authenticated",
+    );
+  });
+
+  it("nenhuma função catalog_* de escrita usa is_store_admin diretamente (todas migraram para can_manage_store_catalog)", () => {
+    const catalogFunctionNames = [
+      "catalog_create_category",
+      "catalog_update_category",
+      "catalog_set_category_active",
+      "catalog_create_product",
+      "catalog_update_product",
+      "catalog_set_product_status",
+      "catalog_adjust_stock",
+      "catalog_add_product_image",
+      "catalog_remove_product_image",
+      "catalog_set_cover_image",
+      "catalog_move_product_image",
+    ];
+    for (const name of catalogFunctionNames) {
+      const start = sql.indexOf(`create or replace function public.${name}`);
+      const nextFn = sql.indexOf("create or replace function public.", start + 1);
+      const body = sql.slice(start, nextFn === -1 ? sql.length : nextFn);
+      expect(body).not.toMatch(/if not public\.is_store_admin\(/);
+      expect(body).toMatch(/public\.can_manage_store_catalog\(/);
+    }
+  });
+
+  it("as 2 policies de ESCRITA de storage.objects usam can_manage_store_catalog; a policy de LEITURA continua em is_store_member", () => {
+    expect(sql).toContain("create policy product_images_storage_select_member");
+    expect(sql).toContain("create policy product_images_storage_insert_admin");
+    expect(sql).toContain("create policy product_images_storage_delete_admin");
+    const readOccurrences = sql.match(/public\.is_store_member\(\(\(storage\.foldername\(name\)\)\[1\]\)::uuid\)/g) ?? [];
+    const writeOccurrences = sql.match(/public\.can_manage_store_catalog\(\(\(storage\.foldername\(name\)\)\[1\]\)::uuid\)/g) ?? [];
+    expect(readOccurrences.length).toBe(1);
+    expect(writeOccurrences.length).toBe(2);
+  });
+});
+
+describe("products — sem escrita direta de authenticated (BUG-CLAUDE-003-002)", () => {
+  it("revoga insert/update/delete/truncate de authenticated em products", () => {
+    expect(sql).toContain("revoke insert, update, delete, truncate on public.products from authenticated");
+  });
+
+  it("derruba as 3 policies de escrita antigas herdadas de 0001_init.sql", () => {
+    expect(sql).toContain("drop policy if exists products_insert_admin on public.products");
+    expect(sql).toContain("drop policy if exists products_update_admin on public.products");
+    expect(sql).toContain("drop policy if exists products_delete_admin on public.products");
+  });
+
+  it("não concede nenhum INSERT/UPDATE/DELETE novo a authenticated em products nesta migração", () => {
+    const grantLines = sql.split(";").filter((s) => /^\s*grant\s/.test(s.trimStart()) && /\bon\s+public\.products\b/.test(s));
+    for (const line of grantLines) {
+      if (/\bto\b[^;]*\bauthenticated\b/.test(line)) {
+        expect(line).not.toMatch(/\binsert\b|\bupdate\b|\bdelete\b/);
+      }
+    }
+  });
+});
+
 describe("categories — sem exclusão física, sem GRANT de delete para authenticated", () => {
   it("RLS habilitada, sem policy de DELETE", () => {
     expect(sql).toContain("alter table public.categories enable row level security");
@@ -111,12 +185,12 @@ describe("estoque — ajuste atômico, único caminho de escrita de products.sto
     expect(fn).toContain("'stock_would_be_negative'");
   });
 
-  it("exige is_store_admin(v_store_id) e motivo não vazio antes de tocar a linha", () => {
+  it("exige can_manage_store_catalog(v_store_id) e motivo não vazio antes de tocar a linha", () => {
     const fn = sql.slice(
       sql.indexOf("create or replace function public.catalog_adjust_stock"),
       sql.indexOf("comment on function public.catalog_adjust_stock"),
     );
-    expect(fn).toContain("if not public.is_store_admin(v_store_id) then");
+    expect(fn).toContain("if not public.can_manage_store_catalog(v_store_id) then");
     expect(fn).toContain("'reason_required'");
   });
 
@@ -142,14 +216,6 @@ describe("imagens — bucket público, escrita protegida por RLS real em storage
     expect(sql).toContain("revoke all on storage.objects from anon");
   });
 
-  it("policies de storage.objects usam is_store_member/is_store_admin sobre o primeiro segmento do caminho (storage.foldername)", () => {
-    expect(sql).toContain("create policy product_images_storage_select_member");
-    expect(sql).toContain("create policy product_images_storage_insert_admin");
-    expect(sql).toContain("create policy product_images_storage_delete_admin");
-    const occurrences = sql.match(/public\.is_store_(member|admin)\(\(\(storage\.foldername\(name\)\)\[1\]\)::uuid\)/g) ?? [];
-    expect(occurrences.length).toBe(3);
-  });
-
   it("índice único parcial garante no máximo uma capa por produto", () => {
     expect(sql).toContain("create unique index product_images_one_cover_per_product");
     expect(sql).toContain("on public.product_images (product_id)\n  where is_cover");
@@ -159,6 +225,18 @@ describe("imagens — bucket público, escrita protegida por RLS real em storage
     expect(sql).toContain("create trigger product_images_insert_check");
     expect(sql).toContain("'max_images_reached'");
     expect(sql).toContain("v_count >= 5");
+  });
+
+  it("catalog_add_product_image trava a linha do produto (for update) antes de contar imagens — fecha BUG-CLAUDE-003-003 (race no limite de 5 sob concorrência)", () => {
+    const fn = sql.slice(
+      sql.indexOf("create or replace function public.catalog_add_product_image"),
+      sql.indexOf("comment on function public.catalog_add_product_image"),
+    );
+    expect(fn).toContain("select store_id into v_store_id from public.products where id = p_product_id for update");
+    const lockIndex = fn.indexOf("for update");
+    const countIndex = fn.indexOf("select count(*)");
+    expect(lockIndex).toBeGreaterThan(-1);
+    expect(countIndex).toBeGreaterThan(lockIndex);
   });
 });
 

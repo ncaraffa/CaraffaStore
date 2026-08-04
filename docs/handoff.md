@@ -1537,6 +1537,46 @@ em `lib/auth/middleware-policy.ts` (senão o middleware redirecionaria todo visi
 | Responsivo (375×812 mobile) | sem overflow horizontal na página; tabela do painel rola só dentro do próprio contêiner (`.table-wrap`) |
 | Scan de segredos (bundle `.next/static`, logs) | Nenhuma ocorrência de `SERVICE_ROLE`/`service_role` |
 
+### Correção pós-QA (2026-08-04) — 3 bloqueadores críticos/altos
+
+Verificação adversarial independente (`qa/reports/TASK-003-CLAUDE-VERIFICATION.md`, não alterado)
+encontrou **BLOQUEADOR — CRÍTICO**: nenhuma função `catalog_*` nem policy de `storage.objects`
+verificava `stores.status`, então lojas `pending_payment`/`suspended` administravam o catálogo
+completo (RPC/Storage diretos, contornando o guard de página da TASK-002); a tabela `products`
+(herdada da TASK-001, só estendida) ainda concedia `INSERT`/`UPDATE`/`DELETE` direto a
+`authenticated`, contornando todas as RPCs; e o limite de 5 imagens por produto era uma condição de
+corrida (check-then-act) vencível sob concorrência real (reproduzido 3/3 vezes). Três correções na
+própria migração da feature branch (`supabase/migrations/0005_catalog.sql`, ainda não mesclada —
+editada diretamente, sem migration corretiva em cima):
+
+1. **`can_manage_store_catalog(store_id)`** (nova função `SECURITY DEFINER`): owner/admin da loja **E**
+   `stores.status = 'active'`. Substitui `is_store_admin` em todas as 11 funções `catalog_*` e nas 2
+   policies de escrita de `storage.objects` (leitura continua em `is_store_member`, sem exigir loja
+   ativa). `is_store_admin` em si não foi alterada (permanece usada por onboarding/outros fluxos).
+2. `revoke insert, update, delete, truncate on public.products from authenticated` + `drop policy`
+   das 3 policies de escrita antigas (`products_insert_admin`/`update_admin`/`delete_admin`, de
+   `0001_init.sql`) — escrita administrativa em `products` só pelas RPCs `catalog_*` a partir de agora;
+   `SELECT` (membro/público) e todos os privilégios de `service_role` preservados.
+3. `catalog_add_product_image` agora trava a linha do produto (`select ... for update`) antes de
+   contar as imagens existentes — serializa qualquer concorrência de inserção para o mesmo produto,
+   fechando o TOCTOU do limite de 5.
+
+**Testes permanentes adicionados** (não apagados, diferente dos scripts adversariais temporários do
+QA): `supabase/tests/catalog_isolation_check.sql` ganhou os Casos 29-42 (matriz de status da loja ×
+RPC para todas as famílias de operação — categoria/produto/publicar/estoque/imagem — em
+`pending_payment`/`suspended`, controle positivo em `active`, e DML direto negado/RPC legítima
+preservada); `supabase/tests/stock-concurrency-check.ts` ganhou os 3 cenários de concorrência de
+imagem exigidos (4+2, 0+6, 5+1) + cross-tenant + `pending_payment`/`suspended` + regressão de
+capa única/promoção determinística. `0005_catalog.privileges.test.ts` ganhou as asserções estáticas
+correspondentes. Total de testes: **282/282** (275 → 282).
+
+**Resultado da rebateria completa (mesma sessão):** TASK-001 RLS 7/7, TASK-002 SQL 56/56, TASK-003
+SQL **35/35** (21 → 35), concorrência de estoque+imagens 17/17, `migration-upgrade-check.sh` PASS
+(banco novo e upgrade real desde `b7e10c3`), lint/typecheck/build OK, `npm audit`/`--omit=dev` 0
+vulnerabilidades, smoke test real (login → criar produto → publicar → ajustar estoque → catálogo
+público) OK, scan de segredos no bundle sem ocorrência. TASK-003 **continua em REVIEW** — esta
+correção não foi mesclada nem aprovada; aguarda nova verificação externa.
+
 ### Limitações remanescentes
 
 - Bucket de imagens é público (leitura por URL direta) — mitigado por caminho com UUID aleatório
