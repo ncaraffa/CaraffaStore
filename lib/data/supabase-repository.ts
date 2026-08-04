@@ -22,7 +22,7 @@ export class SupabaseStoreRepository implements StoreRepository {
   async getStoreBySlug(slug: string): Promise<Store | null> {
     const { data, error } = await this.client
       .from("stores")
-      .select("id, slug, name")
+      .select("id, slug, name, status")
       .eq("slug", slug)
       .maybeSingle();
 

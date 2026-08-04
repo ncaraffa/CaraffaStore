@@ -14,7 +14,64 @@ port = 54323
 [auth]
 enabled = true
 site_url = "http://127.0.0.1:3000"
+# Terceira correção pós-QA (revisão externa sobre
+# qa/reports/TASK-002-CLAUDE-VERIFICATION.md, BUG-CLAUDE-001): os
+# templates de e-mail abaixo (auth.email.template.confirmation/recovery)
+# apontam DIRETAMENTE para app/auth/confirm e app/auth/recovery com
+# `{{ .TokenHash }}` — as rotas não passam mais pelo endpoint
+# `/auth/v1/verify` hospedado pelo GoTrue nem recebem um `code` PKCE
+# genérico, então este `additional_redirect_urls` deixou de ser a
+# barreira de finalidade (a rota escolhe um `type` fixo para
+# `verifyOtp`, nunca lido de query string — ver comentário no topo de
+# cada rota). Mantido apenas como allowlist adicional de defesa em
+# profundidade para qualquer redirect nativo do GoTrue que ainda exista
+# fora destes dois fluxos (ex.: `emailRedirectTo` do signUp/resend). O
+# app também valida contra sua própria allowlist (lib/auth/redirects.ts).
+additional_redirect_urls = [
+  "http://127.0.0.1:3000/auth/confirm",
+  "http://127.0.0.1:3000/auth/recovery",
+]
+
+# T2-DEC-011: minimo de 15 caracteres, sem exigir composicao
+# (mai/min/numero/simbolo). O maximo de 64+ e aceito pelo GoTrue por
+# padrao (nao ha campo de maximo aqui).
+minimum_password_length = 15
+password_requirements = ""
+
+[auth.rate_limit]
+# Limites nativos do GoTrue, alem do limiter de aplicacao
+# (lib/auth/rate-limit.ts) que cobre cadastro/login/recuperacao mesmo
+# sem SMTP customizado configurado localmente.
+email_sent = 2
+sign_in_sign_ups = 30
+token_verifications = 30
+
+# Preparado para cadastro e recuperacao, desativado no dev local
+# (T2-DEC-011: "sem obrigacao de ativa-lo no desenvolvimento local").
+# Para ativar: preencher secret via variavel de ambiente e trocar
+# enabled para true. Ver docs/CLAUDE_PROMPT_TASK-002.md e
+# docs/HANDOFF.md (checklist de producao).
+[auth.captcha]
+enabled = false
+provider = "hcaptcha"
+secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"
 
 [auth.email]
 enable_signup = true
-enable_confirmations = false
+# T2-DEC-002: verificacao de e-mail obrigatoria antes da criacao da loja.
+enable_confirmations = true
+# Evita reenvio de confirmacao/recuperacao em looping rapido no dev.
+max_frequency = "10s"
+
+# Templates customizados (BUG-CLAUDE-001, qa/reports/TASK-002-CLAUDE-VERIFICATION.md):
+# apontam direto para as rotas do app com `token_hash`, sem passar pelo
+# endpoint `/auth/v1/verify` hospedado pelo GoTrue nem pelo `code` PKCE
+# genérico — ver comentário no topo de app/auth/confirm/route.ts e
+# app/auth/recovery/route.ts para a explicação completa.
+[auth.email.template.confirmation]
+subject = "Confirm your email address"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your password"
+content_path = "./supabase/templates/recovery.html"

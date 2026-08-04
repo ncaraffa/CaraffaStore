@@ -1,9 +1,10 @@
-import type { StoreRole } from "@/lib/supabase/types";
+import type { StoreRole, StoreStatus } from "@/lib/supabase/types";
 
 export interface Store {
   id: string;
   slug: string;
   name: string;
+  status: StoreStatus;
 }
 
 export interface Membership {

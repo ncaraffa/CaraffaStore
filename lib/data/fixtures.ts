@@ -32,11 +32,13 @@ export const FIXTURE_STORES: { storeA: Store; storeB: Store } = {
     id: "10000000-0000-4000-8000-000000000001",
     slug: "store-a",
     name: "Mercado Aurora",
+    status: "active",
   },
   storeB: {
     id: "20000000-0000-4000-8000-000000000001",
     slug: "store-b",
     name: "Empório Horizonte",
+    status: "active",
   },
 };
 

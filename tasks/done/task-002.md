@@ -1,13 +1,21 @@
 # TASK-002 — Autenticação e onboarding inicial do comerciante
 
-**Status:** READY
+**Status:** DONE
 
 **Responsável pela implementação:** Claude Code
+**Branch:** feat/TASK-002-auth-onboarding (mesclada na `master` via merge --no-ff, histórico preservado)
+**HEAD-base:** ca2435146b9d3cc63ea589410284e9e14d31c034 (master, limpo)
 
 **Aprovação de escopo:** Caraffa, 2026-08-03 (`T2-DEC-001` a `T2-DEC-011` em `docs/DECISIONS.md`)
+**Aprovação final:** `qa/reports/TASK-002-FINAL-APPROVAL.md` — **APROVADA PARA MERGE** por revisão externa
+(ChatGPT) em 2026-08-04, commit testado `b3540ecc51384818b75b9ff764b5b24d4fb6d185`. 250/250 testes, TASK-001
+RLS 7/7, TASK-002 SQL 41 cenários/56 asserts, migrations (banco novo + upgrade desde 0002) aprovadas, os
+três bloqueadores BUG-CLAUDE-001/VERIF2-001/VERIF3-001 permanecem corrigidos sob teste adversarial real,
+lint/typecheck/build/audit aprovados, smoke test real (signup→confirm→onboarding→forgot-password→
+recovery→reset-password→login) aprovado. Nenhum deploy realizado.
 
 **Dependência concluída:** TASK-001
-**Deploy:** proibido nesta tarefa
+**Deploy:** proibido nesta tarefa; nenhum deploy realizado.
 
 ## Objetivo
 
