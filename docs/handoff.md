@@ -17,11 +17,20 @@
   3. `qa/reports/TASK-001-RETEST-2.md` — RLS **aprovada** (7/7), **REPROVADO** por FINAL-BUG-001 (`.env.local` não carregava automaticamente; corrigido).
   4. `qa/reports/TASK-001-RETEST-3.md` — RLS/seed/29 testes/gates/audits **aprovados**, **REPROVADO** por FINAL-BUG-002 (senha de dev impressa nos logs do seed; corrigido).
   5. `qa/reports/TASK-001-RETEST-4.md` — **APROVADO**, sem ressalvas: 36/36 testes, lint, typecheck, build, `npm audit`/`npm audit --omit=dev` (0 vulnerabilidades), seed idempotente sem vazamento em 2 execuções, RLS real 7/7 PASS em 2 execuções sem estado residual, falha sem `.env.local` sanitizada, Git limpo, nenhum bloqueador restante.
-- **Próxima tarefa recomendada: TASK-002 — Autenticação e onboarding do
-  comerciante** (`tasks/backlog/task-002.md`, depende da fundação
-  multi-tenant desta TASK-001). Ainda em `BACKLOG`, não implementada
-  nesta sessão — segue o processo normal de `AGENTS.md` (Júnior refina e
-  move para `tasks/ready/` antes de Claude Code implementar).
+- **TASK-002: DONE.** Aprovada por revisão externa (ChatGPT) em 2026-08-04
+  (`qa/reports/TASK-002-FINAL-APPROVAL.md`, commit `b3540ecc51384818b75b9ff764b5b24d4fb6d185`)
+  e mesclada na `master` via `git merge --no-ff` (histórico preservado,
+  sem squash). Arquivo da tarefa em `tasks/done/task-002.md`. Branch
+  `feat/TASK-002-auth-onboarding` preservada (não excluída). Cinco
+  rodadas de correção/verificação até a aprovação (`qa/reports/TASK-002*.md`) —
+  a última fechou BUG-CLAUDE-VERIF3-001 (conclusão automática da
+  recuperação de senha correlacionava só por `user_id`, sem provar
+  causalidade real; substituída por conclusão explícita server-only com
+  attempt_id + completion capability). Nenhum deploy realizado.
+- **Próxima tarefa recomendada: TASK-003 — Catálogo, produtos e
+  categorias** (`tasks/backlog/task-003.md`, depende de TASK-001 e
+  TASK-002). Ainda em `BACKLOG`, não implementada — segue o processo
+  normal (refinamento antes de mover para `tasks/ready/` e implementar).
 
 ## TASK-001 — resumo da entrega (2026-08-02)
 
@@ -554,11 +563,13 @@ deploy realizado.
 
 ## Próximos passos
 
-- **TASK-002 — Autenticação e onboarding do comerciante**
-  (`tasks/backlog/task-002.md`): próxima tarefa recomendada, depende
-  diretamente da fundação multi-tenant desta TASK-001. Segue o processo
-  normal de `AGENTS.md` — Júnior refina e move para `tasks/ready/`
-  antes de qualquer implementação.
+- **TASK-002 — Autenticação e onboarding do comerciante: concluída.**
+  Ver `qa/reports/TASK-002-FINAL-APPROVAL.md` e `tasks/done/task-002.md`.
+- **TASK-003 — Catálogo, produtos e categorias**
+  (`tasks/backlog/task-003.md`): próxima tarefa recomendada, depende de
+  TASK-001 e TASK-002. Ainda em `BACKLOG` — requer refinamento (regras
+  de variantes/imagens/estoque negativo) antes de mover para
+  `tasks/ready/` e implementar.
 - Propostas técnicas registradas em `docs/DECISIONS.md` (PROP-001 a
   PROP-004) seguem aguardando aprovação explícita de Caraffa antes de
   novas tarefas se apoiarem nelas como decisão consolidada.
