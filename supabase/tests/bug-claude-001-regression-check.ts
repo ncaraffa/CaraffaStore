@@ -170,9 +170,10 @@ async function main() {
     "claim_recovery_grant_for_password_change",
     { p_nonce: "qualquer-coisa-nao-importa-aqui" },
   );
+  const stepE2Claimed = (stepE2.body as { claimed?: boolean } | null)?.claimed;
   record(
     "2. is_current_session_recovery_grant()/claim continuam false mesmo depois de todas as tentativas acima",
-    stepE1.body === false && stepE2.body === false,
+    stepE1.body === false && stepE2Claimed === false,
     `is_current=${JSON.stringify(stepE1.body)}, claim=${JSON.stringify(stepE2.body)}`,
   );
 
@@ -238,7 +239,7 @@ async function main() {
   });
   record(
     "7. outra sessão (outro navegador) do MESMO usuário não reivindica o grant de uma sessão diferente, mesmo sabendo o nonce",
-    claimFromOtherSession === false,
+    claimFromOtherSession?.claimed === false,
     `claim=${JSON.stringify(claimFromOtherSession)}`,
   );
 
@@ -249,7 +250,7 @@ async function main() {
   });
   record(
     "8. um usuário DIFERENTE não reivindica o grant de outro usuário, mesmo sabendo o nonce",
-    claimFromOtherUser === false,
+    claimFromOtherUser?.claimed === false,
     `claim=${JSON.stringify(claimFromOtherUser)}`,
   );
 
@@ -261,7 +262,7 @@ async function main() {
   });
   record(
     "(controle) a sessão que fez verifyOtp de verdade AINDA reivindica normalmente",
-    claimLegit === true,
+    claimLegit?.claimed === true && Boolean(claimLegit?.attempt_id) && Boolean(claimLegit?.completion_capability),
     `claim=${JSON.stringify(claimLegit)}`,
   );
 
@@ -318,13 +319,27 @@ async function main() {
   const racePasswords = [1, 2, 3, 4, 5].map((n) => `senha concorrente numero ${n} disputa 2026!`);
   const raceResults = await Promise.all(
     raceClients.map(async (c, i) => {
-      const { data: claimed } = await c.rpc("claim_recovery_grant_for_password_change", { p_nonce: raceNonce });
-      if (claimed !== true) return { i, claimed, updated: null as boolean | null };
+      const { data: claim } = await c.rpc("claim_recovery_grant_for_password_change", { p_nonce: raceNonce });
+      if (claim?.claimed !== true) return { i, claimed: false, updated: null as boolean | null, attemptId: null as string | null, capability: null as string | null };
       const { error: updateError } = await c.auth.updateUser({ password: racePasswords[i]! });
-      return { i, claimed, updated: !updateError };
+      return { i, claimed: true, updated: !updateError, attemptId: claim.attempt_id, capability: claim.completion_capability };
     }),
   );
   const raceSuccesses = raceResults.filter((r) => r.claimed === true);
+
+  // Fecha a alça: o único claim bem-sucedido também teve updateUser()
+  // com sucesso — a conclusão explícita e server-only (mesmo caminho de
+  // lib/supabase/service-only/recovery-completion.ts) é chamada aqui
+  // via cliente admin (service_role), exatamente como o reset action
+  // faria depois de updateUser() retornar sucesso real.
+  const raceWinner = raceResults.find((r) => r.claimed && r.updated && r.attemptId && r.capability);
+  if (raceWinner) {
+    await admin.rpc("complete_password_recovery_attempt", {
+      p_attempt_id: raceWinner.attemptId!,
+      p_capability: raceWinner.capability!,
+    });
+  }
+
   const { data: raceAuditRows } = await admin
     .from("audit_log")
     .select("id")
@@ -333,8 +348,13 @@ async function main() {
 
   record(
     "22. concorrência real com 5 tentativas simultâneas (senhas diferentes em disputa): exatamente uma reivindicação bem-sucedida",
-    raceSuccesses.length === 1 && (raceAuditRows ?? []).length === 1,
-    `reivindicacoes=${raceSuccesses.length}, eventosAuditoria=${(raceAuditRows ?? []).length}`,
+    raceSuccesses.length === 1,
+    `reivindicacoes=${raceSuccesses.length}`,
+  );
+  record(
+    "22b. a conclusão explícita da tentativa vencedora grava exatamente 1 evento password_recovery_completed",
+    (raceAuditRows ?? []).length === 1,
+    `eventosAuditoria=${(raceAuditRows ?? []).length}`,
   );
 
   // Limpeza.

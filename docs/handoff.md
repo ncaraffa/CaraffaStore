@@ -1301,3 +1301,118 @@ cliente ou servidor.
   regressão desta correção) — mitigado testando com host consistente.
 - `revoked_at` existe na tabela mas nenhum caminho desta correção o define ainda — reservado para uma
   futura revogação administrativa explícita.
+
+## Quinta correção pós-QA — revisão externa sobre qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md (BUG-CLAUDE-VERIF3-001)
+
+### Causa-raiz confirmada (BLOQUEADOR/ALTA — integridade de auditoria, não escalação de privilégio)
+
+A trigger `handle_password_recovery_completion` (quarta correção) correlacionava a conclusão de uma
+recuperação SOMENTE por `user_id` + `claimed_at is not null and completed_at is null and revoked_at is
+null` — sem `expires_at`, sem `session_id`, sem janela temporal, sem nenhuma prova além de "este usuário
+tem uma linha claimed-e-abandonada". Reproduzido empiricamente em três cenários independentes
+(`qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md`): depois de um claim bem-sucedido cujo `updateUser()`
+falhou (sessão revogada), uma troca de senha comum (Cenário 1), uma alteração administrativa (Cenário 2),
+ou uma alteração feita depois de o grant já ter expirado (Cenário 3) — todas "concluíam" o grant abandonado
+e fabricavam `password_recovery_completed` sem nenhuma relação causal real. Além disso,
+`issue_password_recovery_grant` usava `INSERT ... ON CONFLICT (user_id) DO UPDATE`, sobrescrevendo
+silenciosamente a mesma linha para todo ciclo — nunca preservando histórico de tentativas anteriores.
+
+### Arquitetura final: uma linha por TENTATIVA, conclusão explícita server-only
+
+`public.password_recovery_grants` deixa de ser "uma linha por usuário, reutilizada por upsert" e passa a
+ser "uma linha por TENTATIVA de recuperação, nunca reutilizada". Colunas novas: `completion_secret_hash`,
+`password_fingerprint_before`, `claim_expires_at`, `revoke_reason`. `unique(user_id)` é removida; em seu
+lugar, um índice único PARCIAL (`password_recovery_grants_one_active_per_user`, `where completed_at is null
+and revoked_at is null`) garante no máximo uma tentativa ATIVA por usuário, sem impedir o histórico de
+tentativas passadas (completed/revoked) de coexistir.
+
+- **pending**: `issue_password_recovery_grant` primeiro REVOGA explicitamente (`revoked_at` +
+  `revoke_reason='superseded_by_new_recovery'`, com evento `password_recovery_revoked`) qualquer tentativa
+  ainda ativa do mesmo usuário — preservando a linha — e SÓ ENTÃO insere uma linha NOVA (novo `id`, novo
+  `nonce_hash`). Nunca mais sobrescreve uma linha existente. Evento `password_recovery_grant_issued` novo.
+- **claimed**: `claim_recovery_grant_for_password_change(nonce)` continua um `UPDATE` condicional único,
+  mas agora, no MESMO `UPDATE` atômico, também gera uma **completion capability** de 256 bits (só o hash é
+  persistido; o valor bruto só existe em memória do processo Next.js) e captura
+  **`password_fingerprint_before`** (`sha256(auth.users.encrypted_password)` no instante do claim). Passa a
+  retornar `jsonb` (`{claimed, attempt_id, completion_capability}`) em vez de um `boolean` solto — o
+  `attempt_id`/capability nunca são incluídos no `ResetPasswordState` devolvido ao cliente.
+- **completed**: a trigger automática `on_auth_user_password_changed`/`handle_password_recovery_completion`
+  foi **removida por completo** — nenhum mecanismo reage sozinho a uma alteração de `auth.users`. Em seu
+  lugar, `public.complete_password_recovery_attempt(attempt_id, capability)`
+  (`supabase/migrations/0004_account_audit.sql`), **EXECUTE só para `service_role`** (nem `anon`, nem
+  `authenticated`, nem `PUBLIC`), chamada por um novo módulo server-only
+  (`lib/supabase/service-only/recovery-completion.ts`, mesmo padrão de `recovery-grant-issuer.ts`) dentro
+  de `app/(auth)/reset-password/actions.ts`, **SOMENTE depois de `supabase.auth.updateUser({password})` ter
+  retornado sucesso real**. Exige simultaneamente: `attempt_id` exato, capability exata (comparada por
+  hash), a tentativa ainda `claimed`/não `completed`/não `revoked`/dentro da janela `claim_expires_at` (5
+  minutos após o claim), e o fingerprint ATUAL da credencial DIFERENTE do capturado no claim — prova
+  não-reversível de que a senha realmente mudou depois do claim. Idempotente: uma segunda chamada com os
+  mesmos parâmetros encontra `completed_at` já preenchido (fora do `WHERE`) e retorna `false` sem duplicar
+  auditoria, permitindo um retry limitado (`COMPLETION_RETRY_ATTEMPTS = 2` em `actions.ts`) se a primeira
+  chamada falhar por motivo transitório depois de `updateUser()` já ter tido sucesso.
+
+### O que acontece em cada falha
+
+- **`updateUser()` falha depois do claim**: a tentativa permanece `claimed`, `completed_at` null para
+  sempre — `complete_password_recovery_attempt` nunca é chamada (a Server Action encerra a sessão e exige
+  nova recuperação). Nenhuma troca de senha NÃO relacionada (normal, administrativa, ou sobre uma tentativa
+  expirada) consegue completá-la depois, porque a conclusão exige `attempt_id` + capability exatos desta
+  requisição — nunca "qualquer troca de senha por `user_id`" (fecha os três cenários do relatório).
+- **Completion falha depois de `updateUser()` ter sucesso**: a senha já mudou de fato; o retry limitado
+  dentro da própria Server Action cobre falhas transitórias; se todas as tentativas falharem, o usuário não
+  fica bloqueado (a troca de senha em si já teve sucesso) — só o evento de auditoria de conclusão pode
+  ficar ausente nesse caso raro, documentado explicitamente no código.
+- **Nova recuperação após qualquer cenário interrompido**: `issue_password_recovery_grant` revoga
+  explicitamente a tentativa ativa anterior (preservada, nunca apagada) e insere uma linha nova — testado
+  para os três cenários do bloqueador, mais crash/expiração/sucesso anterior.
+
+### Eventos de auditoria (semântica final)
+
+`password_recovery_grant_issued` (tentativa emitida) → `password_recovery_authorization_claimed`
+(tentativa exata reivindicada) → `password_recovery_completed` (conclusão real, causalmente vinculada) ou
+`password_recovery_revoked` (tentativa substituída por nova emissão). `audit_log_action_check` só ALARGADO
+(nunca estreitado).
+
+### Arquivos criados/modificados/removidos
+
+- **Criados**: `lib/supabase/service-only/recovery-completion.ts` (+ teste de fronteira server-only);
+  `supabase/tests/bug-claude-verif3-001-regression-check.ts` (reproduz os três cenários do bloqueador +
+  capability forjada + capability de tentativa revogada).
+- **Modificados**: `supabase/migrations/0003_recovery_session.sql` (tabela/índice/emissão/claim
+  reprojetados); `0004_account_audit.sql` (trigger automática removida, `complete_password_recovery_attempt`
+  nova, `audit_log_action_check` alargado); `lib/tenant/recovery-session.ts`
+  (`claimRecoveryGrantForPasswordChange` retorna `{claimed, attemptId, completionCapability}`);
+  `app/(auth)/reset-password/actions.ts` (chama a conclusão explícita com retry limitado);
+  `lib/supabase/types.ts`; as duas suítes `*.privileges.test.ts` de 0003/0004;
+  `supabase/tests/onboarding_isolation_check.sql` (Casos 30-41, 12 novos/reescritos — fluxo feliz explícito,
+  fingerprint sem alteração real, privilégio da conclusão, attempt_id/capability incorretos, idempotência,
+  janela `claim_expires_at` expirada, revogação em pending/claimed/completed);
+  `supabase/tests/migration-upgrade-check.sh` (novas funções/índice/actions, trigger antiga confirmada
+  ausente); `supabase/tests/bug-claude-001-regression-check.ts`/`bug-claude-verif2-001-regression-check.ts`/
+  `recovery-claim-concurrency-check.ts` (adaptados ao retorno jsonb do claim e à conclusão explícita).
+
+### Resultados reais desta rodada
+
+| Gate | Resultado |
+|---|---|
+| `npm test` | **250/250** (24 arquivos) |
+| `npm run lint` / `npx tsc --noEmit` / `npm run build` | OK |
+| `npm audit` / `npm audit --omit=dev` | 0 vulnerabilidades |
+| `supabase/tests/onboarding_isolation_check.sql` | **41 cenários / 56 asserts, todos PASS** |
+| `supabase/tests/isolation_check.sql` (TASK-001 RLS) | 7/7 PASS |
+| `supabase/tests/migration-upgrade-check.sh` | PASS — banco novo E upgrade desde 0002 (9 eventos históricos variados sobrevivem intactos), função/trigger/índice/action novos confirmados, função e trigger antigas confirmadas ausentes |
+| `supabase/tests/bug-claude-verif3-001-regression-check.ts` (novo) | **PASS** — os três cenários originais do bloqueador (troca normal, alteração administrativa, grant expirado) não fabricam mais `password_recovery_completed`; capability forjada e capability de tentativa revogada nunca concluem nada; nova recuperação funciona após cada cenário |
+| `supabase/tests/bug-claude-verif2-001-regression-check.ts`, `bug-claude-001-regression-check.ts`, `auth-flow-purpose-check.ts`, `recovery-claim-concurrency-check.ts`, `slug-concurrency-check.ts` | PASS, reexecutados com o novo fluxo de conclusão explícita |
+| Navegador real (`npm run start`, Mailpit, host `127.0.0.1` consistente) | signup→confirm→onboarding→logout→forgot-password→e-mail real→recovery→reset-password→login com a senha nova funcionando de ponta a ponta; audit_log confirmado no Postgres: `password_recovery_grant_issued` → `password_recovery_authorization_claimed` → `password_recovery_completed`, todos com o mesmo `attempt_id` |
+| Scan de segredos (bundles `.next/static`, logs do `npm run start`) | Nenhuma ocorrência de `SERVICE_ROLE`/`service_role`/senha real |
+
+### Limitações remanescentes
+
+- O quirk `127.0.0.1`/`localhost` do ambiente de preview do agente continua presente e nesta rodada se
+  manifestou de forma mais visível (uma navegação para uma URL `127.0.0.1` ocasionalmente resolveu como
+  `localhost` no mesmo processo de navegador) — mitigado abrindo uma aba nova ancorada em `127.0.0.1` desde
+  o início da sequência; não é uma regressão de código (o servidor/`site_url`/cookies estão corretos —
+  confirmado via `docker exec`/Postgres direto que o fluxo completou com o `attempt_id` correto).
+- Estratégia de retry da completion pós-`updateUser()` é local à requisição (sem fila/job assíncrono) — se
+  os `COMPLETION_RETRY_ATTEMPTS` (2) falharem, o evento de conclusão fica ausente até uma reconciliação
+  manual; documentado explicitamente como aceitável (nunca fabricar um evento falso é a prioridade).

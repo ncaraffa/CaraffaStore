@@ -1,0 +1,89 @@
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+/**
+ * Guarda de regressão por análise estática para a fronteira server-only
+ * do módulo de conclusão da recuperação de senha (BUG-CLAUDE-VERIF3-001,
+ * qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md) — mesmo padrão de
+ * lib/supabase/service-only/recovery-grant-issuer.test.ts. Cobre:
+ *
+ *   - `import "server-only"` presente como a primeira importação.
+ *   - Nenhum outro arquivo em app/ ou lib/, além da única chamadora
+ *     legítima (app/(auth)/reset-password/actions.ts), importa este
+ *     módulo.
+ *   - Nenhuma variável de ambiente relacionada a service_role usa o
+ *     prefixo NEXT_PUBLIC_.
+ */
+
+const ROOT = path.resolve(import.meta.dirname, "..", "..", "..");
+const COMPLETION_PATH = path.join(ROOT, "lib", "supabase", "service-only", "recovery-completion.ts");
+const ALLOWED_IMPORTERS = new Set([path.join(ROOT, "app", "(auth)", "reset-password", "actions.ts")]);
+
+function collectTsFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    if (entry === "node_modules" || entry === ".next") continue;
+    const full = path.join(dir, entry);
+    const stat = statSync(full);
+    if (stat.isDirectory()) {
+      collectTsFiles(full, out);
+    } else if (/\.(ts|tsx)$/.test(entry) && !/\.test\.tsx?$/.test(entry)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+describe("lib/supabase/service-only/recovery-completion.ts — fronteira server-only", () => {
+  const source = readFileSync(COMPLETION_PATH, "utf8");
+
+  it('contém `import "server-only";` como a primeira importação do arquivo', () => {
+    const firstImportLine = source
+      .split("\n")
+      .find((line) => line.trim().startsWith("import "));
+    expect(firstImportLine?.trim()).toBe('import "server-only";');
+  });
+
+  it("nenhum arquivo em app/ ou lib/, além de app/(auth)/reset-password/actions.ts, importa recovery-completion", () => {
+    const files: string[] = [];
+    for (const dir of ["app", "lib"]) {
+      collectTsFiles(path.join(ROOT, dir), files);
+    }
+
+    const offenders: string[] = [];
+    for (const file of files) {
+      if (file === COMPLETION_PATH) continue;
+      if (ALLOWED_IMPORTERS.has(file)) continue;
+      const content = readFileSync(file, "utf8");
+      if (content.includes("service-only/recovery-completion")) {
+        offenders.push(path.relative(ROOT, file));
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("nenhuma variável de ambiente SUPABASE_SERVICE_ROLE_KEY (ou equivalente) usa prefixo NEXT_PUBLIC_ em nenhum arquivo do projeto", () => {
+    const files: string[] = [];
+    for (const dir of ["app", "lib", "scripts", "supabase"]) {
+      const full = path.join(ROOT, dir);
+      try {
+        collectTsFiles(full, files);
+      } catch {
+        // diretório pode não existir (ex.: supabase/ tem .sql, não .ts) — ignora
+      }
+    }
+    const offenders: string[] = [];
+    for (const file of files) {
+      const content = readFileSync(file, "utf8");
+      if (/NEXT_PUBLIC_[A-Z_]*SERVICE_ROLE/.test(content)) {
+        offenders.push(path.relative(ROOT, file));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("nunca loga a completion capability (grep por console.*capability no módulo)", () => {
+    expect(source).not.toMatch(/console\.[a-z]+\([^)]*[Cc]apability/);
+  });
+});

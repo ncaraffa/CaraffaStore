@@ -118,13 +118,15 @@ echo "==> Verificando: schema final (password_recovery_grants, funções) existe
 # request_password_recovery_grant foram removidos por completo —
 # substituídos por issue_password_recovery_grant (só service_role) +
 # claim_recovery_grant_for_password_change(nonce) +
-# is_current_session_recovery_grant(). Quarta correção pós-QA (revisão
-# externa sobre qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md,
-# BUG-CLAUDE-VERIF2-001): handle_password_recovery_completion() (trigger
-# em auth.users.encrypted_password) também precisa sobreviver ao upgrade.
+# is_current_session_recovery_grant(). Quinta correção pós-QA (revisão
+# externa sobre qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md,
+# BUG-CLAUDE-VERIF3-001): a trigger automática
+# handle_password_recovery_completion()/on_auth_user_password_changed foi
+# REMOVIDA por completo — substituída por complete_password_recovery_attempt(),
+# explícita/server-only, que também precisa sobreviver ao upgrade.
 FUNCS_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
   select count(*) from pg_proc
-    where proname in ('issue_password_recovery_grant', 'claim_recovery_grant_for_password_change', 'is_current_session_recovery_grant', 'handle_email_confirmed_audit', 'handle_password_recovery_completion');
+    where proname in ('issue_password_recovery_grant', 'claim_recovery_grant_for_password_change', 'is_current_session_recovery_grant', 'handle_email_confirmed_audit', 'complete_password_recovery_attempt');
 ")
 if [ "$FUNCS_OK" != "5" ]; then
   echo "FAIL - nem todas as funções da 0003/0004 existem após o upgrade (esperado 5, obtido $FUNCS_OK)"
@@ -132,37 +134,44 @@ if [ "$FUNCS_OK" != "5" ]; then
 fi
 echo "PASS - as 5 funções de password_recovery_grants/auditoria de confirmação/conclusão existem após o upgrade"
 
-TRIGGER_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+OLD_TRIGGER_GONE=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
   select count(*) from pg_trigger where tgname = 'on_auth_user_password_changed' and not tgisinternal;
 ")
-if [ "$TRIGGER_OK" != "1" ]; then
-  echo "FAIL - trigger on_auth_user_password_changed não existe após o upgrade (esperado 1, obtido $TRIGGER_OK)"
+if [ "$OLD_TRIGGER_GONE" != "0" ]; then
+  echo "FAIL - trigger antiga on_auth_user_password_changed (BUG-CLAUDE-VERIF3-001, removida nesta correção) ainda existe após o upgrade (esperado 0, obtido $OLD_TRIGGER_GONE)"
   exit 1
 fi
-echo "PASS - trigger on_auth_user_password_changed existe após o upgrade"
+echo "PASS - trigger antiga on_auth_user_password_changed não sobrevive ao upgrade (conclusão automática removida)"
+
+ACTIVE_INDEX_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from pg_indexes where indexname = 'password_recovery_grants_one_active_per_user';
+")
+if [ "$ACTIVE_INDEX_OK" != "1" ]; then
+  echo "FAIL - indice unico parcial password_recovery_grants_one_active_per_user nao existe apos o upgrade (esperado 1, obtido $ACTIVE_INDEX_OK)"
+  exit 1
+fi
+echo "PASS - indice unico parcial password_recovery_grants_one_active_per_user existe apos o upgrade"
 
 ACTION_CHECK_WIDENED=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
   select pg_get_constraintdef(oid) from pg_constraint where conname = 'audit_log_action_check';
 ")
-if ! echo "$ACTION_CHECK_WIDENED" | grep -q "password_recovery_authorization_claimed"; then
-  echo "FAIL - audit_log_action_check não inclui password_recovery_authorization_claimed após o upgrade"
-  exit 1
-fi
-if ! echo "$ACTION_CHECK_WIDENED" | grep -q "signup_completed"; then
-  echo "FAIL - audit_log_action_check perdeu um valor histórico (signup_completed) após o upgrade"
-  exit 1
-fi
-echo "PASS - audit_log_action_check foi alargado (password_recovery_authorization_claimed) sem perder nenhum valor histórico"
+for expected_action in password_recovery_authorization_claimed password_recovery_grant_issued password_recovery_revoked signup_completed; do
+  if ! echo "$ACTION_CHECK_WIDENED" | grep -q "$expected_action"; then
+    echo "FAIL - audit_log_action_check não inclui $expected_action após o upgrade"
+    exit 1
+  fi
+done
+echo "PASS - audit_log_action_check foi alargado (password_recovery_grant_issued/password_recovery_revoked) sem perder nenhum valor histórico"
 
 OLD_FUNCS_GONE=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
   select count(*) from pg_proc
-    where proname in ('consume_auth_flow_grant', 'request_password_recovery_grant', 'handle_new_user_confirmation_grant');
+    where proname in ('consume_auth_flow_grant', 'request_password_recovery_grant', 'handle_new_user_confirmation_grant', 'handle_password_recovery_completion');
 ")
 if [ "$OLD_FUNCS_GONE" != "0" ]; then
-  echo "FAIL - funções antigas do desenho vulnerável (BUG-CLAUDE-001) ainda existem após o upgrade (esperado 0, obtido $OLD_FUNCS_GONE)"
+  echo "FAIL - funções antigas do desenho vulnerável (BUG-CLAUDE-001/BUG-CLAUDE-VERIF3-001) ainda existem após o upgrade (esperado 0, obtido $OLD_FUNCS_GONE)"
   exit 1
 fi
-echo "PASS - nenhuma função antiga (consume_auth_flow_grant/request_password_recovery_grant/handle_new_user_confirmation_grant) sobrevive ao upgrade"
+echo "PASS - nenhuma função antiga (consume_auth_flow_grant/request_password_recovery_grant/handle_new_user_confirmation_grant/handle_password_recovery_completion) sobrevive ao upgrade"
 
 RESTRICT_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
   select confdeltype from pg_constraint where conname = 'audit_log_store_id_fkey';

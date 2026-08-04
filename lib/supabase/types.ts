@@ -10,8 +10,10 @@ export type OnboardingStep =
 export type PlanCode = 30 | 50 | 80;
 export type AuditAction =
   | "email_verification_completed"
+  | "password_recovery_grant_issued"
   | "password_recovery_authorization_claimed"
   | "password_recovery_completed"
+  | "password_recovery_revoked"
   | "store_created"
   | "owner_assigned"
   | "plan_selected"
@@ -251,33 +253,45 @@ export interface Database {
           user_id: string;
           session_id: string;
           nonce_hash: string | null;
+          completion_secret_hash: string | null;
+          password_fingerprint_before: string | null;
           created_at: string;
           expires_at: string;
           claimed_at: string | null;
+          claim_expires_at: string | null;
           completed_at: string | null;
           revoked_at: string | null;
+          revoke_reason: string | null;
         };
         Insert: {
           id?: string;
           user_id: string;
           session_id: string;
           nonce_hash?: string | null;
+          completion_secret_hash?: string | null;
+          password_fingerprint_before?: string | null;
           created_at?: string;
           expires_at: string;
           claimed_at?: string | null;
+          claim_expires_at?: string | null;
           completed_at?: string | null;
           revoked_at?: string | null;
+          revoke_reason?: string | null;
         };
         Update: {
           id?: string;
           user_id?: string;
           session_id?: string;
           nonce_hash?: string | null;
+          completion_secret_hash?: string | null;
+          password_fingerprint_before?: string | null;
           created_at?: string;
           expires_at?: string;
           claimed_at?: string | null;
+          claim_expires_at?: string | null;
           completed_at?: string | null;
           revoked_at?: string | null;
+          revoke_reason?: string | null;
         };
         Relationships: [];
       };
@@ -314,14 +328,22 @@ export interface Database {
       };
       issue_password_recovery_grant: {
         Args: { p_user_id: string; p_session_id: string; p_nonce: string; p_ttl_seconds?: number };
-        Returns: void;
+        Returns: string;
       };
       claim_recovery_grant_for_password_change: {
         Args: { p_nonce: string };
-        Returns: boolean;
+        Returns: {
+          claimed: boolean;
+          attempt_id: string | null;
+          completion_capability: string | null;
+        };
       };
       is_current_session_recovery_grant: {
         Args: Record<string, never>;
+        Returns: boolean;
+      };
+      complete_password_recovery_attempt: {
+        Args: { p_attempt_id: string; p_capability: string };
         Returns: boolean;
       };
     };

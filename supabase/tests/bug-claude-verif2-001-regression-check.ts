@@ -1,7 +1,7 @@
 /**
  * Teste regressivo real, ponta a ponta, para BUG-CLAUDE-VERIF2-001
  * (qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, §8, ALTA): a versão
- * anterior de `claim_recovery_grant_for_password_change` gravava
+ * original de `claim_recovery_grant_for_password_change` gravava
  * `password_recovery_completed` DENTRO do próprio claim — ou seja,
  * ANTES de `supabase.auth.updateUser({password})` ser chamado em
  * app/(auth)/reset-password/actions.ts. Reproduzido naquela verificação:
@@ -10,34 +10,40 @@
  * mas a auditoria já afirmava "password_recovery_completed" mesmo
  * assim.
  *
- * Corrigido reprojetando o grant como uma máquina de estados real
- * (pending -> claimed -> completed, supabase/migrations/0003_recovery_session.sql)
- * com a conclusão amarrada a uma trigger AFTER UPDATE OF
- * encrypted_password em auth.users (supabase/migrations/0004_account_audit.sql,
- * handle_password_recovery_completion) — a mesma transação Postgres que
- * o GoTrue usa para gravar a nova senha.
- *
- * Este script reproduz os DOIS cenários e confirma o resultado correto
- * em cada um:
+ * A correção original (pending -> claimed -> completed, com uma trigger
+ * AFTER UPDATE OF encrypted_password em auth.users) foi por sua vez
+ * substituída pela correção de BUG-CLAUDE-VERIF3-001
+ * (qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md): a trigger automática
+ * foi removida — a conclusão agora é EXPLÍCITA e SERVER-ONLY
+ * (complete_password_recovery_attempt, chamada só depois de
+ * updateUser() ter sucesso real, com attempt_id + completion capability
+ * exatos). Este script continua reproduzindo os MESMOS dois cenários do
+ * bloqueador original, agora chamando a conclusão explícita no lugar da
+ * trigger automática:
  *
  *   Cenário 1 (sucesso real): claim -> updateUser com sucesso real ->
- *     exatamente 1 evento password_recovery_authorization_claimed,
- *     exatamente 1 evento password_recovery_completed (gravado DEPOIS
- *     do claimed, pela trigger), grant.completed_at preenchido, senha
- *     antiga falha, senha nova funciona.
+ *     complete_password_recovery_attempt (via cliente admin/service_role,
+ *     mesmo caminho de lib/supabase/service-only/recovery-completion.ts)
+ *     -> exatamente 1 evento password_recovery_authorization_claimed,
+ *     exatamente 1 evento password_recovery_completed, grant.completed_at
+ *     preenchido, senha antiga falha, senha nova funciona.
  *
  *   Cenário 2 (falha forçada entre claim e updateUser, via revogação
  *     real da sessão — não altera nenhum código): claim tem sucesso
- *     (evento claimed gravado, correto), updateUser FALHA, e o teste
- *     falha se — e só se — password_recovery_completed aparecer no
- *     audit_log (o bug original). grant permanece no estado claimed
- *     (completed_at continua null para sempre), senha antiga continua
- *     válida, senha "nova" pretendida nunca funciona.
+ *     (evento claimed gravado, correto), updateUser FALHA — a Server
+ *     Action real NUNCA chamaria a conclusão neste caso (só chama
+ *     depois de updateUser() ter sucesso), então este teste também não
+ *     chama; o teste falha se — e só se — password_recovery_completed
+ *     aparecer no audit_log de qualquer forma (o bug original). grant
+ *     permanece no estado claimed (completed_at continua null para
+ *     sempre), senha antiga continua válida, senha "nova" pretendida
+ *     nunca funciona.
  *
  *   Cenário 3 (concorrência real com 5 tentativas completas, senhas
- *     diferentes): exatamente 1 claim, exatamente 1 updateUser, exatamente
- *     1 evento claimed, exatamente 1 evento completed, exatamente 1 de 6
- *     senhas candidatas (antiga + 5 concorrentes) funciona no login final.
+ *     diferentes): exatamente 1 claim, exatamente 1 updateUser,
+ *     exatamente 1 conclusão explícita (via admin), exatamente 1 evento
+ *     claimed, exatamente 1 evento completed, exatamente 1 de 6 senhas
+ *     candidatas (antiga + 5 concorrentes) funciona no login final.
  *
  * Requer Supabase local real rodando (não precisa do Next.js dev server
  * — usa RPC/REST/GoTrue direto, como o próprio ataque original):
@@ -119,24 +125,29 @@ async function scenario1Success(admin: ReturnType<typeof createAdminSupabaseClie
   const NEW_PASSWORD = "a genuinely new password scenario 1 2026!";
   const { userId, client, nonce } = await setupRecoverySession(admin, email);
 
-  const { data: claimed } = await client.rpc("claim_recovery_grant_for_password_change", { p_nonce: nonce });
+  const { data: claim } = await client.rpc("claim_recovery_grant_for_password_change", { p_nonce: nonce });
   const { error: updateErr } = await client.auth.updateUser({ password: NEW_PASSWORD });
+
+  record("Cenário 1 (sucesso real): claim.claimed=true", claim?.claimed === true, `claim=${JSON.stringify(claim)}`);
+  record("Cenário 1: updateUser teve sucesso real", !updateErr, `error=${updateErr?.message ?? "null"}`);
+
+  // Mesmo caminho de lib/supabase/service-only/recovery-completion.ts —
+  // chamada SOMENTE depois de updateUser() ter sucesso real.
+  let completeOk = false;
+  if (!updateErr && claim?.claimed && claim.attempt_id && claim.completion_capability) {
+    const { data: completed } = await admin.rpc("complete_password_recovery_attempt", {
+      p_attempt_id: claim.attempt_id,
+      p_capability: claim.completion_capability,
+    });
+    completeOk = completed === true;
+  }
+  record("Cenário 1: complete_password_recovery_attempt teve sucesso real", completeOk, `completeOk=${completeOk}`);
 
   const actions = await auditActions(admin, userId);
   const grant = await grantState(admin, userId);
   const oldLogin = await login(env, email, OLD_PASSWORD);
   const newLogin = await login(env, email, NEW_PASSWORD);
 
-  record(
-    "Cenário 1 (sucesso real): claim=true",
-    claimed === true,
-    `claim=${claimed}`,
-  );
-  record(
-    "Cenário 1: updateUser teve sucesso real",
-    !updateErr,
-    `error=${updateErr?.message ?? "null"}`,
-  );
   record(
     "Cenário 1: evento claimed presente, exatamente 1 evento completed",
     actions.includes("password_recovery_authorization_claimed") &&
@@ -162,14 +173,19 @@ async function scenario2ForcedFailure(admin: ReturnType<typeof createAdminSupaba
   const INTENDED_NEW_PASSWORD = "this password must never actually apply scenario 2 2026!";
   const { userId, client, nonce, session } = await setupRecoverySession(admin, email);
 
-  const { data: claimed } = await client.rpc("claim_recovery_grant_for_password_change", { p_nonce: nonce });
-  record("Cenário 2 (falha forçada): claim=true", claimed === true, `claim=${claimed}`);
+  const { data: claim } = await client.rpc("claim_recovery_grant_for_password_change", { p_nonce: nonce });
+  record("Cenário 2 (falha forçada): claim.claimed=true", claim?.claimed === true, `claim=${JSON.stringify(claim)}`);
 
   // Revoga a sessão real (não altera nenhum código) para forçar
   // updateUser a falhar de forma realista (conexão caindo, sessão
   // invalidada no meio do fluxo).
   await admin.auth.admin.signOut(session.access_token, "global");
   const { error: updateErr } = await client.auth.updateUser({ password: INTENDED_NEW_PASSWORD });
+
+  // A Server Action real NUNCA chamaria complete_password_recovery_attempt
+  // aqui (updateUser falhou) — este teste também não chama, por desenho:
+  // o que se está provando é que NENHUM caminho (nem uma trigger
+  // automática, que nem existe mais) conclui esta tentativa sozinho.
 
   const actions = await auditActions(admin, userId);
   const grant = await grantState(admin, userId);
@@ -182,7 +198,7 @@ async function scenario2ForcedFailure(admin: ReturnType<typeof createAdminSupaba
     `error=${updateErr?.message ?? "null"}`,
   );
   record(
-    "Cenário 2 [BUG-CLAUDE-VERIF2-001]: password_recovery_completed NÃO aparece no audit_log",
+    "Cenário 2 [BUG-CLAUDE-VERIF2-001/VERIF3-001]: password_recovery_completed NÃO aparece no audit_log",
     !actions.includes("password_recovery_completed"),
     `actions=${JSON.stringify(actions)}`,
   );
@@ -220,15 +236,24 @@ async function scenario3FiveWayConcurrency(admin: ReturnType<typeof createAdminS
 
   const attempts = await Promise.all(
     clients.map(async (c, i) => {
-      const { data: claimed } = await c.rpc("claim_recovery_grant_for_password_change", { p_nonce: nonce });
-      if (claimed !== true) return { i, claimed: false, updateOk: null as boolean | null };
+      const { data: claim } = await c.rpc("claim_recovery_grant_for_password_change", { p_nonce: nonce });
+      if (claim?.claimed !== true) return { i, claimed: false, updateOk: null as boolean | null, attemptId: null as string | null, capability: null as string | null };
       const { error } = await c.auth.updateUser({ password: passwords[i]! });
-      return { i, claimed: true, updateOk: !error };
+      return { i, claimed: true, updateOk: !error, attemptId: claim.attempt_id, capability: claim.completion_capability };
     }),
   );
 
   const claimSuccesses = attempts.filter((a) => a.claimed);
   const updateSuccesses = attempts.filter((a) => a.updateOk === true);
+
+  const winner = attempts.find((a) => a.claimed && a.updateOk && a.attemptId && a.capability);
+  if (winner) {
+    await admin.rpc("complete_password_recovery_attempt", {
+      p_attempt_id: winner.attemptId!,
+      p_capability: winner.capability!,
+    });
+  }
+
   const actions = await auditActions(admin, userId);
 
   const loginResults = [
@@ -269,7 +294,7 @@ async function main() {
   }
 
   console.log(
-    "\nPASS - BUG-CLAUDE-VERIF2-001 corrigido: password_recovery_completed só é gravado após updateUser() realmente ter sucesso (via trigger correlacionada em auth.users), nos três cenários (sucesso, falha forçada, concorrência real).",
+    "\nPASS - BUG-CLAUDE-VERIF2-001 continua corrigido: password_recovery_completed só é gravado depois de updateUser() realmente ter sucesso E de uma chamada explícita/server-only de conclusão (attempt_id + capability exatos), nos três cenários (sucesso, falha forçada, concorrência real).",
   );
 }
 

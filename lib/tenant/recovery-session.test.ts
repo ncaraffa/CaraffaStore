@@ -31,27 +31,55 @@ describe("isCurrentSessionRecovery", () => {
 });
 
 describe("claimRecoveryGrantForPasswordChange", () => {
-  it("true quando claim_recovery_grant_for_password_change(nonce) devolve true", async () => {
-    const supabase = fakeSupabase({ data: true, error: null });
-    expect(await claimRecoveryGrantForPasswordChange(supabase, FAKE_NONCE)).toBe(true);
+  const CAPABILITY = "a".repeat(64);
+  const ATTEMPT_ID = "11111111-1111-4111-8111-111111111111";
+
+  it("claimed=true + attemptId/completionCapability quando o jsonb retornado tem claimed=true e os dois campos preenchidos", async () => {
+    const supabase = fakeSupabase({
+      data: { claimed: true, attempt_id: ATTEMPT_ID, completion_capability: CAPABILITY },
+      error: null,
+    });
+    const result = await claimRecoveryGrantForPasswordChange(supabase, FAKE_NONCE);
+    expect(result).toEqual({ claimed: true, attemptId: ATTEMPT_ID, completionCapability: CAPABILITY });
     expect(supabase.rpc).toHaveBeenCalledWith("claim_recovery_grant_for_password_change", {
       p_nonce: FAKE_NONCE,
     });
   });
 
-  it("false quando não há grant a reivindicar (já reivindicado por uma requisição concorrente, ou nunca existiu)", async () => {
-    const supabase = fakeSupabase({ data: false, error: null });
-    expect(await claimRecoveryGrantForPasswordChange(supabase, FAKE_NONCE)).toBe(false);
+  it("claimed=false quando não há tentativa a reivindicar (já reivindicada por uma requisição concorrente, ou nunca existiu)", async () => {
+    const supabase = fakeSupabase({ data: { claimed: false, attempt_id: null, completion_capability: null }, error: null });
+    expect(await claimRecoveryGrantForPasswordChange(supabase, FAKE_NONCE)).toEqual({
+      claimed: false,
+      attemptId: null,
+      completionCapability: null,
+    });
   });
 
-  it("false quando a RPC retorna erro — nunca autoriza a troca de senha em caso de falha", async () => {
+  it("claimed=false quando a RPC retorna erro — nunca autoriza a troca de senha em caso de falha", async () => {
     const supabase = fakeSupabase({ data: null, error: { message: "boom" } });
-    expect(await claimRecoveryGrantForPasswordChange(supabase, FAKE_NONCE)).toBe(false);
+    expect(await claimRecoveryGrantForPasswordChange(supabase, FAKE_NONCE)).toEqual({
+      claimed: false,
+      attemptId: null,
+      completionCapability: null,
+    });
   });
 
-  it("false quando o nonce está ausente/vazio — nunca chama a RPC sem nonce (qa/reports/TASK-002-CLAUDE-VERIFICATION.md, BUG-CLAUDE-001)", async () => {
-    const supabase = fakeSupabase({ data: true, error: null });
-    expect(await claimRecoveryGrantForPasswordChange(supabase, undefined)).toBe(false);
+  it("claimed=false quando o jsonb afirma claimed=true mas está sem attempt_id/completion_capability (defensivo — nunca deveria acontecer no banco real)", async () => {
+    const supabase = fakeSupabase({ data: { claimed: true, attempt_id: null, completion_capability: null }, error: null });
+    expect(await claimRecoveryGrantForPasswordChange(supabase, FAKE_NONCE)).toEqual({
+      claimed: false,
+      attemptId: null,
+      completionCapability: null,
+    });
+  });
+
+  it("claimed=false quando o nonce está ausente/vazio — nunca chama a RPC sem nonce (qa/reports/TASK-002-CLAUDE-VERIFICATION.md, BUG-CLAUDE-001)", async () => {
+    const supabase = fakeSupabase({ data: { claimed: true, attempt_id: ATTEMPT_ID, completion_capability: CAPABILITY }, error: null });
+    expect(await claimRecoveryGrantForPasswordChange(supabase, undefined)).toEqual({
+      claimed: false,
+      attemptId: null,
+      completionCapability: null,
+    });
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 

@@ -112,50 +112,80 @@ create trigger on_auth_user_email_confirmed
 -- ============================================================
 -- QUARTA correção pós-QA (revisão externa sobre
 -- qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, BUG-CLAUDE-VERIF2-001,
--- ALTA): a versão anterior de claim_recovery_grant_for_password_change
+-- ALTA) — HISTÓRICO, substituída pela QUINTA correção abaixo: a versão
+-- anterior de claim_recovery_grant_for_password_change
 -- (supabase/migrations/0003_recovery_session.sql) gravava
 -- 'password_recovery_completed' ANTES de supabase.auth.updateUser()
--- realmente trocar a senha — reproduzido empiricamente: uma sessão
--- revogada entre o claim e o updateUser faz o updateUser falhar (senha
--- antiga continua válida), mas a auditoria já afirmava conclusão mesmo
--- assim.
+-- realmente trocar a senha. Corrigido NAQUELA rodada amarrando o evento
+-- a uma trigger AFTER UPDATE OF encrypted_password em auth.users
+-- (handle_password_recovery_completion, removida nesta correção — ver
+-- QUINTA abaixo).
 --
--- Corrigido amarrando o evento 'password_recovery_completed' a uma
--- transição REAL e verificável em auth.users — a própria coluna que o
--- GoTrue grava (auth.users.encrypted_password) quando a senha muda de
--- fato. Confirmado empiricamente nesta correção (script descartável,
--- não commitado) que uma trigger AFTER UPDATE OF encrypted_password que
--- sempre lança exceção faz updateUser() falhar por completo (a senha
--- NÃO muda) — ou seja, a trigger roda na MESMA transação Postgres que o
--- GoTrue usa para escrever a nova senha, não depois dela. Isso garante
--- nos dois sentidos:
---   * se updateUser() falhar (por qualquer motivo, incluindo uma falha
---     forçada nesta própria trigger), encrypted_password não muda e
---     completed_at nunca é marcado — nenhum password_recovery_completed
---     fabricado;
---   * se a auditoria obrigatória desta trigger falhar (ex.: violação de
---     constraint), a troca de senha inteira sofre rollback junto —
---     nunca existe um estado em que a senha mudou mas a conclusão não
---     foi registrada.
+-- ============================================================
+-- QUINTA correção pós-QA (revisão externa sobre
+-- qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md, BUG-CLAUDE-VERIF3-001,
+-- BLOQUEADOR/ALTA): a trigger `handle_password_recovery_completion` da
+-- correção anterior correlacionava a conclusão SOMENTE por
+-- `new.id` (o auth.users.id sendo atualizado) contra "existe um grant
+-- claimed-não-completed-não-revoked para este usuário" — sem
+-- `expires_at`, sem `session_id`, sem janela temporal, sem NENHUMA
+-- prova de que a alteração de senha específica que disparou a trigger
+-- tinha qualquer relação com a tentativa de recuperação que criou
+-- aquele grant `claimed`. Confirmado empiricamente: uma troca de senha
+-- comum, uma alteração administrativa, ou uma alteração feita depois de
+-- o grant já ter expirado — todas "concluíam" um grant `claimed`
+-- abandonado (updateUser da recuperação original tendo falhado antes),
+-- fabricando `password_recovery_completed` sem nenhuma causalidade
+-- real. Uma trigger genérica sobre `auth.users.encrypted_password` só
+-- prova "a senha deste usuário mudou" — nunca "esta mudança foi
+-- causada por esta tentativa de recuperação".
 --
--- A correlação com o grant correto nunca depende de "o mais recente
--- sem restrição", session_id/user_id vindos do cliente, nem de janela
--- temporal: usa exclusivamente new.id (o próprio auth.users.id sendo
--- atualizado pelo GoTrue) contra claimed_at is not null and
--- completed_at is null and revoked_at is null — e a constraint
--- unique(user_id) de password_recovery_grants garante que no máximo UMA
--- linha pode satisfazer essa condição para aquele usuário, então não há
--- ambiguidade possível de qual grant concluir.
+-- Removida por completo a trigger `on_auth_user_password_changed` e a
+-- função `handle_password_recovery_completion` — não existe mais
+-- NENHUM mecanismo automático que conclua um grant a partir de uma
+-- alteração de `auth.users`. A conclusão vira uma função explícita,
+-- SERVER-ONLY (EXECUTE só para service_role — nem authenticated, nem
+-- anon, nem PUBLIC), chamada pelo reset action IMEDIATAMENTE depois de
+-- `updateUser()` retornar sucesso real:
 --
--- Troca de senha SEM nenhum grant claimed (ex.: uma futura função de
--- "trocar senha logado", que não existe ainda na TASK-002) não fabrica
--- password_recovery_completed — a atualização simplesmente não afeta
--- nenhuma linha, v_grant_id fica null, e nenhum evento é gravado.
--- Deliberadamente não foi criado um evento genérico "password_changed"
--- para esse caso: a TASK-002 não tem hoje nenhum fluxo de troca de
--- senha fora da recuperação, então essa situação nunca deveria
--- acontecer na prática; se um fluxo desses for adicionado no futuro,
--- deve decidir explicitamente sua própria semântica de auditoria.
+--   public.complete_password_recovery_attempt(p_attempt_id uuid,
+--     p_capability text)
+--
+-- Ela exige, simultaneamente:
+--   * `p_attempt_id` — a tentativa EXATA (não "a mais recente", não "a
+--     claimed do usuário") criada por issue_password_recovery_grant e
+--     reivindicada por claim_recovery_grant_for_password_change;
+--   * `p_capability` — a completion capability de uso único gerada
+--     ATOMICAMENTE por claim_recovery_grant_for_password_change no
+--     mesmo UPDATE do claim (só o hash é persistido em
+--     completion_secret_hash; o valor bruto só existe em memória do
+--     processo Next.js entre o claim e esta chamada) — comparado por
+--     hash, nunca em texto puro;
+--   * `claimed_at is not null`, `completed_at is null`, `revoked_at is
+--     null`, `claim_expires_at > now()` — a mesma tentativa, ainda
+--     dentro da janela de conclusão, nunca já concluída/revogada;
+--   * o fingerprint ATUAL de `auth.users.encrypted_password`
+--     (sha256, comparado só por hash) DIFERENTE de
+--     `password_fingerprint_before` (capturado no claim) — prova
+--     não-reversível de que a credencial realmente mudou DEPOIS do
+--     claim, fechando a lacuna de causalidade: sem essa mudança real,
+--     a conclusão falha mesmo com attempt_id/capability corretos.
+--
+-- Só then marca `completed_at` e grava `password_recovery_completed`,
+-- com `attempt_id` nos `metadata` (não sensível — só um uuid interno).
+-- Idempotente por desenho: uma segunda chamada com o mesmo
+-- attempt_id/capability encontra `completed_at is not null` (já não
+-- bate no WHERE) e retorna `false` sem duplicar nada — uma Server
+-- Action pode tentar de novo com segurança (ex.: falha transitória de
+-- rede entre updateUser() e esta chamada) sem risco de gravar dois
+-- eventos de conclusão.
+--
+-- Troca de senha SEM nenhuma tentativa claimed correspondente (ex.:
+-- uma futura função de "trocar senha logado", que não existe ainda na
+-- TASK-002) nunca fabrica password_recovery_completed — não há mais
+-- NENHUM caminho automático que reaja a auth.users por conta própria;
+-- só uma chamada explícita e server-only com attempt_id/capability
+-- corretos conclui alguma coisa.
 -- ============================================================
 
 alter table public.audit_log
@@ -164,8 +194,10 @@ alter table public.audit_log
     'signup_completed',
     'email_verification_completed',
     'password_recovery_requested',
+    'password_recovery_grant_issued',
     'password_recovery_authorization_claimed',
     'password_recovery_completed',
+    'password_recovery_revoked',
     'store_created',
     'owner_assigned',
     'plan_selected',
@@ -174,44 +206,83 @@ alter table public.audit_log
   ));
 
 comment on constraint audit_log_action_check on public.audit_log is
-  'Conjunto de actions só CRESCE entre migrations (nunca estreitar — bloqueador 6/BUG-RT2-006, qa/reports/TASK-002-RETEST.md, e comentário no topo deste arquivo): estreitar quebraria upgrade com linhas históricas gravadas sob um conjunto anterior mais permissivo. password_recovery_authorization_claimed adicionado nesta correção (BUG-CLAUDE-VERIF2-001) — password_recovery_completed permanece no conjunto e continua sendo escrito, só que agora exclusivamente pela trigger on_auth_user_password_changed abaixo, nunca mais por claim_recovery_grant_for_password_change.';
+  'Conjunto de actions só CRESCE entre migrations (nunca estreitar — bloqueador 6/BUG-RT2-006, qa/reports/TASK-002-RETEST.md, e comentário no topo deste arquivo): estreitar quebraria upgrade com linhas históricas gravadas sob um conjunto anterior mais permissivo. password_recovery_grant_issued/password_recovery_revoked adicionados nesta correção (BUG-CLAUDE-VERIF3-001, supabase/migrations/0003_recovery_session.sql) — password_recovery_completed permanece no conjunto e continua sendo escrito, agora exclusivamente por complete_password_recovery_attempt() abaixo (nunca mais por uma trigger automática sobre auth.users, nem por claim_recovery_grant_for_password_change).';
 
-create or replace function public.handle_password_recovery_completion()
-returns trigger
+drop trigger if exists on_auth_user_password_changed on auth.users;
+drop function if exists public.handle_password_recovery_completion();
+
+-- ============================================================
+-- Conclusão explícita, server-only — ver bloco QUINTA correção acima
+-- para a explicação completa do desenho.
+-- ============================================================
+
+create or replace function public.complete_password_recovery_attempt(
+  p_attempt_id uuid,
+  p_capability text
+)
+returns boolean
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  v_grant_id uuid;
+  v_user_id uuid;
+  v_fingerprint_before text;
+  v_current_encrypted_password text;
+  v_current_fingerprint text;
 begin
-  update public.password_recovery_grants
-  set completed_at = now()
-  where user_id = new.id
+  if p_attempt_id is null or p_capability is null or length(p_capability) = 0 then
+    return false;
+  end if;
+
+  select user_id, password_fingerprint_before
+    into v_user_id, v_fingerprint_before
+  from public.password_recovery_grants
+  where id = p_attempt_id
+    and completion_secret_hash = encode(extensions.digest(p_capability, 'sha256'), 'hex')
     and claimed_at is not null
     and completed_at is null
     and revoked_at is null
-  returning id into v_grant_id;
+    and claim_expires_at is not null
+    and claim_expires_at > now()
+  for update;
 
-  -- unique(user_id) em password_recovery_grants garante no máximo uma
-  -- linha elegível — nenhuma ambiguidade de qual grant concluir.
-  if v_grant_id is not null then
-    insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
-    values (new.id, null, 'password_recovery_completed', 'auth_user', new.id::text, '{}'::jsonb);
+  if not found or v_fingerprint_before is null then
+    return false;
   end if;
 
-  return new;
+  select encrypted_password into v_current_encrypted_password
+  from auth.users
+  where id = v_user_id;
+
+  if v_current_encrypted_password is null then
+    return false;
+  end if;
+
+  v_current_fingerprint := encode(extensions.digest(v_current_encrypted_password, 'sha256'), 'hex');
+
+  -- Prova de alteração real (qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md,
+  -- "PROVA DE ALTERAÇÃO REAL"): sem isso, um chamador com attempt_id +
+  -- capability corretos mas SEM updateUser() ter mudado nada ainda
+  -- conseguiria marcar completed_at prematuramente.
+  if v_current_fingerprint = v_fingerprint_before then
+    return false;
+  end if;
+
+  update public.password_recovery_grants
+  set completed_at = now(),
+      completion_secret_hash = null
+  where id = p_attempt_id;
+
+  insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
+  values (v_user_id, null, 'password_recovery_completed', 'auth_user', v_user_id::text, jsonb_build_object('attempt_id', p_attempt_id));
+
+  return true;
 end;
 $$;
 
-comment on function public.handle_password_recovery_completion() is
-  'Dispara em AFTER UPDATE OF encrypted_password em auth.users, só quando o hash realmente muda (ver cláusula WHEN do trigger) — na MESMA transação Postgres que o GoTrue usa para gravar a nova senha (updateUser()). Só marca completed_at e grava password_recovery_completed se existir exatamente um grant claimed (não completed, não revoked) para new.id — nunca fabrica conclusão para uma troca de senha sem uma autorização de recuperação reivindicada correspondente. Fecha BUG-CLAUDE-VERIF2-001 (qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md): antes, o evento era gravado dentro do claim, antes de updateUser() ter qualquer garantia de sucesso.';
+comment on function public.complete_password_recovery_attempt(uuid, text) is
+  'Conclusão EXPLÍCITA e SERVER-ONLY (fecha BUG-CLAUDE-VERIF3-001, qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md) — EXECUTE só para service_role (nunca anon/authenticated/PUBLIC), chamada por lib/supabase/service-only/recovery-completion.ts dentro de app/(auth)/reset-password/actions.ts, SOMENTE depois de supabase.auth.updateUser({password}) ter retornado sucesso real. Exige simultaneamente: attempt_id exato, completion capability exata (comparada por hash), a tentativa ainda claimed/não completed/não revoked/dentro da janela claim_expires_at, e o fingerprint ATUAL da credencial DIFERENTE do capturado no claim (prova não-reversível de alteração real). Nunca correlaciona por user_id sozinho, nunca escolhe "o grant claimed mais recente/atual", nunca conclui uma tentativa expirada ou revogada. Idempotente: uma segunda chamada com os mesmos parâmetros encontra completed_at já preenchido (fora do WHERE) e retorna false sem duplicar auditoria — seguro para uma Server Action tentar de novo (retry limitado) se a primeira chamada falhar por um motivo transitório depois de updateUser() já ter tido sucesso.';
 
-revoke all on function public.handle_password_recovery_completion() from public;
-
-drop trigger if exists on_auth_user_password_changed on auth.users;
-create trigger on_auth_user_password_changed
-  after update of encrypted_password on auth.users
-  for each row
-  when (old.encrypted_password is distinct from new.encrypted_password)
-  execute function public.handle_password_recovery_completion();
+revoke all on function public.complete_password_recovery_attempt(uuid, text) from public;
+grant execute on function public.complete_password_recovery_attempt(uuid, text) to service_role;

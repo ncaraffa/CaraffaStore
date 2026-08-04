@@ -154,10 +154,10 @@ async function main() {
   ];
 
   for (const o of outcomes) {
-    console.log(`${o.label}: claim_recovery_grant_for_password_change(nonce) = ${o.value}`);
+    console.log(`${o.label}: claim_recovery_grant_for_password_change(nonce) = ${JSON.stringify(o.value)}`);
   }
 
-  const successes = outcomes.filter((o) => o.value === true);
+  const successes = outcomes.filter((o) => o.value?.claimed === true);
 
   const { data: auditRows } = await admin
     .from("audit_log")

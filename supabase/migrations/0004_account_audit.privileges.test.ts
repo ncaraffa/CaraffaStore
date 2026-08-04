@@ -16,14 +16,20 @@ import { describe, expect, it } from "vitest";
  * chamável por um cliente.
  *
  * Também cobre a quarta correção pós-QA (revisão externa sobre
- * qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, BUG-CLAUDE-VERIF2-001):
- * audit_log_action_check agora É alterado aqui (diferente da correção
- * anterior, que deliberadamente não tocava nele) — mas só para
- * ALARGAR o conjunto permitido (adicionar
- * password_recovery_authorization_claimed), nunca para estreitá-lo;
- * password_recovery_completed passa a ser gravado exclusivamente pela
- * nova trigger on_auth_user_password_changed, correlacionada a uma
- * transição real em auth.users.encrypted_password.
+ * qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, BUG-CLAUDE-VERIF2-001,
+ * histórico — substituída pela quinta correção abaixo): a trigger
+ * automática que concluía o grant foi removida na quinta correção.
+ *
+ * Também cobre a QUINTA correção pós-QA (revisão externa sobre
+ * qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md, BUG-CLAUDE-VERIF3-001):
+ * a trigger on_auth_user_password_changed/handle_password_recovery_completion
+ * (que correlacionava só por user_id, sem expires_at/session_id/janela
+ * temporal — fabricável) é REMOVIDA por completo. A conclusão passa a
+ * ser complete_password_recovery_attempt(attempt_id, capability) —
+ * EXECUTE só para service_role, exige attempt_id + capability exatos e
+ * prova de que a credencial realmente mudou (fingerprint). audit_log_action_check
+ * ganha password_recovery_grant_issued/password_recovery_revoked (só
+ * ALARGA, nunca estreita).
  */
 
 const migrationPath = path.resolve(import.meta.dirname, "0004_account_audit.sql");
@@ -38,7 +44,7 @@ describe("supabase/migrations/0004_account_audit.sql — append-only e compatív
     expect(sql).toContain("revoke update, delete on public.audit_log from service_role");
   });
 
-  it("ALARGA audit_log_action_check (nunca estreita): todos os valores antigos permanecem, password_recovery_authorization_claimed é adicionado (BUG-CLAUDE-VERIF2-001)", () => {
+  it("ALARGA audit_log_action_check (nunca estreita): todos os valores antigos permanecem, password_recovery_grant_issued/password_recovery_revoked são adicionados (BUG-CLAUDE-VERIF3-001)", () => {
     const constraintStmt = sql.slice(
       sql.indexOf("alter table public.audit_log\n  drop constraint audit_log_action_check"),
       sql.indexOf("comment on constraint audit_log_action_check"),
@@ -47,8 +53,10 @@ describe("supabase/migrations/0004_account_audit.sql — append-only e compatív
       "signup_completed",
       "email_verification_completed",
       "password_recovery_requested",
+      "password_recovery_grant_issued",
       "password_recovery_authorization_claimed",
       "password_recovery_completed",
+      "password_recovery_revoked",
       "store_created",
       "owner_assigned",
       "plan_selected",
@@ -95,42 +103,79 @@ describe("handle_email_confirmed_audit — evento de confirmação nasce de uma 
   });
 });
 
-describe("handle_password_recovery_completion — password_recovery_completed nasce de uma transição real em auth.users, não do claim (BUG-CLAUDE-VERIF2-001)", () => {
-  it("função security definer, search_path vazio, revogada de PUBLIC — nenhum GRANT de EXECUTE para nenhum papel (só o próprio trigger a invoca)", () => {
-    expect(sql).toContain("create or replace function public.handle_password_recovery_completion()");
+describe("handle_password_recovery_completion/on_auth_user_password_changed removidos por completo — BUG-CLAUDE-VERIF3-001", () => {
+  it("dropa o trigger e a função da correção anterior — nenhum mecanismo automático sobre auth.users conclui um grant por conta própria", () => {
+    expect(sql).toContain("drop trigger if exists on_auth_user_password_changed on auth.users");
+    expect(sql).toContain("drop function if exists public.handle_password_recovery_completion()");
+    expect(sql).not.toMatch(/create or replace function public\.handle_password_recovery_completion/);
+    expect(sql).not.toContain("after update of encrypted_password on auth.users");
+  });
+});
+
+describe("complete_password_recovery_attempt — conclusão EXPLÍCITA, server-only, causalmente vinculada à tentativa exata (BUG-CLAUDE-VERIF3-001)", () => {
+  it("função security definer, search_path vazio, revogada de PUBLIC — EXECUTE só para service_role (nem anon, nem authenticated, nem PUBLIC)", () => {
+    expect(sql).toMatch(
+      /create or replace function public\.complete_password_recovery_attempt\(\n {2}p_attempt_id uuid,\n {2}p_capability text\n\)\nreturns boolean/,
+    );
     const fnBody = sql.slice(
-      sql.indexOf("create or replace function public.handle_password_recovery_completion()"),
-      sql.indexOf("comment on function public.handle_password_recovery_completion"),
+      sql.indexOf("create or replace function public.complete_password_recovery_attempt"),
+      sql.indexOf("comment on function public.complete_password_recovery_attempt"),
     );
     expect(fnBody).toMatch(/security definer\s*\nset search_path = ''/);
-    expect(sql).toContain("revoke all on function public.handle_password_recovery_completion() from public");
-    expect(sql).not.toMatch(/grant execute[^;]*handle_password_recovery_completion/);
+    expect(sql).toContain("revoke all on function public.complete_password_recovery_attempt(uuid, text) from public");
+    expect(sql).toContain("grant execute on function public.complete_password_recovery_attempt(uuid, text) to service_role");
+    const grantLines = sql.split(";").filter((stmt) => /^\s*grant execute\s/.test(stmt.trimStart()));
+    const clientGrant = grantLines.find(
+      (stmt) =>
+        /\bcomplete_password_recovery_attempt\b/.test(stmt) &&
+        (/\bto\b[^;]*\banon\b/.test(stmt) || /\bto\b[^;]*\bauthenticated\b/.test(stmt)),
+    );
+    expect(clientGrant).toBeUndefined();
   });
 
-  it("só marca completed_at/grava password_recovery_completed quando existe exatamente um grant claimed (não completed, não revoked) para new.id — nunca fabrica conclusão sem uma autorização reivindicada", () => {
+  it("exige attempt_id + capability (por hash) + claimed/não completed/não revoked + dentro da janela claim_expires_at — nunca correlaciona por user_id sozinho", () => {
     const fnBody = sql.slice(
-      sql.indexOf("create or replace function public.handle_password_recovery_completion()"),
-      sql.indexOf("comment on function public.handle_password_recovery_completion"),
+      sql.indexOf("create or replace function public.complete_password_recovery_attempt"),
+      sql.indexOf("comment on function public.complete_password_recovery_attempt"),
     );
-    expect(fnBody).toContain("where user_id = new.id");
+    expect(fnBody).toContain("where id = p_attempt_id");
+    expect(fnBody).toContain("and completion_secret_hash = encode(extensions.digest(p_capability, 'sha256'), 'hex')");
     expect(fnBody).toContain("and claimed_at is not null");
     expect(fnBody).toContain("and completed_at is null");
     expect(fnBody).toContain("and revoked_at is null");
-    expect(fnBody).toMatch(/if v_grant_id is not null then/);
-    expect(fnBody).toContain("'password_recovery_completed'");
+    expect(fnBody).toContain("and claim_expires_at > now()");
+    expect(fnBody).not.toContain("where user_id = new.id");
   });
 
-  it("trigger dispara em AFTER UPDATE OF encrypted_password em auth.users, só quando o hash realmente muda (WHEN) — nunca em qualquer UPDATE de auth.users", () => {
-    expect(sql).toContain("after update of encrypted_password on auth.users");
-    expect(sql).toContain("when (old.encrypted_password is distinct from new.encrypted_password)");
-    expect(sql).toContain("execute function public.handle_password_recovery_completion()");
-  });
-
-  it("auditoria de conclusão é gravada DENTRO da mesma função/transação da trigger (sem exception handler ao redor) — falha no insert propaga e desfaz a troca de senha inteira", () => {
+  it("exige que o fingerprint ATUAL da credencial seja DIFERENTE do capturado no claim — recusa concluir sem alteração real (\"PROVA DE ALTERAÇÃO REAL\")", () => {
     const fnBody = sql.slice(
-      sql.indexOf("create or replace function public.handle_password_recovery_completion()"),
-      sql.indexOf("comment on function public.handle_password_recovery_completion"),
+      sql.indexOf("create or replace function public.complete_password_recovery_attempt"),
+      sql.indexOf("comment on function public.complete_password_recovery_attempt"),
+    );
+    expect(fnBody).toContain("if v_current_fingerprint = v_fingerprint_before then");
+    expect(fnBody).toContain("return false;");
+  });
+
+  it("só marca completed_at/grava password_recovery_completed depois de todas as validações passarem, com attempt_id em metadata", () => {
+    const fnBody = sql.slice(
+      sql.indexOf("create or replace function public.complete_password_recovery_attempt"),
+      sql.indexOf("comment on function public.complete_password_recovery_attempt"),
+    );
+    expect(fnBody).toContain("set completed_at = now(),\n      completion_secret_hash = null");
+    expect(fnBody).toContain("'password_recovery_completed'");
+    expect(fnBody).toContain("jsonb_build_object('attempt_id', p_attempt_id)");
+  });
+
+  it("auditoria de conclusão é gravada DENTRO da mesma função/transação (sem exception handler ao redor) — falha no insert propaga e desfaz o UPDATE de completed_at junto", () => {
+    const fnBody = sql.slice(
+      sql.indexOf("create or replace function public.complete_password_recovery_attempt"),
+      sql.indexOf("comment on function public.complete_password_recovery_attempt"),
     );
     expect(fnBody).not.toContain("exception when");
+  });
+
+  it("security definer com search_path vazio (junto de handle_email_confirmed_audit — 2 funções nesta migração)", () => {
+    const occurrences = sql.match(/security definer\s*\nset search_path = ''/g) ?? [];
+    expect(occurrences.length).toBe(2);
   });
 });

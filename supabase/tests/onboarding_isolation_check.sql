@@ -25,12 +25,14 @@
 --   4. psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
 --        -v ON_ERROR_STOP=1 -f supabase/tests/onboarding_isolation_check.sql
 --
--- 33 cenários (16 originais + 5 da primeira correção pós-QA,
+-- 41 cenários (16 originais + 5 da primeira correção pós-QA,
 -- qa/reports/TASK-002.md, + 8 da segunda correção pós-QA,
 -- qa/reports/TASK-002-RETEST.md, + 10 da terceira correção pós-QA,
 -- revisão externa sobre qa/reports/TASK-002-CLAUDE-VERIFICATION.md, + 4
 -- da quarta correção pós-QA, revisão externa sobre
--- qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md) cobrindo: isolamento de
+-- qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, + 12 da quinta correção
+-- pós-QA, revisão externa sobre
+-- qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md) cobrindo: isolamento de
 -- onboarding_progress/merchant_profiles/ store_plans entre usuários e
 -- entre lojas, múltiplos memberships, audit_log inacessível para
 -- anon/authenticated, escrita direta forjada em stores/store_members
@@ -69,17 +71,34 @@
 -- Caso 29: audit_log verdadeiramente append-only (nem authenticated nem
 -- service_role alteram/apagam — BUG-T2-004/BUG-RT2-006).
 --
--- Casos 30-33 (quarta correção pós-QA, revisão externa sobre
--- qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, BUG-CLAUDE-VERIF2-001):
--- a trigger on_auth_user_password_changed, disparada por uma transição
--- REAL de auth.users.encrypted_password, correlaciona corretamente ao
--- único grant claimed do usuário (unique(user_id) garante que não há
--- ambiguidade) e só então marca completed_at + grava
--- password_recovery_completed (Caso 30); uma troca de senha sem nenhum
--- grant claimed correspondente não fabrica esse evento (Caso 31);
--- authenticated/PUBLIC não conseguem chamar a função da trigger
--- diretamente (Caso 32); um grant já completed não pode ser
--- reivindicado de novo pelo claim (Caso 33).
+-- Casos 30-41 (quinta correção pós-QA, revisão externa sobre
+-- qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md, BUG-CLAUDE-VERIF3-001):
+-- a trigger automática on_auth_user_password_changed foi REMOVIDA por
+-- completo (ela correlacionava só por user_id, sem expires_at/session_id/
+-- janela temporal — provado fabricável nos três cenários daquele
+-- relatório). A conclusão agora é a função explícita, server-only,
+-- complete_password_recovery_attempt(attempt_id, capability):
+-- fluxo feliz completo, com fingerprint de credencial realmente mudado
+-- (Caso 30); completion sem alteração real da senha falha (fingerprint
+-- igual — Caso 31); authenticated/anon não conseguem chamar a função
+-- diretamente (Caso 32); tentativa já completed não pode ser
+-- reivindicada de novo pelo claim (Caso 33); completion com attempt_id
+-- incorreto falha (Caso 34); completion com capability incorreta falha
+-- (Caso 35); completion duas vezes conclui exatamente uma vez,
+-- idempotente (Caso 36); tentativa claimed cuja janela claim_expires_at
+-- já passou não pode ser concluída mesmo com capability/attempt_id
+-- corretos e senha realmente alterada (Caso 37 — a reprodução direta,
+-- em SQL, do bloqueador original: nenhuma alteração de senha posterior
+-- consegue "herdar" uma tentativa abandonada); nova emissão enquanto
+-- existe uma tentativa pending revoga a anterior explicitamente e
+-- preserva a linha (Caso 38); nova emissão enquanto existe uma
+-- tentativa claimed revoga a anterior — a capability antiga nunca
+-- conclui a tentativa nova, mesmo mesmo usuário (Caso 39); nova emissão
+-- enquanto existe uma tentativa completed insere uma linha nova e
+-- preserva a completed intacta (Caso 40); troca de senha sem nenhuma
+-- tentativa de recuperação em andamento não fabrica
+-- password_recovery_completed (Caso 41, mantém a cobertura do antigo
+-- Caso 31 desta mesma seção antes da renumeração).
 --
 -- Troca de token_hash entre /auth/confirm e /auth/recovery
 -- (BUG-RT2-003/004) e concorrência real de duas trocas de senha
@@ -686,7 +705,7 @@ do $$
 declare
   v_result boolean;
 begin
-  select public.claim_recovery_grant_for_password_change(current_setting('app.case20_nonce')) into v_result;
+  select (public.claim_recovery_grant_for_password_change(current_setting('app.case20_nonce'))->>'claimed')::boolean into v_result;
   if v_result = false then
     raise notice 'PASS - Caso 20: grant expirado e rejeitado pelo claim';
   else
@@ -728,8 +747,8 @@ declare
   v_first boolean;
   v_second boolean;
 begin
-  select public.claim_recovery_grant_for_password_change(current_setting('app.case21_nonce')) into v_first;
-  select public.claim_recovery_grant_for_password_change(current_setting('app.case21_nonce')) into v_second;
+  select (public.claim_recovery_grant_for_password_change(current_setting('app.case21_nonce'))->>'claimed')::boolean into v_first;
+  select (public.claim_recovery_grant_for_password_change(current_setting('app.case21_nonce'))->>'claimed')::boolean into v_second;
   if v_first = true and v_second = false then
     raise notice 'PASS - Caso 21: grant reivindicado uma vez nao pode ser reivindicado de novo (segunda chamada devolve false)';
   else
@@ -770,7 +789,7 @@ do $$
 declare
   v_result boolean;
 begin
-  select public.claim_recovery_grant_for_password_change(current_setting('app.case22_nonce')) into v_result;
+  select (public.claim_recovery_grant_for_password_change(current_setting('app.case22_nonce'))->>'claimed')::boolean into v_result;
   if v_result = false then
     raise notice 'PASS - Caso 22: sessao de um usuario nao consegue reivindicar o grant de outro usuario';
   else
@@ -812,8 +831,8 @@ declare
   v_wrong boolean;
   v_right boolean;
 begin
-  select public.claim_recovery_grant_for_password_change('nonce-errado-completamente') into v_wrong;
-  select public.claim_recovery_grant_for_password_change(current_setting('app.case23_nonce')) into v_right;
+  select (public.claim_recovery_grant_for_password_change('nonce-errado-completamente')->>'claimed')::boolean into v_wrong;
+  select (public.claim_recovery_grant_for_password_change(current_setting('app.case23_nonce'))->>'claimed')::boolean into v_right;
   if v_wrong = false and v_right = true then
     raise notice 'PASS - Caso 23: nonce incorreto rejeitado; nonce correto reivindica normalmente';
   else
@@ -855,7 +874,7 @@ do $$
 declare
   v_result boolean;
 begin
-  select public.claim_recovery_grant_for_password_change(current_setting('app.case24_nonce')) into v_result;
+  select (public.claim_recovery_grant_for_password_change(current_setting('app.case24_nonce'))->>'claimed')::boolean into v_result;
   if v_result = false then
     raise notice 'PASS - Caso 24: session_id incorreto (outra sessao do mesmo usuario) rejeitado pelo claim';
   else
@@ -879,7 +898,7 @@ do $$
 declare
   v_claim boolean;
 begin
-  select public.claim_recovery_grant_for_password_change('qualquer-nonce') into v_claim;
+  select (public.claim_recovery_grant_for_password_change('qualquer-nonce')->>'claimed')::boolean into v_claim;
   if v_claim = false then
     raise notice 'PASS - Caso 25: reivindicar sem nenhum grant emitido falha';
   else
@@ -952,14 +971,18 @@ reset role;
 do $$
 declare
   qtd_claimed_null int;
+  qtd_capability_null int;
 begin
   select count(*) into qtd_claimed_null from public.password_recovery_grants
     where user_id = current_setting('app.merchant_onboarding_id')::uuid
       and claimed_at is null;
-  if qtd_claimed_null = 1 then
-    raise notice 'PASS - Caso 26b: falha na auditoria desfez tambem o UPDATE do grant (claimed_at continua null — rollback completo, nao so do insert)';
+  select count(*) into qtd_capability_null from public.password_recovery_grants
+    where user_id = current_setting('app.merchant_onboarding_id')::uuid
+      and completion_secret_hash is null;
+  if qtd_claimed_null = 1 and qtd_capability_null = 1 then
+    raise notice 'PASS - Caso 26b: falha na auditoria desfez tambem o UPDATE do grant (claimed_at/completion_secret_hash continuam null — rollback completo, nao so do insert)';
   else
-    raise exception 'FAIL - Caso 26b: esperado claimed_at ainda null (rollback completo), grant com claimed_at nulo encontrado=%', qtd_claimed_null;
+    raise exception 'FAIL - Caso 26b: esperado claimed_at/completion_secret_hash ainda null (rollback completo), obtido claimed_null=%, capability_null=%', qtd_claimed_null, qtd_capability_null;
   end if;
 end $$;
 -- rollback to savepoint desfaz o gatilho/funcao de teste tambem (DDL e transacional).
@@ -1059,14 +1082,15 @@ end $$;
 rollback to savepoint case_29;
 
 -- ------------------------------------------------------------
--- Caso 30 (quarta correção pós-QA, revisão externa sobre
--- qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, BUG-CLAUDE-VERIF2-001):
--- a trigger on_auth_user_password_changed, disparada por uma transição
--- REAL de auth.users.encrypted_password (aqui simulada como postgres,
--- exatamente como o GoTrue faz internamente), correlaciona corretamente
--- ao ÚNICO grant claimed do usuário e marca completed_at + grava
--- password_recovery_completed — SÓ quando existe uma autorização
--- claimed correspondente.
+-- Caso 30 (quinta correção pós-QA, revisão externa sobre
+-- qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md, BUG-CLAUDE-VERIF3-001):
+-- fluxo feliz completo pela conclusão EXPLÍCITA — issue -> claim
+-- (captura attempt_id/completion capability) -> alteração REAL da
+-- credencial (simulada como postgres, exatamente como o GoTrue faz
+-- internamente) -> complete_password_recovery_attempt (service_role,
+-- attempt_id/capability corretos) -> completed_at preenchido,
+-- exatamente 1 evento password_recovery_completed, com o attempt_id
+-- correto em metadata (nunca "o grant claimed do usuário").
 -- ------------------------------------------------------------
 savepoint case_30;
 do $$
@@ -1093,12 +1117,14 @@ select set_config(
 );
 do $$
 declare
-  v_claimed boolean;
+  v_claim jsonb;
 begin
-  select public.claim_recovery_grant_for_password_change(current_setting('app.case30_nonce')) into v_claimed;
-  if v_claimed <> true then
-    raise exception 'FAIL - Caso 30 (setup): claim deveria ter tido sucesso, obtido %', v_claimed;
+  select public.claim_recovery_grant_for_password_change(current_setting('app.case30_nonce')) into v_claim;
+  if (v_claim->>'claimed')::boolean <> true then
+    raise exception 'FAIL - Caso 30 (setup): claim deveria ter tido sucesso, obtido %', v_claim;
   end if;
+  perform set_config('app.case30_attempt_id', v_claim->>'attempt_id', true);
+  perform set_config('app.case30_capability', v_claim->>'completion_capability', true);
 end $$;
 reset role;
 
@@ -1111,58 +1137,123 @@ begin
     where id = current_setting('app.merchant_pending_id')::uuid;
 end $$;
 
+set local role service_role;
+do $$
+declare
+  v_completed boolean;
+begin
+  select public.complete_password_recovery_attempt(
+    current_setting('app.case30_attempt_id')::uuid,
+    current_setting('app.case30_capability')
+  ) into v_completed;
+  if v_completed <> true then
+    raise exception 'FAIL - Caso 30: complete_password_recovery_attempt deveria ter tido sucesso, obtido %', v_completed;
+  end if;
+end $$;
+reset role;
+
 do $$
 declare
   v_completed_at timestamptz;
   v_evento_qtd int;
+  v_metadata_attempt_id text;
 begin
   select completed_at into v_completed_at from public.password_recovery_grants
     where user_id = current_setting('app.merchant_pending_id')::uuid;
   select count(*) into v_evento_qtd from public.audit_log
     where actor_user_id = current_setting('app.merchant_pending_id')::uuid
       and action = 'password_recovery_completed';
-  if v_completed_at is not null and v_evento_qtd = 1 then
-    raise notice 'PASS - Caso 30: trigger correlacionou a transicao real de encrypted_password ao grant claimed — completed_at preenchido, exatamente 1 evento password_recovery_completed';
+  select metadata->>'attempt_id' into v_metadata_attempt_id from public.audit_log
+    where actor_user_id = current_setting('app.merchant_pending_id')::uuid
+      and action = 'password_recovery_completed';
+  if v_completed_at is not null and v_evento_qtd = 1 and v_metadata_attempt_id = current_setting('app.case30_attempt_id') then
+    raise notice 'PASS - Caso 30: complete_password_recovery_attempt concluiu a tentativa exata — completed_at preenchido, exatamente 1 evento password_recovery_completed com attempt_id correto';
   else
-    raise exception 'FAIL - Caso 30: esperado completed_at preenchido e 1 evento, obtido completed_at=%, eventos=%', v_completed_at, v_evento_qtd;
+    raise exception 'FAIL - Caso 30: esperado completed_at preenchido/1 evento/attempt_id correto, obtido completed_at=%, eventos=%, metadata_attempt_id=% (esperado %)', v_completed_at, v_evento_qtd, v_metadata_attempt_id, current_setting('app.case30_attempt_id');
   end if;
 end $$;
 rollback to savepoint case_30;
 
 -- ------------------------------------------------------------
--- Caso 31: a mesma trigger, quando NÃO existe nenhum grant claimed
--- correspondente (troca de senha comum, sem recuperação em andamento),
--- NÃO fabrica password_recovery_completed — a transição real em
--- encrypted_password acontece normalmente (a trigger nunca bloqueia uma
--- troca de senha legítima fora do fluxo de recuperação), só não grava
--- o evento de conclusão de recuperação.
+-- Caso 31: completion sem alteração real da senha falha — claim captura
+-- password_fingerprint_before, mas encrypted_password NUNCA muda (ex.:
+-- updateUser nunca chamado, ou falhou) — complete_password_recovery_attempt
+-- com attempt_id/capability corretos ainda assim retorna false, e
+-- completed_at continua null (fecha a "PROVA DE ALTERAÇÃO REAL" exigida
+-- pela revisão externa).
 -- ------------------------------------------------------------
 savepoint case_31;
 do $$
 begin
-  update auth.users set encrypted_password = 'fake-bcrypt-hash-caso-31-' || gen_random_uuid()::text
-    where id = current_setting('app.merchant_onboarding_id')::uuid;
+  perform set_config('app.case31_session_id', gen_random_uuid()::text, true);
+  perform set_config('app.case31_nonce', 'nonce-de-teste-caso-31', true);
 end $$;
+set local role service_role;
+do $$ begin
+  perform public.issue_password_recovery_grant(
+    current_setting('app.merchant_onboarding_id')::uuid,
+    current_setting('app.case31_session_id')::uuid,
+    current_setting('app.case31_nonce'),
+    1800
+  );
+end $$;
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_onboarding_id'), 'session_id', current_setting('app.case31_session_id'))::text,
+  true
+);
 do $$
 declare
-  v_evento_qtd int;
+  v_claim jsonb;
 begin
-  select count(*) into v_evento_qtd from public.audit_log
-    where actor_user_id = current_setting('app.merchant_onboarding_id')::uuid
-      and action = 'password_recovery_completed';
-  if v_evento_qtd = 0 then
-    raise notice 'PASS - Caso 31: troca de senha sem grant claimed correspondente nao fabrica password_recovery_completed';
+  select public.claim_recovery_grant_for_password_change(current_setting('app.case31_nonce')) into v_claim;
+  if (v_claim->>'claimed')::boolean <> true then
+    raise exception 'FAIL - Caso 31 (setup): claim deveria ter tido sucesso, obtido %', v_claim;
+  end if;
+  perform set_config('app.case31_attempt_id', v_claim->>'attempt_id', true);
+  perform set_config('app.case31_capability', v_claim->>'completion_capability', true);
+end $$;
+reset role;
+
+set local role service_role;
+do $$
+declare
+  v_completed boolean;
+begin
+  select public.complete_password_recovery_attempt(
+    current_setting('app.case31_attempt_id')::uuid,
+    current_setting('app.case31_capability')
+  ) into v_completed;
+  if v_completed = false then
+    raise notice 'PASS - Caso 31: completion sem alteracao real da senha falha (fingerprint inalterado)';
   else
-    raise exception 'FAIL - Caso 31: esperado 0 eventos fabricados, obtido %', v_evento_qtd;
+    raise exception 'FAIL - Caso 31: completion deveria ter falhado sem alteracao real da credencial';
+  end if;
+end $$;
+reset role;
+
+do $$
+declare
+  v_completed_at timestamptz;
+begin
+  select completed_at into v_completed_at from public.password_recovery_grants
+    where user_id = current_setting('app.merchant_onboarding_id')::uuid;
+  if v_completed_at is null then
+    raise notice 'PASS - Caso 31b: completed_at continua null apos completion recusada';
+  else
+    raise exception 'FAIL - Caso 31b: completed_at nao deveria estar preenchido';
   end if;
 end $$;
 rollback to savepoint case_31;
 
 -- ------------------------------------------------------------
--- Caso 32: authenticated/PUBLIC não conseguem chamar
--- handle_password_recovery_completion() diretamente — mesmo padrão do
--- Caso 27 para handle_email_confirmed_audit. Só o próprio mecanismo de
--- trigger do Postgres invoca esta função.
+-- Caso 32: nem authenticated nem anon conseguem chamar
+-- complete_password_recovery_attempt() diretamente — EXECUTE só para
+-- service_role (PUBLIC/anon/authenticated nunca podem executar a
+-- função de conclusão).
 -- ------------------------------------------------------------
 savepoint case_32;
 set local role authenticated;
@@ -1174,20 +1265,33 @@ select set_config(
 do $$
 begin
   begin
-    perform public.handle_password_recovery_completion();
-    raise exception 'FAIL - Caso 32: authenticated conseguiu chamar handle_password_recovery_completion diretamente';
+    perform public.complete_password_recovery_attempt(gen_random_uuid(), 'qualquer-capability');
+    raise exception 'FAIL - Caso 32a: authenticated conseguiu chamar complete_password_recovery_attempt diretamente';
   exception
     when insufficient_privilege then
-      raise notice 'PASS - Caso 32: authenticated nao consegue chamar handle_password_recovery_completion diretamente (sem GRANT de EXECUTE)';
+      raise notice 'PASS - Caso 32a: authenticated nao consegue chamar complete_password_recovery_attempt diretamente (sem GRANT de EXECUTE)';
+  end;
+end $$;
+reset role;
+
+set local role anon;
+select set_config('request.jwt.claims', '', true);
+do $$
+begin
+  begin
+    perform public.complete_password_recovery_attempt(gen_random_uuid(), 'qualquer-capability');
+    raise exception 'FAIL - Caso 32b: anon conseguiu chamar complete_password_recovery_attempt diretamente';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS - Caso 32b: anon nao consegue chamar complete_password_recovery_attempt diretamente (sem GRANT de EXECUTE)';
   end;
 end $$;
 rollback to savepoint case_32;
 
 -- ------------------------------------------------------------
--- Caso 33: um grant já completed não pode ser reivindicado de novo pelo
--- claim (completed_at is null é exigido no WHERE) — reforça que a
--- conclusão é um estado terminal tanto para a trigger quanto para o
--- claim.
+-- Caso 33: uma tentativa já completed não pode ser reivindicada de novo
+-- pelo claim (completed_at is null é exigido no WHERE) — a conclusão
+-- continua sendo um estado terminal para o claim.
 -- ------------------------------------------------------------
 savepoint case_33;
 do $$
@@ -1214,12 +1318,14 @@ select set_config(
 );
 do $$
 declare
-  v_claimed boolean;
+  v_claim jsonb;
 begin
-  select public.claim_recovery_grant_for_password_change(current_setting('app.case33_nonce')) into v_claimed;
-  if v_claimed <> true then
-    raise exception 'FAIL - Caso 33 (setup): claim deveria ter tido sucesso, obtido %', v_claimed;
+  select public.claim_recovery_grant_for_password_change(current_setting('app.case33_nonce')) into v_claim;
+  if (v_claim->>'claimed')::boolean <> true then
+    raise exception 'FAIL - Caso 33 (setup): claim deveria ter tido sucesso, obtido %', v_claim;
   end if;
+  perform set_config('app.case33_attempt_id', v_claim->>'attempt_id', true);
+  perform set_config('app.case33_capability', v_claim->>'completion_capability', true);
 end $$;
 reset role;
 
@@ -1229,6 +1335,21 @@ begin
     where id = current_setting('app.merchant_multi_id')::uuid;
 end $$;
 
+set local role service_role;
+do $$
+declare
+  v_completed boolean;
+begin
+  select public.complete_password_recovery_attempt(
+    current_setting('app.case33_attempt_id')::uuid,
+    current_setting('app.case33_capability')
+  ) into v_completed;
+  if v_completed <> true then
+    raise exception 'FAIL - Caso 33 (setup): complete deveria ter tido sucesso, obtido %', v_completed;
+  end if;
+end $$;
+reset role;
+
 set local role authenticated;
 select set_config(
   'request.jwt.claims',
@@ -1237,16 +1358,556 @@ select set_config(
 );
 do $$
 declare
-  v_second_claim boolean;
+  v_second_claim jsonb;
 begin
   select public.claim_recovery_grant_for_password_change(current_setting('app.case33_nonce')) into v_second_claim;
-  if v_second_claim = false then
-    raise notice 'PASS - Caso 33: grant ja completed nao pode ser reivindicado de novo pelo claim';
+  if (v_second_claim->>'claimed')::boolean = false then
+    raise notice 'PASS - Caso 33: tentativa ja completed nao pode ser reivindicada de novo pelo claim';
   else
-    raise exception 'FAIL - Caso 33: reivindicacao de um grant ja completed deveria ter falhado';
+    raise exception 'FAIL - Caso 33: reivindicacao de uma tentativa ja completed deveria ter falhado';
   end if;
 end $$;
 rollback to savepoint case_33;
+
+-- ------------------------------------------------------------
+-- Caso 34: completion com attempt_id incorreto falha, mesmo com a
+-- capability correta e a senha realmente alterada.
+-- ------------------------------------------------------------
+savepoint case_34;
+do $$
+begin
+  perform set_config('app.case34_session_id', gen_random_uuid()::text, true);
+  perform set_config('app.case34_nonce', 'nonce-de-teste-caso-34', true);
+end $$;
+set local role service_role;
+do $$ begin
+  perform public.issue_password_recovery_grant(
+    current_setting('app.merchant_pending_id')::uuid,
+    current_setting('app.case34_session_id')::uuid,
+    current_setting('app.case34_nonce'),
+    1800
+  );
+end $$;
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_pending_id'), 'session_id', current_setting('app.case34_session_id'))::text,
+  true
+);
+do $$
+declare
+  v_claim jsonb;
+begin
+  select public.claim_recovery_grant_for_password_change(current_setting('app.case34_nonce')) into v_claim;
+  perform set_config('app.case34_capability', v_claim->>'completion_capability', true);
+end $$;
+reset role;
+
+do $$
+begin
+  update auth.users set encrypted_password = 'fake-bcrypt-hash-caso-34-' || gen_random_uuid()::text
+    where id = current_setting('app.merchant_pending_id')::uuid;
+end $$;
+
+set local role service_role;
+do $$
+declare
+  v_completed boolean;
+begin
+  select public.complete_password_recovery_attempt(
+    gen_random_uuid(), -- attempt_id incorreto, nunca existiu
+    current_setting('app.case34_capability')
+  ) into v_completed;
+  if v_completed = false then
+    raise notice 'PASS - Caso 34: completion com attempt_id incorreto falha';
+  else
+    raise exception 'FAIL - Caso 34: completion com attempt_id incorreto deveria ter falhado';
+  end if;
+end $$;
+reset role;
+rollback to savepoint case_34;
+
+-- ------------------------------------------------------------
+-- Caso 35: completion com completion capability incorreta falha, mesmo
+-- com o attempt_id correto e a senha realmente alterada.
+-- ------------------------------------------------------------
+savepoint case_35;
+do $$
+begin
+  perform set_config('app.case35_session_id', gen_random_uuid()::text, true);
+  perform set_config('app.case35_nonce', 'nonce-de-teste-caso-35', true);
+end $$;
+set local role service_role;
+do $$ begin
+  perform public.issue_password_recovery_grant(
+    current_setting('app.merchant_pending_id')::uuid,
+    current_setting('app.case35_session_id')::uuid,
+    current_setting('app.case35_nonce'),
+    1800
+  );
+end $$;
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_pending_id'), 'session_id', current_setting('app.case35_session_id'))::text,
+  true
+);
+do $$
+declare
+  v_claim jsonb;
+begin
+  select public.claim_recovery_grant_for_password_change(current_setting('app.case35_nonce')) into v_claim;
+  perform set_config('app.case35_attempt_id', v_claim->>'attempt_id', true);
+end $$;
+reset role;
+
+do $$
+begin
+  update auth.users set encrypted_password = 'fake-bcrypt-hash-caso-35-' || gen_random_uuid()::text
+    where id = current_setting('app.merchant_pending_id')::uuid;
+end $$;
+
+set local role service_role;
+do $$
+declare
+  v_completed boolean;
+begin
+  select public.complete_password_recovery_attempt(
+    current_setting('app.case35_attempt_id')::uuid,
+    'capability-completamente-errada-nunca-gerada-por-nenhum-claim'
+  ) into v_completed;
+  if v_completed = false then
+    raise notice 'PASS - Caso 35: completion com capability incorreta falha';
+  else
+    raise exception 'FAIL - Caso 35: completion com capability incorreta deveria ter falhado';
+  end if;
+end $$;
+reset role;
+rollback to savepoint case_35;
+
+-- ------------------------------------------------------------
+-- Caso 36: completion chamada duas vezes com os mesmos attempt_id/
+-- capability conclui exatamente uma vez — idempotente, sem duplicar
+-- auditoria (a segunda chamada encontra completed_at já preenchido,
+-- fora do WHERE, e retorna false).
+-- ------------------------------------------------------------
+savepoint case_36;
+do $$
+begin
+  perform set_config('app.case36_session_id', gen_random_uuid()::text, true);
+  perform set_config('app.case36_nonce', 'nonce-de-teste-caso-36', true);
+end $$;
+set local role service_role;
+do $$ begin
+  perform public.issue_password_recovery_grant(
+    current_setting('app.merchant_pending_id')::uuid,
+    current_setting('app.case36_session_id')::uuid,
+    current_setting('app.case36_nonce'),
+    1800
+  );
+end $$;
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_pending_id'), 'session_id', current_setting('app.case36_session_id'))::text,
+  true
+);
+do $$
+declare
+  v_claim jsonb;
+begin
+  select public.claim_recovery_grant_for_password_change(current_setting('app.case36_nonce')) into v_claim;
+  perform set_config('app.case36_attempt_id', v_claim->>'attempt_id', true);
+  perform set_config('app.case36_capability', v_claim->>'completion_capability', true);
+end $$;
+reset role;
+
+do $$
+begin
+  update auth.users set encrypted_password = 'fake-bcrypt-hash-caso-36-' || gen_random_uuid()::text
+    where id = current_setting('app.merchant_pending_id')::uuid;
+end $$;
+
+set local role service_role;
+do $$
+declare
+  v_first boolean;
+  v_second boolean;
+begin
+  select public.complete_password_recovery_attempt(
+    current_setting('app.case36_attempt_id')::uuid, current_setting('app.case36_capability')
+  ) into v_first;
+  select public.complete_password_recovery_attempt(
+    current_setting('app.case36_attempt_id')::uuid, current_setting('app.case36_capability')
+  ) into v_second;
+  if v_first = true and v_second = false then
+    raise notice 'PASS - Caso 36: completion duas vezes conclui exatamente uma (idempotente)';
+  else
+    raise exception 'FAIL - Caso 36: esperado true depois false, obtido %/%', v_first, v_second;
+  end if;
+end $$;
+reset role;
+
+do $$
+declare
+  v_evento_qtd int;
+begin
+  select count(*) into v_evento_qtd from public.audit_log
+    where actor_user_id = current_setting('app.merchant_pending_id')::uuid
+      and action = 'password_recovery_completed';
+  if v_evento_qtd = 1 then
+    raise notice 'PASS - Caso 36b: exatamente 1 evento password_recovery_completed, sem duplicar na segunda chamada';
+  else
+    raise exception 'FAIL - Caso 36b: esperado exatamente 1 evento, obtido %', v_evento_qtd;
+  end if;
+end $$;
+rollback to savepoint case_36;
+
+-- ------------------------------------------------------------
+-- Caso 37: uma tentativa CLAIMED cuja janela claim_expires_at já passou
+-- não pode ser concluída, mesmo com attempt_id/capability corretos e a
+-- senha realmente alterada — a reprodução direta, em SQL, do bloqueador
+-- original (BUG-CLAUDE-VERIF3-001, Cenário 3): nenhuma alteração de
+-- senha posterior consegue "herdar" uma tentativa abandonada além da
+-- janela de conclusão.
+-- ------------------------------------------------------------
+savepoint case_37;
+do $$
+begin
+  perform set_config('app.case37_session_id', gen_random_uuid()::text, true);
+  perform set_config('app.case37_nonce', 'nonce-de-teste-caso-37', true);
+end $$;
+set local role service_role;
+do $$ begin
+  perform public.issue_password_recovery_grant(
+    current_setting('app.merchant_pending_id')::uuid,
+    current_setting('app.case37_session_id')::uuid,
+    current_setting('app.case37_nonce'),
+    1800
+  );
+end $$;
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_pending_id'), 'session_id', current_setting('app.case37_session_id'))::text,
+  true
+);
+do $$
+declare
+  v_claim jsonb;
+begin
+  select public.claim_recovery_grant_for_password_change(current_setting('app.case37_nonce')) into v_claim;
+  perform set_config('app.case37_attempt_id', v_claim->>'attempt_id', true);
+  perform set_config('app.case37_capability', v_claim->>'completion_capability', true);
+end $$;
+reset role;
+
+-- Força claim_expires_at para o passado, como postgres — simula o
+-- relógio avançar além da janela de conclusão (ex.: updateUser demorou
+-- demais, ou o processo travou entre o claim e o updateUser real).
+update public.password_recovery_grants
+  set claim_expires_at = now() - interval '1 minute'
+  where id = current_setting('app.case37_attempt_id')::uuid;
+
+do $$
+begin
+  update auth.users set encrypted_password = 'fake-bcrypt-hash-caso-37-' || gen_random_uuid()::text
+    where id = current_setting('app.merchant_pending_id')::uuid;
+end $$;
+
+set local role service_role;
+do $$
+declare
+  v_completed boolean;
+begin
+  select public.complete_password_recovery_attempt(
+    current_setting('app.case37_attempt_id')::uuid,
+    current_setting('app.case37_capability')
+  ) into v_completed;
+  if v_completed = false then
+    raise notice 'PASS - Caso 37: tentativa claimed com janela de conclusao expirada nao pode ser concluida, mesmo com attempt_id/capability corretos e senha realmente alterada';
+  else
+    raise exception 'FAIL - Caso 37: completion apos claim_expires_at deveria ter falhado';
+  end if;
+end $$;
+reset role;
+rollback to savepoint case_37;
+
+-- ------------------------------------------------------------
+-- Caso 38: nova emissão enquanto existe uma tentativa PENDING (nunca
+-- reivindicada) revoga a anterior explicitamente (revoked_at/
+-- revoke_reason preenchidos, linha preservada) — nunca mais que uma
+-- tentativa ativa por usuário (password_recovery_grants_one_active_per_user).
+-- ------------------------------------------------------------
+savepoint case_38;
+do $$
+declare
+  v_first_id uuid;
+begin
+  select public.issue_password_recovery_grant(
+    current_setting('app.merchant_onboarding_id')::uuid,
+    gen_random_uuid(),
+    'nonce-caso-38-primeiro',
+    1800
+  ) into v_first_id;
+  perform set_config('app.case38_first_id', v_first_id::text, true);
+end $$;
+
+do $$ begin
+  perform public.issue_password_recovery_grant(
+    current_setting('app.merchant_onboarding_id')::uuid,
+    gen_random_uuid(),
+    'nonce-caso-38-segundo',
+    1800
+  );
+end $$;
+
+do $$
+declare
+  v_first_revoked timestamptz;
+  v_first_reason text;
+  v_active_count int;
+begin
+  select revoked_at, revoke_reason into v_first_revoked, v_first_reason
+    from public.password_recovery_grants where id = current_setting('app.case38_first_id')::uuid;
+  select count(*) into v_active_count from public.password_recovery_grants
+    where user_id = current_setting('app.merchant_onboarding_id')::uuid
+      and completed_at is null and revoked_at is null;
+  if v_first_revoked is not null and v_first_reason = 'superseded_by_new_recovery' and v_active_count = 1 then
+    raise notice 'PASS - Caso 38: nova emissao revoga explicitamente a tentativa pending anterior (linha preservada) e so 1 tentativa ativa permanece';
+  else
+    raise exception 'FAIL - Caso 38: esperado revoked_at preenchido/reason correto/1 ativa, obtido revoked_at=%, reason=%, ativas=%', v_first_revoked, v_first_reason, v_active_count;
+  end if;
+end $$;
+rollback to savepoint case_38;
+
+-- ------------------------------------------------------------
+-- Caso 39: nova emissão enquanto existe uma tentativa CLAIMED (não
+-- completed) revoga a anterior explicitamente — a capability antiga
+-- nunca conclui a tentativa nova, mesmo sendo o mesmo usuário (reforça
+-- que revoked é estado terminal, igual completed).
+-- ------------------------------------------------------------
+savepoint case_39;
+do $$
+begin
+  perform set_config('app.case39_session_id_1', gen_random_uuid()::text, true);
+  perform set_config('app.case39_nonce_1', 'nonce-caso-39-primeiro', true);
+end $$;
+set local role service_role;
+do $$ begin
+  perform public.issue_password_recovery_grant(
+    current_setting('app.merchant_onboarding_id')::uuid,
+    current_setting('app.case39_session_id_1')::uuid,
+    current_setting('app.case39_nonce_1'),
+    1800
+  );
+end $$;
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_onboarding_id'), 'session_id', current_setting('app.case39_session_id_1'))::text,
+  true
+);
+do $$
+declare
+  v_claim jsonb;
+begin
+  select public.claim_recovery_grant_for_password_change(current_setting('app.case39_nonce_1')) into v_claim;
+  if (v_claim->>'claimed')::boolean <> true then
+    raise exception 'FAIL - Caso 39 (setup): claim deveria ter tido sucesso, obtido %', v_claim;
+  end if;
+  perform set_config('app.case39_attempt_id_1', v_claim->>'attempt_id', true);
+  perform set_config('app.case39_capability_1', v_claim->>'completion_capability', true);
+end $$;
+reset role;
+
+-- Nova recuperação para o MESMO usuário, enquanto a primeira ainda está
+-- claimed (não completed) — revoga a primeira explicitamente.
+set local role service_role;
+do $$ begin
+  perform public.issue_password_recovery_grant(
+    current_setting('app.merchant_onboarding_id')::uuid,
+    gen_random_uuid(),
+    'nonce-caso-39-segundo',
+    1800
+  );
+end $$;
+reset role;
+
+do $$
+begin
+  update auth.users set encrypted_password = 'fake-bcrypt-hash-caso-39-' || gen_random_uuid()::text
+    where id = current_setting('app.merchant_onboarding_id')::uuid;
+end $$;
+
+set local role service_role;
+do $$
+declare
+  v_completed boolean;
+begin
+  select public.complete_password_recovery_attempt(
+    current_setting('app.case39_attempt_id_1')::uuid,
+    current_setting('app.case39_capability_1')
+  ) into v_completed;
+  if v_completed = false then
+    raise notice 'PASS - Caso 39: capability da tentativa claimed anterior (revogada pela nova emissao) nunca conclui nada, mesmo apos alteracao real da senha';
+  else
+    raise exception 'FAIL - Caso 39: completion com capability de tentativa revogada deveria ter falhado';
+  end if;
+end $$;
+reset role;
+
+do $$
+declare
+  v_revoked_at timestamptz;
+begin
+  select revoked_at into v_revoked_at from public.password_recovery_grants
+    where id = current_setting('app.case39_attempt_id_1')::uuid;
+  if v_revoked_at is not null then
+    raise notice 'PASS - Caso 39b: tentativa claimed anterior foi revogada explicitamente pela nova emissao (linha preservada, revoked_at preenchido)';
+  else
+    raise exception 'FAIL - Caso 39b: esperado revoked_at preenchido na tentativa anterior';
+  end if;
+end $$;
+rollback to savepoint case_39;
+
+-- ------------------------------------------------------------
+-- Caso 40: nova emissão enquanto existe uma tentativa COMPLETED insere
+-- uma linha nova — a linha completed anterior é preservada intacta
+-- (nunca revogada nem sobrescrita — completed já é estado terminal por
+-- si só, revoked_at continua null nela).
+-- ------------------------------------------------------------
+savepoint case_40;
+do $$
+begin
+  perform set_config('app.case40_session_id_1', gen_random_uuid()::text, true);
+  perform set_config('app.case40_nonce_1', 'nonce-caso-40-primeiro', true);
+end $$;
+set local role service_role;
+do $$ begin
+  perform public.issue_password_recovery_grant(
+    current_setting('app.merchant_multi_id')::uuid,
+    current_setting('app.case40_session_id_1')::uuid,
+    current_setting('app.case40_nonce_1'),
+    1800
+  );
+end $$;
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', current_setting('app.merchant_multi_id'), 'session_id', current_setting('app.case40_session_id_1'))::text,
+  true
+);
+do $$
+declare
+  v_claim jsonb;
+begin
+  select public.claim_recovery_grant_for_password_change(current_setting('app.case40_nonce_1')) into v_claim;
+  if (v_claim->>'claimed')::boolean <> true then
+    raise exception 'FAIL - Caso 40 (setup): claim deveria ter tido sucesso, obtido %', v_claim;
+  end if;
+  perform set_config('app.case40_attempt_id_1', v_claim->>'attempt_id', true);
+  perform set_config('app.case40_capability_1', v_claim->>'completion_capability', true);
+end $$;
+reset role;
+
+do $$
+begin
+  update auth.users set encrypted_password = 'fake-bcrypt-hash-caso-40-' || gen_random_uuid()::text
+    where id = current_setting('app.merchant_multi_id')::uuid;
+end $$;
+
+set local role service_role;
+do $$
+declare
+  v_completed boolean;
+begin
+  select public.complete_password_recovery_attempt(
+    current_setting('app.case40_attempt_id_1')::uuid,
+    current_setting('app.case40_capability_1')
+  ) into v_completed;
+  if v_completed <> true then
+    raise exception 'FAIL - Caso 40 (setup): complete deveria ter tido sucesso, obtido %', v_completed;
+  end if;
+end $$;
+reset role;
+
+-- Nova recuperação para o MESMO usuário, DEPOIS de a primeira já estar
+-- completed — insere uma linha nova (não reabre nem toca a completed).
+set local role service_role;
+do $$
+declare
+  v_second_id uuid;
+begin
+  select public.issue_password_recovery_grant(
+    current_setting('app.merchant_multi_id')::uuid,
+    gen_random_uuid(),
+    'nonce-caso-40-segundo',
+    1800
+  ) into v_second_id;
+  perform set_config('app.case40_second_id', v_second_id::text, true);
+end $$;
+reset role;
+
+do $$
+declare
+  v_first_completed_at timestamptz;
+  v_first_revoked_at timestamptz;
+  v_second_exists boolean;
+  v_active_count int;
+begin
+  select completed_at, revoked_at into v_first_completed_at, v_first_revoked_at
+    from public.password_recovery_grants where id = current_setting('app.case40_attempt_id_1')::uuid;
+  select exists(select 1 from public.password_recovery_grants where id = current_setting('app.case40_second_id')::uuid) into v_second_exists;
+  select count(*) into v_active_count from public.password_recovery_grants
+    where user_id = current_setting('app.merchant_multi_id')::uuid
+      and completed_at is null and revoked_at is null;
+  if v_first_completed_at is not null and v_first_revoked_at is null and v_second_exists and v_active_count = 1 then
+    raise notice 'PASS - Caso 40: nova emissao apos tentativa completed insere linha nova; a completed anterior permanece intacta (nao revogada, nao sobrescrita)';
+  else
+    raise exception 'FAIL - Caso 40: esperado completed intacta + segunda linha nova + 1 ativa, obtido completed_at=%, revoked_at=%, segunda_existe=%, ativas=%', v_first_completed_at, v_first_revoked_at, v_second_exists, v_active_count;
+  end if;
+end $$;
+rollback to savepoint case_40;
+
+-- ------------------------------------------------------------
+-- Caso 41: troca de senha sem NENHUMA tentativa de recuperação em
+-- andamento não fabrica password_recovery_completed — sem trigger
+-- automática nenhuma (removida nesta correção), não há absolutamente
+-- nenhum caminho que reaja sozinho a uma alteração de auth.users.
+-- ------------------------------------------------------------
+savepoint case_41;
+do $$
+begin
+  update auth.users set encrypted_password = 'fake-bcrypt-hash-caso-41-' || gen_random_uuid()::text
+    where id = current_setting('app.merchant_onboarding_id')::uuid;
+end $$;
+do $$
+declare
+  v_evento_qtd int;
+begin
+  select count(*) into v_evento_qtd from public.audit_log
+    where actor_user_id = current_setting('app.merchant_onboarding_id')::uuid
+      and action = 'password_recovery_completed';
+  if v_evento_qtd = 0 then
+    raise notice 'PASS - Caso 41: troca de senha sem nenhuma tentativa de recuperacao em andamento nao fabrica password_recovery_completed';
+  else
+    raise exception 'FAIL - Caso 41: esperado 0 eventos fabricados, obtido %', v_evento_qtd;
+  end if;
+end $$;
+rollback to savepoint case_41;
 
 -- Nenhuma alteração persiste: garante execução repetível a qualquer momento.
 rollback;

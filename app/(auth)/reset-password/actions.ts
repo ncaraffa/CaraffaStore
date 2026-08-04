@@ -11,7 +11,22 @@ import {
   isCurrentSessionRecovery,
   RECOVERY_NONCE_COOKIE,
 } from "@/lib/tenant/recovery-session";
+import { completePasswordRecoveryAttempt } from "@/lib/supabase/service-only/recovery-completion";
 import { RESET_LINK_INVALID_MESSAGE } from "@/lib/auth/messages";
+
+/**
+ * Tentativas de chamar complete_password_recovery_attempt depois de
+ * updateUser() já ter tido sucesso real — cobre só falhas transitórias
+ * (ex.: rede) entre as duas chamadas dentro da MESMA requisição. Nunca
+ * bloqueia o usuário se todas falharem: a senha já mudou de verdade
+ * nesse ponto, e complete_password_recovery_attempt é idempotente (uma
+ * chamada bem-sucedida grava completed_at; retries adicionais com o
+ * mesmo attempt_id/capability encontram completed_at preenchido e
+ * retornam false sem duplicar auditoria) — ver
+ * qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md, "FALHA DE COMPLETION
+ * APÓS SENHA ALTERADA".
+ */
+const COMPLETION_RETRY_ATTEMPTS = 2;
 
 export interface ResetPasswordState {
   status: "idle" | "error";
@@ -58,58 +73,69 @@ export async function resetPasswordAction(
   // condicional dentro da função (estado pending -> claimed) é o que
   // garante que, sob duas requisições concorrentes com a mesma sessão,
   // exatamente uma consegue prosseguir: a segunda encontra 0 linhas
-  // elegíveis (claimed_at já não é mais null) e recebe `false` aqui,
-  // sem nunca chamar updateUser().
+  // elegíveis (claimed_at já não é mais null) e recebe `claimed: false`
+  // aqui, sem nunca chamar updateUser().
   //
   // Terceira correção pós-QA (qa/reports/TASK-002-CLAUDE-VERIFICATION.md,
   // BUG-CLAUDE-001): a reivindicação agora também exige o nonce bruto
   // devolvido por app/auth/recovery/route.ts num cookie HttpOnly — sem
-  // ele, mesmo uma sessão com um grant pendente de verdade não consegue
-  // reivindicar nada.
+  // ele, mesmo uma sessão com uma tentativa pendente de verdade não
+  // consegue reivindicar nada.
   //
-  // Quarta correção pós-QA (revisão externa sobre
-  // qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md, BUG-CLAUDE-VERIF2-001):
-  // o claim NÃO grava mais `password_recovery_completed` — só
-  // `password_recovery_authorization_claimed` (a senha ainda não mudou
-  // neste ponto). A linha do grant permanece no estado `claimed`
-  // (não é apagada) para que a trigger `on_auth_user_password_changed`
-  // (supabase/migrations/0004_account_audit.sql) consiga correlacioná-la
-  // corretamente depois, SE E SOMENTE SE `updateUser()` abaixo realmente
-  // tiver sucesso.
+  // Quinta correção pós-QA (revisão externa sobre
+  // qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md, BUG-CLAUDE-VERIF3-001):
+  // o claim também devolve `attemptId`/`completionCapability` — a
+  // conclusão real (completePasswordRecoveryAttempt, abaixo) exige os
+  // dois, e só é chamada DEPOIS de updateUser() ter sucesso real. Nenhum
+  // mecanismo automático conclui a tentativa por conta própria (a antiga
+  // trigger `on_auth_user_password_changed` foi removida — ela
+  // correlacionava só por user_id, sem provar causalidade real).
   const cookieStore = await cookies();
   const nonce = cookieStore.get(RECOVERY_NONCE_COOKIE)?.value;
-  const claimed = await claimRecoveryGrantForPasswordChange(supabase, nonce);
+  const { claimed, attemptId, completionCapability } = await claimRecoveryGrantForPasswordChange(supabase, nonce);
   cookieStore.delete(RECOVERY_NONCE_COOKIE);
-  if (!claimed) {
+  if (!claimed || !attemptId || !completionCapability) {
     return { status: "error", message: RESET_LINK_INVALID_MESSAGE };
   }
 
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
   if (error) {
-    // O grant já foi reivindicado (estado claimed) pela chamada acima —
-    // não há como "devolvê-lo" com segurança (reabriria a mesma janela
-    // de reuso que a atomicidade acima fecha): completed_at permanece
-    // null PARA SEMPRE nesta linha, então nenhuma tentativa futura pode
-    // reivindicá-la de novo nem concluí-la. `password_recovery_completed`
-    // nunca é gravado neste caminho, porque encrypted_password nunca
-    // mudou de fato (fecha BUG-CLAUDE-VERIF2-001,
-    // qa/reports/TASK-002-CLAUDE-VERIFICATION-2.md — reproduzido
-    // empiricamente forçando updateUser() a falhar depois de um claim
-    // bem-sucedido). Falha segura: encerra a sessão e exige uma nova
-    // recuperação (novo verifyOtp real), em vez de permitir nova
-    // tentativa com o mesmo grant.
+    // A tentativa já foi reivindicada (estado claimed) pela chamada
+    // acima — não há como "devolvê-la" com segurança (reabriria a mesma
+    // janela de reuso que a atomicidade acima fecha): completed_at
+    // permanece null PARA SEMPRE nesta linha, então nenhuma tentativa
+    // futura pode reivindicá-la de novo nem concluí-la, e nenhuma troca
+    // de senha NÃO relacionada consegue concluí-la depois (fecha
+    // BUG-CLAUDE-VERIF3-001, qa/reports/TASK-002-CLAUDE-VERIFICATION-3.md
+    // — a conclusão exige attempt_id + completion capability exatos
+    // desta requisição, nunca "qualquer troca de senha por user_id").
+    // `password_recovery_completed` nunca é gravado neste caminho,
+    // porque encrypted_password nunca mudou de fato e
+    // completePasswordRecoveryAttempt não é sequer chamada. Falha
+    // segura: encerra a sessão e exige uma nova recuperação (novo
+    // verifyOtp real, que revoga esta tentativa automaticamente via
+    // issue_password_recovery_grant), em vez de permitir nova tentativa
+    // com a mesma linha.
     await supabase.auth.signOut();
     return { status: "error", message: RESET_LINK_INVALID_MESSAGE };
   }
 
-  // updateUser() teve sucesso real: a trigger `on_auth_user_password_changed`
-  // (AFTER UPDATE OF encrypted_password em auth.users, mesma transação
-  // Postgres que o GoTrue usou para gravar a nova senha — confirmado
-  // empiricamente) já marcou completed_at e gravou
-  // `password_recovery_completed` sozinha, correlacionando pelo próprio
-  // auth.users.id — nenhuma chamada adicional é necessária aqui. Não
-  // existe nenhuma RPC de auditoria separada e chamável isoladamente
-  // para este evento (BUG-RT2-005, qa/reports/TASK-002-RETEST.md).
+  // updateUser() teve sucesso real: a senha JÁ MUDOU no GoTrue. A
+  // conclusão explícita, server-only (lib/supabase/service-only/recovery-completion.ts)
+  // exige attemptId + completionCapability EXATOS desta tentativa e
+  // confirma internamente que a credencial realmente mudou desde o claim
+  // — nunca correlaciona por user_id sozinho (fecha BUG-CLAUDE-VERIF3-001).
+  // Um pequeno número de tentativas cobre só falha transitória entre as
+  // duas chamadas: se todas falharem, a troca de senha em si já teve
+  // sucesso e o usuário não deve ficar bloqueado por isso — só o evento
+  // de auditoria de conclusão pode ficar ausente nesse caso raro (ver
+  // comentário de COMPLETION_RETRY_ATTEMPTS acima). Nunca duplica
+  // auditoria: a função de conclusão é idempotente.
+  for (let attempt = 0; attempt < COMPLETION_RETRY_ATTEMPTS; attempt++) {
+    const completed = await completePasswordRecoveryAttempt({ attemptId, completionCapability });
+    if (completed) break;
+  }
+
   await supabase.auth.signOut();
   redirect("/login");
 }
