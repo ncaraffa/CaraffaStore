@@ -2,6 +2,14 @@
 
 ## Estado atual
 
+- **TASK-003: DONE.** Catálogo, produtos, categorias, imagens e estoque. Verificação adversarial
+  encontrou 3 bloqueadores (crítico/alto — loja não ativa administrando catálogo via RPC/Storage
+  direta, DML direto em `products` contornando as RPCs, limite de 5 imagens vencível sob
+  concorrência), corrigidos e reverificados. Aprovada em
+  `qa/reports/TASK-003-FINAL-APPROVAL.md` e mesclada na `master` via `git merge --no-ff` (histórico
+  preservado, sem squash). Arquivo da tarefa em `tasks/done/task-003.md`. Branch
+  `feat/TASK-003-catalog-products` preservada (não excluída). Nenhum deploy realizado.
+
 - Fase: 1 — Fundação técnica.
 - **TASK-001: DONE.** Aprovada no reteste final do Júnior
   (`qa/reports/TASK-001-RETEST-4.md`, 2026-08-03, commit testado
@@ -1587,3 +1595,17 @@ correção não foi mesclada nem aprovada; aguarda nova verificação externa.
 - Ordenação de imagens é só "mover para cima/baixo" (sem arrastar-e-soltar) — suficiente para até 5 imagens.
 - `<img>` nativo em vez de `next/image` (3 warnings de lint aceitos) — evita a complexidade de configurar
   `remotePatterns` para o domínio do Storage; pode ser revisitado se performance de imagem virar prioridade.
+
+## Encerramento da TASK-003 (2026-08-04)
+
+**Aprovação final:** `qa/reports/TASK-003-FINAL-APPROVAL.md`, **APROVADA PARA MERGE**, commit
+testado `685e3aab7d400c915832b58512216ed9b1a73604`. Verificação final rebateu os três bloqueadores
+corrigidos (loja não ativa via RPC/Storage direta, DML direto em `products`, limite de 5 imagens sob
+concorrência) em banco limpo: 282/282 testes, TASK-001 RLS 7/7, TASK-002 SQL 56/56, TASK-003 SQL
+35/35, concorrência de estoque+imagens 17/17, migration upgrade desde a master PASS, lint/typecheck/
+build/audit OK, smoke test real OK.
+
+**Ação:** TASK-003 movida para `tasks/done/task-003.md` (status `DONE`) e branch
+`feat/TASK-003-catalog-products` mesclada na `master` via `git merge --no-ff` (sem squash — histórico
+de implementação, correções e QA preservado). Branch da tarefa **não** excluída. Nenhum deploy
+realizado.
