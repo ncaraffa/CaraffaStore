@@ -1,7 +1,17 @@
 # TASK-003 — Catálogo, produtos e categorias
 
-**Status:** BACKLOG  
-**Responsável:** Claude Code (após refinamento)
+**Status:** DONE
+**Responsável:** Claude Code
+**Branch:** feat/TASK-003-catalog-products (mesclada na master via `git merge --no-ff`, histórico preservado)
+**HEAD-base:** b7e10c315e94b98293395a8d814e0fdfb0c2b7ca (master, TASK-001/002 DONE)
+
+**Decisões aprovadas por Caraffa (2026-08-04):** sem variantes nesta tarefa (preço/estoque únicos por
+produto); até 5 imagens por produto via Supabase Storage com capa/ordenação; estoque nunca negativo,
+ajuste atômico, produto publicado com estoque zero permanece visível como "Esgotado".
+
+**Aprovação final:** verificação adversarial encontrou 3 bloqueadores (crítico/alto), corrigidos no
+commit `685e3aab7d400c915832b58512216ed9b1a73604` e reverificados — ver
+`qa/reports/TASK-003-CLAUDE-VERIFICATION.md` e `qa/reports/TASK-003-FINAL-APPROVAL.md`.
 
 ## Objetivo
 

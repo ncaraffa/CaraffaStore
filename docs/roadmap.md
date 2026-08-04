@@ -17,6 +17,8 @@
 
 - Personalização, produtos, categorias, estoque e loja pública.
 - Carrinho, checkout, pedidos e painel do comerciante.
+- **Catálogo, produtos, categorias e estoque: concluída** (TASK-003, `tasks/done/task-003.md`,
+  aprovada em `qa/reports/TASK-003-FINAL-APPROVAL.md`).
 
 ## Fase 3 — Pix
 
