@@ -78,16 +78,32 @@ if [ "$SURVIVED" != "1" ]; then
 fi
 echo "PASS - linha histórica com action='signup_completed' sobreviveu intacta ao upgrade da 0002 para o schema final"
 
-echo "==> Verificando: schema final (auth_flow_grants, funções) existe e responde"
+echo "==> Verificando: schema final (password_recovery_grants, funções) existe e responde"
+# Terceira correção pós-QA (qa/reports/TASK-002-CLAUDE-VERIFICATION.md,
+# BUG-CLAUDE-001): auth_flow_grants/consume_auth_flow_grant/
+# request_password_recovery_grant foram removidos por completo —
+# substituídos por issue_password_recovery_grant (só service_role) +
+# claim_recovery_grant_for_password_change(nonce) +
+# is_current_session_recovery_grant().
 FUNCS_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
   select count(*) from pg_proc
-    where proname in ('consume_auth_flow_grant', 'claim_recovery_grant_for_password_change', 'is_current_session_recovery_grant', 'request_password_recovery_grant');
+    where proname in ('issue_password_recovery_grant', 'claim_recovery_grant_for_password_change', 'is_current_session_recovery_grant', 'handle_email_confirmed_audit');
 ")
 if [ "$FUNCS_OK" != "4" ]; then
-  echo "FAIL - nem todas as funções da 0003 existem após o upgrade (esperado 4, obtido $FUNCS_OK)"
+  echo "FAIL - nem todas as funções da 0003/0004 existem após o upgrade (esperado 4, obtido $FUNCS_OK)"
   exit 1
 fi
-echo "PASS - as 4 funções de auth_flow_grants existem após o upgrade"
+echo "PASS - as 4 funções de password_recovery_grants/auditoria de confirmação existem após o upgrade"
+
+OLD_FUNCS_GONE=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from pg_proc
+    where proname in ('consume_auth_flow_grant', 'request_password_recovery_grant', 'handle_new_user_confirmation_grant');
+")
+if [ "$OLD_FUNCS_GONE" != "0" ]; then
+  echo "FAIL - funções antigas do desenho vulnerável (BUG-CLAUDE-001) ainda existem após o upgrade (esperado 0, obtido $OLD_FUNCS_GONE)"
+  exit 1
+fi
+echo "PASS - nenhuma função antiga (consume_auth_flow_grant/request_password_recovery_grant/handle_new_user_confirmation_grant) sobrevive ao upgrade"
 
 RESTRICT_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
   select confdeltype from pg_constraint where conname = 'audit_log_store_id_fkey';

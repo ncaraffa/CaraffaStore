@@ -16,7 +16,6 @@ export type AuditAction =
   | "plan_selected"
   | "onboarding_completed"
   | "access_denied";
-export type AuthFlowGrantPurpose = "email_confirmation" | "password_recovery";
 
 /**
  * Minimal hand-written mirror of `supabase/migrations/0001_init.sql`
@@ -245,33 +244,30 @@ export interface Database {
           },
         ];
       };
-      auth_flow_grants: {
+      password_recovery_grants: {
         Row: {
           id: string;
           user_id: string;
-          purpose: AuthFlowGrantPurpose;
-          session_id: string | null;
+          session_id: string;
+          nonce_hash: string;
           created_at: string;
           expires_at: string;
-          consumed_at: string | null;
         };
         Insert: {
           id?: string;
           user_id: string;
-          purpose: AuthFlowGrantPurpose;
-          session_id?: string | null;
+          session_id: string;
+          nonce_hash: string;
           created_at?: string;
           expires_at: string;
-          consumed_at?: string | null;
         };
         Update: {
           id?: string;
           user_id?: string;
-          purpose?: AuthFlowGrantPurpose;
-          session_id?: string | null;
+          session_id?: string;
+          nonce_hash?: string;
           created_at?: string;
           expires_at?: string;
-          consumed_at?: string | null;
         };
         Relationships: [];
       };
@@ -306,16 +302,12 @@ export interface Database {
         Args: { p_slug: string };
         Returns: boolean;
       };
-      request_password_recovery_grant: {
-        Args: { p_email: string };
+      issue_password_recovery_grant: {
+        Args: { p_user_id: string; p_session_id: string; p_nonce: string; p_ttl_seconds?: number };
         Returns: void;
       };
-      consume_auth_flow_grant: {
-        Args: { p_purpose: AuthFlowGrantPurpose };
-        Returns: boolean;
-      };
       claim_recovery_grant_for_password_change: {
-        Args: Record<string, never>;
+        Args: { p_nonce: string };
         Returns: boolean;
       };
       is_current_session_recovery_grant: {

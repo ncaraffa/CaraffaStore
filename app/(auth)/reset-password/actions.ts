@@ -1,11 +1,16 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { resetPasswordSchema } from "@/lib/auth/schemas";
 import { fieldErrorsFromZod } from "@/lib/auth/form-errors";
 import { isPasswordLeaked } from "@/lib/auth/password-policy";
-import { claimRecoveryGrantForPasswordChange, isCurrentSessionRecovery } from "@/lib/tenant/recovery-session";
+import {
+  claimRecoveryGrantForPasswordChange,
+  isCurrentSessionRecovery,
+  RECOVERY_NONCE_COOKIE,
+} from "@/lib/tenant/recovery-session";
 import { RESET_LINK_INVALID_MESSAGE } from "@/lib/auth/messages";
 
 export interface ResetPasswordState {
@@ -54,7 +59,16 @@ export async function resetPasswordAction(
   // requisições concorrentes com a mesma sessão, exatamente uma
   // consegue prosseguir: a segunda encontra 0 linhas (a primeira já
   // apagou) e recebe `false` aqui, sem nunca chamar updateUser().
-  const claimed = await claimRecoveryGrantForPasswordChange(supabase);
+  //
+  // Terceira correção pós-QA (qa/reports/TASK-002-CLAUDE-VERIFICATION.md,
+  // BUG-CLAUDE-001): a reivindicação agora também exige o nonce bruto
+  // devolvido por app/auth/recovery/route.ts num cookie HttpOnly — sem
+  // ele, mesmo uma sessão com um grant pendente de verdade não consegue
+  // reivindicar nada.
+  const cookieStore = await cookies();
+  const nonce = cookieStore.get(RECOVERY_NONCE_COOKIE)?.value;
+  const claimed = await claimRecoveryGrantForPasswordChange(supabase, nonce);
+  cookieStore.delete(RECOVERY_NONCE_COOKIE);
   if (!claimed) {
     return { status: "error", message: RESET_LINK_INVALID_MESSAGE };
   }

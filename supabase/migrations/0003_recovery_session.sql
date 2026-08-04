@@ -1,203 +1,218 @@
--- TASK-002 — segunda correção pós-QA (qa/reports/TASK-002-RETEST.md).
+-- TASK-002 — terceira correção pós-QA (revisão externa sobre
+-- qa/reports/TASK-002-CLAUDE-VERIFICATION.md, BUG-CLAUDE-001/002/003).
 --
--- O reteste do Júnior reprovou a primeira versão desta migração:
--- `recovery_grants` concedia INSERT/UPDATE/DELETE a `authenticated` e
--- confiava só em RLS (`user_id = auth.uid()`) + um DEFAULT/CHECK de
--- `session_id` — qualquer sessão comum conseguia inserir a própria
--- linha diretamente (BUG-RT2-001) e obter acesso a /reset-password sem
--- jamais ter passado por um e-mail de recuperação. Também não havia
--- `expires_at`/`consumed_at`, então duas trocas de senha concorrentes
--- eram aceitas (BUG-RT2-002), e nada impedia um código de confirmação
--- de cadastro de ser trocado manualmente em /auth/recovery (e
--- vice-versa) para fabricar uma sessão com o privilégio errado
--- (BUG-RT2-003/004) — separar as ROTAS não classifica criptograficamente
--- o `code` PKCE: `exchangeCodeForSession`/`verifyOtp` do GoTrue devolvem
--- uma sessão válida de qualquer forma, sem vincular o código à rota
--- Next.js que o consumiu.
+-- BUG-CLAUDE-001 (CRÍTICO): a versão anterior desta migração provou que
+-- "existe um pedido pendente de purpose=password_recovery para
+-- auth.uid()" é suficiente para conceder o privilégio de troca de senha
+-- (`consume_auth_flow_grant`). Mas um pedido pendente sozinho NUNCA
+-- provou que um código de recuperação real foi trocado: qualquer sessão
+-- comum conseguia chamar `request_password_recovery_grant(próprio
+-- e-mail)` e, na sequência, `consume_auth_flow_grant('password_recovery')`
+-- pela MESMA sessão de login normal — sem jamais receber ou clicar em
+-- nenhum e-mail — e completar a troca de senha inteira
+-- (qa/reports/TASK-002-CLAUDE-VERIFICATION.md, §4). `session_id` era só
+-- GRAVADO no consumo, nunca EXIGIDO como prova de origem.
 --
--- Reprojetado do zero: `public.auth_flow_grants` substitui
--- `recovery_grants` e passa a proteger OS DOIS fluxos (confirmação de
--- cadastro e recuperação de senha), não só recuperação. Princípios:
+-- BUG-CLAUDE-002 (BAIXO/MÉDIO): o mesmo desenho, aplicado ao propósito
+-- email_confirmation (grant nascia sozinho por trigger, sem exigir
+-- proveniência), deixava qualquer sessão autenticada-mas-com-grant-
+-- pendente fabricar o evento de auditoria email_verification_completed
+-- sem passar pela rota /auth/confirm.
 --
---   1. ZERO grant de tabela para anon/authenticated — nenhum cliente
---      insere, atualiza, apaga ou lê uma linha diretamente, mesmo via
---      RLS. Toda a superfície é um punhado de funções SECURITY DEFINER
---      com uma responsabilidade estreita cada uma, nenhuma aceitando
---      `user_id`/`session_id`/qualquer identificador de outro usuário
---      como parâmetro vindo do cliente — sempre `auth.uid()`/
---      `auth.jwt()` da própria sessão que está chamando.
---   2. A linha de "confirmação de cadastro" nasce automaticamente por um
---      TRIGGER em `auth.users` (dispara só quando o GoTrue insere um
---      usuário de verdade — nunca por uma chamada RPC direta) — não há
---      como um cliente pedir esse grant para si mesmo ou para outro
---      user_id.
---   3. A linha de "recuperação de senha" nasce por
---      `request_password_recovery_grant(email)`, chamável por
---      anon/authenticated (é assim que "esqueci minha senha" funciona
---      antes de existir sessão) — mas essa chamada sozinha NÃO concede
---      acesso a nada: só marca "pedido pendente", com `consumed_at`
---      nulo. Anti-enumeração preservada (procura o usuário por e-mail
---      internamente; e-mail inexistente não gera nenhuma linha nem erro
---      visível).
---   4. O que de fato ATIVA o privilégio é `consume_auth_flow_grant(purpose)`
---      — só pode ser chamada por uma sessão JÁ autenticada (ou seja,
---      depois de um `exchangeCodeForSession`/`verifyOtp` real ter
---      acontecido) e faz, num ÚNICO UPDATE atômico: exige que exista uma
---      linha PENDENTE (`consumed_at is null`), não expirada, para
---      `auth.uid()` E para o `purpose` exato da rota que está chamando.
---      Uma sessão comum sem pedido pendente correspondente não tem o
---      que consumir — `consume_auth_flow_grant` devolve `false` e as
---      rotas (`app/auth/confirm/route.ts`/`app/auth/recovery/route.ts`)
---      encerram a sessão imediatamente (nenhuma sessão sobrevive a uma
---      troca de propósito incompatível — fecha BUG-RT2-003 e
---      BUG-RT2-004 nos dois sentidos, sem depender de `amr`, `next`,
---      pathname ou da simples existência de uma sessão). Grava a
---      auditoria de confirmação de e-mail DENTRO do mesmo UPDATE
---      atômico — nenhuma RPC separada de auditoria existe para um
---      cliente chamar isoladamente (fecha BUG-RT2-005 para este
---      evento).
---   5. A troca de senha em si exige um SEGUNDO passo atômico,
---      `claim_recovery_grant_for_password_change()`: um DELETE
---      condicional que só afeta a linha se ela já estiver consumida
---      (passo 4 aconteceu) E ainda não tiver sido reivindicada. Sob
---      concorrência real (duas requisições com o mesmo access/refresh
---      token em paralelo), o bloqueio de linha do Postgres garante que
---      só UMA das duas encontra a linha ainda presente — a outra vê 0
---      linhas afetadas e falha com segurança, sem tentar de novo com o
---      mesmo grant (fecha BUG-RT2-002). Grava a auditoria de
---      recuperação concluída no mesmo DELETE atômico.
+-- BUG-CLAUDE-003 (BAIXO): `request_password_recovery_grant` era uma RPC
+-- pública (`grant execute ... to anon, authenticated`) chamável
+-- diretamente via PostgREST, fora da Server Action — nenhum rate limit
+-- de aplicação nem CAPTCHA a protegiam, permitindo griefing (substituir
+-- repetidamente o grant pendente de uma vítima).
 --
--- Não há nenhum nonce/token na URL para o cliente apresentar de volta —
--- a "prova não fabricável" exigida pelo reteste vem inteira do banco:
--- `auth.uid()` (a sessão JÁ provou sua identidade ao GoTrue) cruzado com
--- uma linha PENDENTE que só um mecanismo interno (trigger/função restrita
--- a um propósito) pôde ter criado. Isso evita a superfície adicional de
--- "aceitar um nonce como parâmetro" (que, se mal desenhada, reabriria a
--- mesma classe de bug ao permitir registrar um grant para user_id
--- arbitrário).
-
-create table public.auth_flow_grants (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users (id) on delete cascade,
-  purpose text not null check (purpose in ('email_confirmation', 'password_recovery')),
-  session_id uuid,
-  created_at timestamptz not null default now(),
-  expires_at timestamptz not null,
-  consumed_at timestamptz,
-  constraint auth_flow_grants_user_purpose_unique unique (user_id, purpose)
-);
-
-comment on table public.auth_flow_grants is
-  'Prova server-side, não fabricável pelo cliente, de que uma sessão nasceu de um fluxo específico (confirmação de cadastro OU recuperação de senha) — substitui public.recovery_grants (qa/reports/TASK-002-RETEST.md, BUG-RT2-001/002/003/004). Nenhum grant de tabela para anon/authenticated: toda a leitura/escrita passa por funções SECURITY DEFINER que usam auth.uid()/auth.jwt() da própria sessão chamando, nunca um parâmetro do cliente. "purpose" pendente (consumed_at null) só prova "existe um pedido"; o privilégio real só nasce em consume_auth_flow_grant(), chamada depois de uma troca de código real bem-sucedida.';
-
-alter table public.auth_flow_grants enable row level security;
-
--- Nenhuma policy — ninguém (nem authenticated) tem acesso direto à
--- linha. Todo acesso é mediado pelas funções SECURITY DEFINER abaixo,
--- que rodam com o privilégio do DONO da função (bypassa RLS), nunca com
--- o do chamador.
-revoke all on public.auth_flow_grants from public, anon, authenticated, service_role;
-
--- service_role: só uso administrativo/debug local, mesmo padrão de
--- audit_log (RLS habilitada, zero policy, service_role tem BYPASSRLS no
--- Supabase). Nenhuma rota de usuário usa service_role (proibido desde a
--- primeira correção pós-QA).
-grant select, insert, update, delete on public.auth_flow_grants to service_role;
+-- Reprojetado do zero, seguindo a direção técnica da revisão externa:
+--
+--   1. RECUPERAÇÃO passa a exigir prova real: `app/auth/recovery/route.ts`
+--      chama `supabase.auth.verifyOtp({ type: "recovery", token_hash })`
+--      com o `type` HARDCODED pela rota (nunca lido de query string) —
+--      o GoTrue só valida com sucesso se aquele token_hash específico foi
+--      de fato emitido como recovery; um token de signup jamais passa
+--      nesta chamada, então a separação de finalidade agora é
+--      cripto­graficamente garantida pelo próprio GoTrue, não por uma
+--      tabela de intenção pendente.
+--   2. O grant de recuperação (`public.password_recovery_grants`) só
+--      pode ser EMITIDO por `issue_password_recovery_grant(...)` — EXECUTE
+--      concedido SOMENTE a `service_role`, nunca a `anon`/`authenticated`/
+--      `PUBLIC`. A única chamadora é o módulo server-only isolado
+--      `lib/supabase/service-only/recovery-grant-issuer.ts`, importado
+--      SÓ por `app/auth/recovery/route.ts`, e só invocado DEPOIS de
+--      `verifyOtp` ter retornado sucesso — `user_id`/`session_id` vêm da
+--      própria resposta do GoTrue àquela chamada (nunca de um parâmetro
+--      arbitrário de cliente).
+--   3. O grant é adicionalmente vinculado a um NONCE aleatório de 256
+--      bits gerado no servidor Next.js — só o HASH (sha256, hex) do
+--      nonce é gravado no banco; o nonce em si só existe em memória do
+--      processo Next.js e num cookie HttpOnly com `path=/reset-password`
+--      devolvido ao navegador. `claim_recovery_grant_for_password_change`
+--      exige `user_id` + `session_id` (de `auth.uid()`/`auth.jwt()`) E o
+--      nonce correto (o cookie) para reivindicar — mesmo que
+--      `issue_password_recovery_grant` algum dia fosse chamável por
+--      engano fora do fluxo real, uma sessão sem o cookie HttpOnly certo
+--      não teria como reivindicar.
+--   4. CONFIRMAÇÃO DE CADASTRO não usa mais nenhum grant/RPC: nenhuma
+--      RPC pública "regista confirmação" existe. `app/auth/confirm/route.ts`
+--      chama `verifyOtp({ type: "signup", token_hash })` (hardcoded) — o
+--      próprio GoTrue grava `auth.users.email_confirmed_at` quando a
+--      verificação é real. O evento de auditoria
+--      `email_verification_completed` nasce de um TRIGGER em
+--      `auth.users` (ver supabase/migrations/0004_account_audit.sql)
+--      que só dispara na transição real `email_confirmed_at: null ->
+--      not null` — não fabricável por nenhuma RPC.
+--   5. `request_password_recovery_grant`/`consume_auth_flow_grant`/
+--      `handle_new_user_confirmation_grant` e a tabela
+--      `public.auth_flow_grants` são REMOVIDOS por completo (bloqueador
+--      3 da revisão externa: "remova o desenho em que o pedido de envio
+--      do e-mail cria um grant que depois pode ser ativado por qualquer
+--      sessão comum"). O pedido de recuperação
+--      (`app/(auth)/forgot-password/actions.ts`) volta a ser só
+--      "dispara o e-mail" — sem criar nenhuma linha, sem conceder nada.
+--
+-- Como rodar localmente após esta mudança: `npx supabase db reset`
+-- (mesmo padrão das duas remediações anteriores desta mesma migração —
+-- a TASK-002 ainda não foi mesclada, então editar o arquivo em vez de
+-- empilhar uma 0005 é a forma correta de expressar "estado final
+-- correto da branch", conforme instrução explícita da revisão externa).
+-- `supabase migration up` incremental NÃO deve ser usado depois de
+-- editar um arquivo já aplicado localmente — vai reportar drift de
+-- checksum; use sempre reset completo em ambiente de desenvolvimento.
 
 -- ============================================================
--- 1. Confirmação de cadastro: grant nasce SOZINHO quando o GoTrue cria
---    o usuário de verdade (signUp()) — nenhuma chamada de cliente
---    participa disso, então não há "user_id escolhido pelo cliente"
---    possível aqui.
+-- 0. Remove por completo o desenho anterior (auth_flow_grants e tudo
+--    que o cercava) — nada aqui sobrevive na versão final.
 -- ============================================================
-
-create or replace function public.handle_new_user_confirmation_grant()
-returns trigger
-language plpgsql
-security definer
-set search_path = ''
-as $$
-begin
-  insert into public.auth_flow_grants (user_id, purpose, expires_at)
-  values (new.id, 'email_confirmation', now() + interval '24 hours')
-  on conflict (user_id, purpose) do update
-    set id = gen_random_uuid(),
-        expires_at = excluded.expires_at,
-        consumed_at = null,
-        session_id = null,
-        created_at = now();
-  return new;
-end;
-$$;
-
-comment on function public.handle_new_user_confirmation_grant() is
-  'Dispara em AFTER INSERT em auth.users (só o próprio GoTrue insere ali, nunca uma RPC chamável por anon/authenticated) — cria o pedido pendente de confirmação de cadastro do novo usuário automaticamente. Reenvio de e-mail (supabase.auth.resend) não insere um novo auth.users, então reaproveita esta mesma linha (ainda pendente, dentro da janela de 24h).';
-
-revoke all on function public.handle_new_user_confirmation_grant() from public;
 
 drop trigger if exists on_auth_user_created_confirmation_grant on auth.users;
-create trigger on_auth_user_created_confirmation_grant
-  after insert on auth.users
-  for each row execute function public.handle_new_user_confirmation_grant();
+drop function if exists public.handle_new_user_confirmation_grant();
+drop function if exists public.request_password_recovery_grant(text);
+drop function if exists public.consume_auth_flow_grant(text);
+-- Assinatura antiga (zero parâmetros) de uma versão anterior deste
+-- arquivo — a nova versão abaixo recebe um nonce; remover explicitamente
+-- evita deixar um overload órfão chamável no catálogo.
+drop function if exists public.claim_recovery_grant_for_password_change();
+drop function if exists public.is_current_session_recovery_grant();
+drop table if exists public.auth_flow_grants;
 
 -- ============================================================
--- 2. Recuperação de senha: pedido pendente nasce a partir de um e-mail
---    informado por quem ainda não tem sessão (anon) — a função resolve
---    o user_id internamente (nunca aceita um user_id vindo do cliente).
---    Chamar isto sozinho NUNCA concede acesso a /reset-password: só
---    marca "existe um pedido pendente", sem session_id, sem
---    consumed_at.
+-- 1. Tabela: um grant de recuperação de senha por usuário, emitido
+--    SOMENTE por issue_password_recovery_grant (service_role only).
+--    Nenhuma policy de RLS para nenhum papel de cliente — mesmo padrão
+--    de public.audit_log: zero acesso direto, tudo mediado por função
+--    SECURITY DEFINER.
 -- ============================================================
 
-create or replace function public.request_password_recovery_grant(p_email text)
+create table public.password_recovery_grants (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  session_id uuid not null,
+  nonce_hash text not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  constraint password_recovery_grants_user_unique unique (user_id),
+  constraint password_recovery_grants_nonce_hash_format check (nonce_hash ~ '^[0-9a-f]{64}$')
+);
+
+comment on table public.password_recovery_grants is
+  'Prova server-side, não fabricável por nenhuma sessão de cliente, de que uma verificação real de token de recuperação (supabase.auth.verifyOtp({type:"recovery"}) em app/auth/recovery/route.ts) aconteceu para este user_id/session_id. Substitui public.auth_flow_grants (qa/reports/TASK-002-CLAUDE-VERIFICATION.md, BUG-CLAUDE-001): diferente daquele desenho, a linha só é criada DEPOIS de verifyOtp confirmar o token — nunca no momento de "pedir" a recuperação. Nenhum grant de tabela para anon/authenticated: toda leitura/escrita passa por issue_password_recovery_grant (só service_role) e claim_recovery_grant_for_password_change/is_current_session_recovery_grant (só authenticated, e exigem nonce/session_id da própria sessão).';
+
+comment on column public.password_recovery_grants.nonce_hash is
+  'sha256(nonce) em hex minúsculo. O nonce em si (256 bits de entropia, gerado em lib/supabase/service-only/recovery-grant-issuer.ts) nunca é gravado em texto puro — só existe em memória do processo Next.js e num cookie HttpOnly path=/reset-password devolvido ao navegador.';
+
+alter table public.password_recovery_grants enable row level security;
+
+revoke all on public.password_recovery_grants from public, anon, authenticated, service_role;
+
+-- service_role: só uso administrativo/debug local (mesmo padrão de
+-- audit_log). Nenhuma rota de usuário usa um cliente service_role
+-- genérico — a única gravação nesta tabela em produção passa por
+-- issue_password_recovery_grant, que roda como SECURITY DEFINER (dono
+-- da função, não do papel chamador) e por isso não precisa deste GRANT
+-- de tabela para funcionar.
+grant select, insert, update, delete on public.password_recovery_grants to service_role;
+
+-- ============================================================
+-- 2. Emissão — SOMENTE service_role pode chamar. anon/authenticated/
+--    PUBLIC não têm EXECUTE nenhum; mesmo uma sessão comum com um
+--    access_token válido não consegue invocar esta função via
+--    PostgREST, porque a autenticação como service_role exige a
+--    SUPABASE_SERVICE_ROLE_KEY, que nunca chega ao navegador
+--    (lib/supabase/env.ts:getServiceRoleEnv lança se chamada no
+--    cliente) e só é usada dentro do módulo server-only isolado
+--    lib/supabase/service-only/recovery-grant-issuer.ts, importado
+--    apenas por app/auth/recovery/route.ts, só depois de um
+--    verifyOtp({type:"recovery"}) bem-sucedido.
+-- ============================================================
+
+create or replace function public.issue_password_recovery_grant(
+  p_user_id uuid,
+  p_session_id uuid,
+  p_nonce text,
+  p_ttl_seconds integer default 1800
+)
 returns void
 language plpgsql
 security definer
 set search_path = ''
 as $$
-declare
-  v_uid uuid;
 begin
-  select id into v_uid from auth.users where lower(email) = lower(trim(p_email)) limit 1;
-
-  -- E-mail sem conta: não revela isso ao chamador (anti-enumeração,
-  -- T2-DEC-011) — retorna silenciosamente, nenhuma linha gravada.
-  if v_uid is null then
-    return;
+  if p_user_id is null or p_session_id is null then
+    raise exception 'issue_password_recovery_grant: user_id e session_id são obrigatórios';
   end if;
 
-  insert into public.auth_flow_grants (user_id, purpose, expires_at)
-  values (v_uid, 'password_recovery', now() + interval '30 minutes')
-  on conflict (user_id, purpose) do update
+  if p_nonce is null or length(p_nonce) < 16 then
+    raise exception 'issue_password_recovery_grant: nonce ausente ou fraco demais';
+  end if;
+
+  -- TTL defensivo: nunca mais que 1 hora, nunca zero/negativo, mesmo se
+  -- o chamador (nosso próprio código server-side) passar um valor
+  -- absurdo por engano.
+  if p_ttl_seconds is null or p_ttl_seconds <= 0 or p_ttl_seconds > 3600 then
+    raise exception 'issue_password_recovery_grant: ttl_seconds fora do intervalo permitido (1..3600)';
+  end if;
+
+  -- pgcrypto (digest()) vive no schema "extensions" no Supabase local/hospedado,
+  -- não em "public" — com search_path = '' precisa ser qualificado
+  -- explicitamente (gen_random_uuid() não precisa: é nativo do
+  -- pg_catalog desde o Postgres 13, sempre pesquisado implicitamente).
+  insert into public.password_recovery_grants (user_id, session_id, nonce_hash, expires_at)
+  values (
+    p_user_id,
+    p_session_id,
+    encode(extensions.digest(p_nonce, 'sha256'), 'hex'),
+    now() + make_interval(secs => p_ttl_seconds)
+  )
+  on conflict (user_id) do update
     set id = gen_random_uuid(),
-        expires_at = excluded.expires_at,
-        consumed_at = null,
-        session_id = null,
-        created_at = now();
+        session_id = excluded.session_id,
+        nonce_hash = excluded.nonce_hash,
+        created_at = now(),
+        expires_at = excluded.expires_at;
 end;
 $$;
 
-comment on function public.request_password_recovery_grant(text) is
-  'Chamada por app/(auth)/forgot-password/actions.ts antes de supabase.auth.resetPasswordForEmail(). Só cria um pedido PENDENTE (consumed_at null, sem session_id) — não concede /reset-password por si só. Pedir de novo substitui (upsert) qualquer pedido pendente anterior do mesmo usuário, invalidando um link antigo ainda não usado.';
+comment on function public.issue_password_recovery_grant(uuid, uuid, text, integer) is
+  'Único ponto de EMISSÃO de um grant de recuperação. EXECUTE só para service_role — chamada exclusivamente por lib/supabase/service-only/recovery-grant-issuer.ts, dentro de app/auth/recovery/route.ts, imediatamente após supabase.auth.verifyOtp({type:"recovery", token_hash}) ter retornado sucesso real. user_id/session_id vêm da resposta do próprio GoTrue àquela chamada, nunca de um parâmetro de cliente (fecha BUG-CLAUDE-001, qa/reports/TASK-002-CLAUDE-VERIFICATION.md). Um novo pedido substitui (upsert) qualquer grant pendente anterior do mesmo usuário — invalida um link/sessão de recuperação anterior ainda não reivindicado.';
 
-revoke all on function public.request_password_recovery_grant(text) from public;
-grant execute on function public.request_password_recovery_grant(text) to anon, authenticated;
+revoke all on function public.issue_password_recovery_grant(uuid, uuid, text, integer) from public;
+grant execute on function public.issue_password_recovery_grant(uuid, uuid, text, integer) to service_role;
 
 -- ============================================================
--- 3. Consumo do pedido pendente — SÓ pode ser chamada por uma sessão JÁ
---    autenticada (auth.uid() não nulo), ou seja, depois de um
---    exchangeCodeForSession/verifyOtp real ter acontecido em
---    app/auth/confirm/route.ts ou app/auth/recovery/route.ts. UPDATE
---    único e atômico: só afeta a linha se ela existir, pertencer a
---    auth.uid(), tiver o purpose EXATO da rota chamando, ainda não
---    tiver sido consumida e não estiver expirada — nenhuma janela entre
---    "checar" e "consumir" (sem SELECT seguido de UPDATE separados).
---    Uma sessão comum sem pedido pendente correspondente encontra 0
---    linhas e recebe false — as rotas devem então encerrar a sessão
---    imediatamente, nunca deixá-la sobreviver.
+-- 3. Reivindicação atômica para a TROCA DE SENHA — chamável por
+--    authenticated, mas exige TRÊS provas simultâneas que uma sessão
+--    comum não possui: auth.uid() bater com o user_id do grant,
+--    session_id (de auth.jwt()) bater com a sessão que verifyOtp criou,
+--    e o nonce correto (só existe no cookie HttpOnly devolvido pela
+--    própria rota de recuperação). DELETE condicional único — sem
+--    "consultar depois consumir" — garante exatamente uma reivindicação
+--    sob concorrência real (mesmo mecanismo, já validado sob corrida,
+--    da versão anterior desta função).
 -- ============================================================
 
-create or replace function public.consume_auth_flow_grant(p_purpose text)
+create or replace function public.claim_recovery_grant_for_password_change(p_nonce text)
 returns boolean
 language plpgsql
 security definer
@@ -208,77 +223,14 @@ declare
   v_session_id uuid := nullif(auth.jwt() ->> 'session_id', '')::uuid;
   v_rows int;
 begin
-  if v_uid is null or p_purpose not in ('email_confirmation', 'password_recovery') then
+  if v_uid is null or v_session_id is null or p_nonce is null or length(p_nonce) = 0 then
     return false;
   end if;
 
-  update public.auth_flow_grants
-  set consumed_at = now(),
-      session_id = v_session_id
-  where user_id = v_uid
-    and purpose = p_purpose
-    and consumed_at is null
-    and expires_at > now();
-
-  get diagnostics v_rows = row_count;
-
-  if v_rows <> 1 then
-    return false;
-  end if;
-
-  -- Auditoria de confirmação DENTRO da mesma transação do consumo: se
-  -- este insert falhar (ex.: constraint violada), toda a função — o
-  -- UPDATE acima incluído — sofre rollback automaticamente (nenhuma
-  -- exceção é capturada aqui). Não existe RPC separada de auditoria
-  -- para um cliente chamar isoladamente (fecha BUG-RT2-005 para este
-  -- evento) — o único jeito de gerar esta linha é consumir um grant
-  -- real.
-  if p_purpose = 'email_confirmation' then
-    insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
-    values (v_uid, null, 'email_verification_completed', 'auth_user', v_uid::text, '{}'::jsonb);
-  end if;
-
-  return true;
-end;
-$$;
-
-comment on function public.consume_auth_flow_grant(text) is
-  'Único ponto que ATIVA um grant. Chamada por app/auth/confirm/route.ts (purpose=email_confirmation) e app/auth/recovery/route.ts (purpose=password_recovery) logo após a troca de código bem-sucedida. UPDATE condicional atômico (mesma linha do WHERE: usuário, propósito, não consumido, não expirado) — sem sequência "consultar depois consumir". false = nada para consumir (sessão comum, propósito trocado, expirado ou já consumido); a rota deve encerrar a sessão imediatamente nesse caso, nunca deixá-la ativa.';
-
-revoke all on function public.consume_auth_flow_grant(text) from public;
-grant execute on function public.consume_auth_flow_grant(text) to authenticated;
-
--- ============================================================
--- 4. Reivindicação atômica para a TROCA DE SENHA em si (segundo passo,
---    depois do consumo em 3) — DELETE condicional: só remove a linha se
---    ela já estiver consumida (mesma sessão) e ainda presente. Sob duas
---    requisições concorrentes com a mesma sessão, o lock de linha do
---    Postgres serializa as duas: a primeira a commitar apaga a linha; a
---    segunda, ao reavaliar o WHERE após o lock liberar, não encontra
---    mais nada e recebe false. Isso é o que garante "exatamente uma
---    autorização" sob concorrência real (BUG-RT2-002).
--- ============================================================
-
-create or replace function public.claim_recovery_grant_for_password_change()
-returns boolean
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_uid uuid := auth.uid();
-  v_session_id uuid := nullif(auth.jwt() ->> 'session_id', '')::uuid;
-  v_rows int;
-begin
-  if v_uid is null or v_session_id is null then
-    return false;
-  end if;
-
-  delete from public.auth_flow_grants
+  delete from public.password_recovery_grants
   where user_id = v_uid
     and session_id = v_session_id
-    and purpose = 'password_recovery'
-    and consumed_at is not null
+    and nonce_hash = encode(extensions.digest(p_nonce, 'sha256'), 'hex')
     and expires_at > now();
 
   get diagnostics v_rows = row_count;
@@ -287,6 +239,9 @@ begin
     return false;
   end if;
 
+  -- Auditoria DENTRO da mesma transação do consumo: falha no insert
+  -- derruba a função inteira (o DELETE acima incluído) via rollback
+  -- automático — nenhuma exceção é capturada aqui.
   insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
   values (v_uid, null, 'password_recovery_completed', 'auth_user', v_uid::text, '{}'::jsonb);
 
@@ -294,18 +249,16 @@ begin
 end;
 $$;
 
-comment on function public.claim_recovery_grant_for_password_change() is
-  'Chamada por app/(auth)/reset-password/actions.ts IMEDIATAMENTE ANTES de supabase.auth.updateUser({password}) — nunca depois. false = nada a reivindicar (sem sessão de recuperação válida, grant já usado por outra requisição concorrente, ou expirado): a Server Action deve recusar a troca sem chamar updateUser(). Se updateUser() falhar DEPOIS de um claim bem-sucedido, o grant já foi apagado — não há como "devolver"; a Server Action deve falhar com segurança e orientar a exigir uma nova recuperação (nunca reutilizar o mesmo grant).';
+comment on function public.claim_recovery_grant_for_password_change(text) is
+  'Chamada por app/(auth)/reset-password/actions.ts IMEDIATAMENTE ANTES de supabase.auth.updateUser({password}) — nunca depois. Exige simultaneamente: auth.uid() = user_id do grant, session_id da sessão atual = session_id gravado na emissão, e o nonce correto (lido do cookie HttpOnly RECOVERY_NONCE_COOKIE por lib/tenant/recovery-session.ts) — uma sessão comum sem esse cookie específico não reivindica nada, mesmo sabendo que um grant existe. false = nada a reivindicar (sem grant válido, nonce incorreto, já reivindicado por outra requisição concorrente, ou expirado): a Server Action deve recusar a troca sem chamar updateUser(). Se updateUser() falhar DEPOIS de um claim bem-sucedido, o grant já foi apagado — não há como "devolvê-lo"; a Server Action deve falhar com segurança e exigir uma nova recuperação.';
 
-revoke all on function public.claim_recovery_grant_for_password_change() from public;
-grant execute on function public.claim_recovery_grant_for_password_change() to authenticated;
+revoke all on function public.claim_recovery_grant_for_password_change(text) from public;
+grant execute on function public.claim_recovery_grant_for_password_change(text) to authenticated;
 
 -- ============================================================
--- 5. Checagem de leitura (GET /reset-password, guards, proxy.ts): a
---    sessão ATUAL está em modo de recuperação? Só verdadeiro entre o
---    consumo (passo 3) e a reivindicação para troca de senha (passo 4)
---    — depois do passo 4 a linha não existe mais, então isto some
---    sozinho.
+-- 4. Checagem de leitura (GET /reset-password, guards de middleware): a
+--    sessão ATUAL está em modo de recuperação? Não exige o nonce (só
+--    gate de UI — a autorização real de escrita vive no claim acima).
 -- ============================================================
 
 create or replace function public.is_current_session_recovery_grant()
@@ -317,17 +270,15 @@ set search_path = ''
 as $$
   select exists (
     select 1
-    from public.auth_flow_grants
+    from public.password_recovery_grants
     where user_id = auth.uid()
-      and purpose = 'password_recovery'
       and session_id = nullif(auth.jwt() ->> 'session_id', '')::uuid
-      and consumed_at is not null
       and expires_at > now()
   );
 $$;
 
 comment on function public.is_current_session_recovery_grant() is
-  'Usada por lib/tenant/recovery-session.ts (isCurrentSessionRecovery) — zero parâmetros, lê só auth.uid()/auth.jwt() da própria sessão chamando. Substitui a checagem anterior baseada em SELECT direto em recovery_grants (que exigia GRANT de tabela para authenticated — removido nesta correção).';
+  'Usada por lib/tenant/recovery-session.ts (isCurrentSessionRecovery) para decidir se a sessão ATUAL deve ver o formulário de troca de senha — zero parâmetros, lê só auth.uid()/auth.jwt() da própria sessão chamando. Só true entre a emissão real (issue_password_recovery_grant, depois de verifyOtp) e a reivindicação (claim_recovery_grant_for_password_change) — depois do claim a linha não existe mais.';
 
 revoke all on function public.is_current_session_recovery_grant() from public;
 grant execute on function public.is_current_session_recovery_grant() to authenticated;

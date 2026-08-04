@@ -1059,3 +1059,143 @@ Log completo do servidor de desenvolvimento desta sessão e do container do GoTr
 7. `bash supabase/tests/migration-upgrade-check.sh` (requer bash/Docker; restaura o ambiente ao final).
 8. Navegador real, sempre `http://127.0.0.1:3000`: repetir a reprodução exata do BUG-RT2-001 (sessão comum → `GET /reset-password` → deve mostrar "Link inválido"), e o fluxo completo de recuperação via Mailpit.
 9. **Esta remediação não deve ser considerada aprovada por esta entrega** — cabe exclusivamente ao QA independente do Júnior decidir o resultado.
+
+---
+
+## Terceira correção pós-QA — revisão externa sobre qa/reports/TASK-002-CLAUDE-VERIFICATION.md (BUG-CLAUDE-001/002/003)
+
+O Júnior estava temporariamente indisponível nesta rodada; a verificação adversarial foi feita pelo próprio Claude Code
+(`qa/reports/TASK-002-CLAUDE-VERIFICATION.md`, commit `3e0548e51567f188c1bbe2bc405fb7b907806229`) e a revisão externa
+(decisão de reprovação e escopo de correção) foi feita pelo ChatGPT. Este documento registra só os fatos técnicos da
+remediação — a decisão de aprovação continua fora do escopo deste arquivo.
+
+### Causa-raiz confirmada (BUG-CLAUDE-001, CRÍTICO)
+
+`consume_auth_flow_grant(purpose)` só verificava "existe um pedido pendente para este `auth.uid()`+propósito" — nunca
+que a sessão chamadora tinha sido produzida por uma troca de código real vinculada àquele pedido. Como
+`request_password_recovery_grant` podia ser chamada diretamente por qualquer sessão `authenticated` para o próprio
+e-mail, uma sessão de login comum conseguia: `request_password_recovery_grant(próprio e-mail)` →
+`consume_auth_flow_grant('password_recovery')` → `claim_recovery_grant_for_password_change()` →
+`updateUser({password})` — trocando a própria senha sem jamais tocar num e-mail de recuperação real. O mesmo padrão,
+aplicado a `email_confirmation`, permitia fabricar o evento de auditoria `email_verification_completed` sem passar
+pela rota `/auth/confirm` (BUG-CLAUDE-002). `request_password_recovery_grant` sendo uma RPC pública sem rate limit
+próprio também permitia griefing do grant pendente de terceiros (BUG-CLAUDE-003).
+
+### Arquitetura final
+
+- **Confirmação de cadastro**: `app/auth/confirm/route.ts` só aceita `token_hash` (não mais `code`/PKCE genérico) e
+  chama `supabase.auth.verifyOtp({ type: "signup", token_hash })` com `type` HARDCODED pela rota — nunca lido da
+  query string. O GoTrue só valida com sucesso se aquele `token_hash` foi de fato emitido como `signup`. Não existe
+  mais nenhuma RPC de "registrar confirmação": `email_confirmed_at` é gravado pelo próprio GoTrue dentro do
+  `verifyOtp`, e o evento `email_verification_completed` nasce de um TRIGGER em `auth.users`
+  (`handle_email_confirmed_audit`, `supabase/migrations/0004_account_audit.sql`) que só dispara na transição real
+  `email_confirmed_at: null -> not null` — sem EXECUTE para nenhum papel, só o mecanismo de trigger do Postgres o
+  invoca.
+- **Recuperação de senha**: `app/auth/recovery/route.ts` só aceita `token_hash`, chama `verifyOtp({type:"recovery"})`
+  com `type` igualmente hardcoded. Depois de uma verificação REAL, chama
+  `lib/supabase/service-only/recovery-grant-issuer.ts` (`issuePasswordRecoveryGrant`) — módulo server-only isolado,
+  usado exclusivamente aqui, que chama `issue_password_recovery_grant` no banco com um cliente `service_role`
+  construído localmente (não reaproveita `lib/supabase/admin.ts`, que é genérico e proibido em código de fluxo de
+  usuário desde BUG-T2-004). `user_id`/`session_id` vêm da própria resposta do GoTrue a esta chamada de `verifyOtp`
+  (via `supabase.auth.getClaims()`), nunca de um parâmetro de cliente. Um nonce de 256 bits é gerado em
+  `crypto.randomBytes(32)`, devolvido num cookie HttpOnly `sb-recovery-nonce` (`path=/reset-password`,
+  `secure` em produção, `sameSite=lax`) — só o HASH (`extensions.digest(nonce, 'sha256')`) é gravado no banco.
+  `app/(auth)/reset-password/actions.ts` lê o cookie e passa o nonce a
+  `claim_recovery_grant_for_password_change(p_nonce)`, que exige simultaneamente `auth.uid()`, `session_id` (do
+  `auth.jwt()`) e o hash do nonce batendo — um DELETE condicional atômico, garantindo exatamente uma reivindicação
+  sob concorrência real (testado com 5 tentativas simultâneas, ver abaixo). Se a emissão do grant falhar depois de um
+  `verifyOtp` bem-sucedido, a sessão é encerrada (`signOut()`) antes do redirecionamento — nunca sobra uma sessão
+  "verificada como recovery" sem o grant que a restringe.
+- **Pedido de recuperação**: `app/(auth)/forgot-password/actions.ts` volta a fazer só uma coisa — chamar
+  `resetPasswordForEmail`, sob rate limit e CAPTCHA da aplicação. Não cria mais nenhuma linha/grant.
+- **Templates de e-mail customizados**: `supabase/config.toml` (`[auth.email.template.confirmation]`/`[auth.email.template.recovery]`)
+  aponta `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup` e
+  `{{ .SiteURL }}/auth/recovery?token_hash={{ .TokenHash }}&type=recovery` diretamente para as rotas do app — os
+  links não passam mais pelo endpoint `/auth/v1/verify` hospedado pelo GoTrue nem produzem um `code` PKCE genérico
+  (verificado empiricamente: `verifyOtp` com `token_hash` não depende de nenhum cookie `code_verifier`, então este
+  fluxo é mais simples que o PKCE anterior). O `type` na query string dos links é só cosmético/informativo — as rotas
+  nunca o leem.
+
+### Privilégios SQL — resumo do que mudou nesta rodada
+
+| Objeto | Antes (commit reprovado) | Depois |
+|---|---|---|
+| `public.auth_flow_grants` (tabela) | Existia, zero grant de cliente | **Removida por completo** (`drop table if exists`) |
+| `public.password_recovery_grants` (tabela, nova) | — | Zero grant para `anon`/`authenticated`; `service_role`: SELECT/INSERT/UPDATE/DELETE (uso administrativo, RLS sem policy); `nonce_hash` com `CHECK` de formato hex/sha256 |
+| `request_password_recovery_grant(text)` | EXECUTE: `anon`, `authenticated` | **Removida por completo** |
+| `consume_auth_flow_grant(text)` | EXECUTE: `authenticated` | **Removida por completo** |
+| `issue_password_recovery_grant(uuid, uuid, text, integer)` (nova) | — | EXECUTE: **só `service_role`** — nenhum GRANT para `anon`/`authenticated`/`PUBLIC` |
+| `claim_recovery_grant_for_password_change()` (0 parâmetros) | EXECUTE: `authenticated` | **Removida** (assinatura antiga dropada explicitamente) |
+| `claim_recovery_grant_for_password_change(text)` (nova, aceita nonce) | — | EXECUTE: `authenticated` (nunca `anon`) |
+| `is_current_session_recovery_grant()` | EXECUTE: `authenticated` | Inalterada (mesma assinatura, corpo aponta para a tabela nova) |
+| `handle_new_user_confirmation_grant()` (trigger em `auth.users`) | Nenhum EXECUTE direto | **Removida por completo**, junto com o trigger `on_auth_user_created_confirmation_grant` |
+| `handle_email_confirmed_audit()` (trigger em `auth.users`, novo) | — | Nenhum EXECUTE direto — só invocável pelo trigger `on_auth_user_email_confirmed` (dispara em `email_confirmed_at: null -> not null`) |
+
+### Arquivos criados, modificados e removidos
+
+- **Criados**: `lib/supabase/service-only/recovery-grant-issuer.ts`; `supabase/templates/confirmation.html`;
+  `supabase/templates/recovery.html`; `supabase/tests/bug-claude-001-regression-check.ts` (reproduz a cadeia de
+  ataque original ponta a ponta e prova que ela falha em todo passo, incluindo concorrência real com 5 tentativas).
+- **Modificados**: `supabase/migrations/0003_recovery_session.sql` (reescrita completa); `0004_account_audit.sql`
+  (novo trigger de auditoria de confirmação); `app/auth/confirm/route.ts`; `app/auth/recovery/route.ts`;
+  `app/(auth)/forgot-password/actions.ts`; `app/(auth)/reset-password/actions.ts`;
+  `lib/tenant/recovery-session.ts` (e seu teste); `lib/supabase/types.ts` (tipos manuais, não gerados pela CLI —
+  ver comentário no topo do arquivo); `supabase/config.toml` (templates de e-mail); `proxy.ts`/`reset-password/page.tsx`
+  (só comentários); `supabase/tests/onboarding_isolation_check.sql` (Casos 17-27 reescritos, `29` cenários no total
+  agora); `supabase/tests/auth-flow-purpose-check.ts` e `recovery-claim-concurrency-check.ts` (reescritos para não
+  usar mais a cadeia vulnerável como setup de teste); `supabase/tests/migration-upgrade-check.sh` (checa as novas
+  funções); `supabase/migrations/0003_recovery_session.privileges.test.ts` e
+  `0004_account_audit.privileges.test.ts` (reescritos).
+- **Removidos**: nenhum arquivo — só conteúdo dentro dos arquivos acima.
+
+### Resultados reais desta rodada (não copiados de rodadas anteriores)
+
+| Gate | Resultado |
+|---|---|
+| `npm test` | **225/225** (22 arquivos) |
+| `npm run lint` | OK |
+| `npx tsc --noEmit` | OK |
+| `npm run build` | OK |
+| `npm audit` / `npm audit --omit=dev` | 0 vulnerabilidades em ambos |
+| `supabase/tests/isolation_check.sql` (TASK-001) | **7/7 PASS** |
+| `supabase/tests/onboarding_isolation_check.sql` (29 cenários) | **40/40 asserts PASS**, 0 FAIL, 0 ERROR |
+| `supabase/tests/auth-flow-purpose-check.ts` (reescrito, sem PKCE) | **4/4 PASS** |
+| `supabase/tests/recovery-claim-concurrency-check.ts` (reescrito, sem bypass no setup) | PASS |
+| `supabase/tests/slug-concurrency-check.ts` | PASS |
+| `supabase/tests/bug-claude-001-regression-check.ts` (novo) | **PASS**, incluindo concorrência real com 5 tentativas simultâneas |
+| `supabase/tests/migration-upgrade-check.sh` | PASS (banco limpo e upgrade real desde a 0002 com dado histórico) |
+| Navegador real (login → onboarding) | Sessão persiste e onboarding renderiza corretamente |
+
+### Limitação encontrada e não corrigida nesta rodada (ambiente local, não é uma regressão desta correção)
+
+Ao navegar manualmente para `/auth/confirm`/`/auth/recovery` via `http://127.0.0.1:3000` no navegador de automação
+desta sessão, o `next dev` às vezes constrói o cabeçalho `Location` do redirect final usando `localhost` em vez de
+`127.0.0.1` (`request.url` dentro do Route Handler), fazendo o cookie de sessão (escopado a `127.0.0.1`) não
+acompanhar o navegador para o destino final. Confirmado que **não é uma regressão desta correção**: o helper
+`redirectTo()`/`new URL(path, request.url)` é idêntico, linha a linha, ao código já presente no commit reprovado
+(`f038c7d`). Também confirmado, via `fetch` same-origin dentro da página, que se trata de um redirect
+verdadeiramente cross-origin (não só um rótulo cosmético da aba) — a mesma característica já registrada
+anteriormente neste documento (linha ~929) para a ferramenta de navegador usada nas validações, com a mesma
+recomendação de sempre usar `127.0.0.1` explicitamente e, se necessário, validar via `fetch`/`curl` com cookie jar
+próprio (como os scripts em `supabase/tests/` já fazem) em vez de depender só da barra de endereço do navegador de
+automação. Login (Server Action, sem essa construção de URL) funciona normalmente em navegador real, confirmado
+nesta sessão — a sessão persiste e o onboarding renderiza corretamente.
+
+### Instruções para o próximo QA (Júnior ou revisão externa)
+
+1. Commit a validar: hash informado ao final desta sessão.
+2. `npx supabase stop && npx supabase start && npx supabase db reset --local && npm run seed:local` (reinício
+   completo necessário — os templates de e-mail customizados só são recarregados por `supabase start`, não por
+   `db reset` sozinho).
+3. `npm run lint && npx tsc --noEmit && npm test && npm run build && npm audit && npm audit --omit=dev`.
+4. `docker exec -i <container_postgres> psql -U postgres -d postgres -f supabase/tests/isolation_check.sql` (7/7,
+   substituir os 3 placeholders de UUID) e `-f supabase/tests/onboarding_isolation_check.sql` (29 cenários).
+5. `npx tsx supabase/tests/slug-concurrency-check.ts`, `recovery-claim-concurrency-check.ts` e
+   `bug-claude-001-regression-check.ts` (novo — reproduz o ataque original e prova que falha).
+6. Com o Next.js rodando (`npm run dev -- --port 3000`): `npx tsx supabase/tests/auth-flow-purpose-check.ts` (4/4).
+7. `bash supabase/tests/migration-upgrade-check.sh`.
+8. Navegador real: preferir testar via `fetch`/cookie jar (como os scripts acima) para os passos que envolvem
+   `/auth/confirm`/`/auth/recovery` diretamente, dada a limitação de ambiente documentada acima; login normal
+   (`/login`) e onboarding funcionam normalmente em navegador real.
+9. **Esta remediação não deve ser considerada aprovada por esta entrega** — cabe exclusivamente à revisão externa
+   decidir o resultado. Não fazer merge, não mover TASK-002 para DONE.

@@ -66,3 +66,45 @@ revoke update, delete on public.audit_log from service_role;
 
 drop function if exists public.log_email_verification_completed();
 drop function if exists public.log_password_recovery_completed();
+
+-- ============================================================
+-- Terceira correção pós-QA (revisão externa sobre
+-- qa/reports/TASK-002-CLAUDE-VERIFICATION.md, BUG-CLAUDE-002): o evento
+-- email_verification_completed deixa de nascer de uma RPC
+-- (consume_auth_flow_grant('email_confirmation'), removida em
+-- supabase/migrations/0003_recovery_session.sql) chamável por qualquer
+-- sessão com um grant pendente, e passa a nascer de uma TRANSIÇÃO REAL
+-- em auth.users: email_confirmed_at indo de null para não-null. Só o
+-- próprio GoTrue grava essa coluna (dentro de
+-- supabase.auth.verifyOtp({type:"signup", token_hash}) com um token_hash
+-- real — ver app/auth/confirm/route.ts) — nenhum cliente, mesmo
+-- authenticated, tem como fabricar essa transição chamando uma função
+-- diretamente. A cláusula WHEN garante exatamente um disparo por
+-- confirmação (a coluna só transiciona null -> not null uma vez), sem
+-- exigir nenhuma RPC pública de "registrar confirmação".
+-- ============================================================
+
+create or replace function public.handle_email_confirmed_audit()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
+  values (new.id, null, 'email_verification_completed', 'auth_user', new.id::text, '{}'::jsonb);
+  return new;
+end;
+$$;
+
+comment on function public.handle_email_confirmed_audit() is
+  'Dispara em AFTER UPDATE em auth.users, só quando email_confirmed_at transiciona de null para não-null (ver cláusula WHEN do trigger) — nunca por uma chamada de cliente. Substitui a antiga consume_auth_flow_grant(''email_confirmation''), que era uma RPC authenticated chamável a qualquer momento contra um grant pendente automático, sem provar que a rota /auth/confirm de fato validou um token real (BUG-CLAUDE-002, qa/reports/TASK-002-CLAUDE-VERIFICATION.md).';
+
+revoke all on function public.handle_email_confirmed_audit() from public;
+
+drop trigger if exists on_auth_user_email_confirmed on auth.users;
+create trigger on_auth_user_email_confirmed
+  after update on auth.users
+  for each row
+  when (old.email_confirmed_at is null and new.email_confirmed_at is not null)
+  execute function public.handle_email_confirmed_audit();

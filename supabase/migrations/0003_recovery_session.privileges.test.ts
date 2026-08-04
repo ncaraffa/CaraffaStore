@@ -4,11 +4,20 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Guarda de regressão por análise estática para
- * supabase/migrations/0003_recovery_session.sql — a reescrita completa
- * do mecanismo de prova de finalidade depois do reteste do Júnior
- * (qa/reports/TASK-002-RETEST.md). Cobre especificamente os
- * bloqueadores 1 a 5 (BUG-RT2-001 a 005) e os requisitos 1-4/14 da
- * lista de testes regressivos obrigatórios daquele relatório.
+ * supabase/migrations/0003_recovery_session.sql — a terceira reescrita
+ * do mecanismo de prova de finalidade, depois da revisão externa sobre
+ * qa/reports/TASK-002-CLAUDE-VERIFICATION.md (BUG-CLAUDE-001/002/003).
+ * Cobre especificamente:
+ *
+ *   - BUG-CLAUDE-001: emissão do grant de recuperação só por
+ *     service_role, nunca por RPC pública; claim exige nonce + session_id
+ *     + user_id simultaneamente.
+ *   - BUG-CLAUDE-003: nenhuma RPC de "pedir recuperação" concede EXECUTE
+ *     a anon/authenticated (a antiga request_password_recovery_grant foi
+ *     removida por completo).
+ *   - O desenho antigo (auth_flow_grants, consume_auth_flow_grant,
+ *     handle_new_user_confirmation_grant) é explicitamente DROPADO, não
+ *     só deixado de lado.
  */
 
 const migrationPath = path.resolve(import.meta.dirname, "0003_recovery_session.sql");
@@ -18,138 +27,144 @@ const sql = raw
   .map((line) => line.replace(/--.*$/, ""))
   .join("\n");
 
-describe("supabase/migrations/0003_recovery_session.sql — auth_flow_grants sem nenhum grant de tabela para cliente", () => {
+describe("supabase/migrations/0003_recovery_session.sql — desenho antigo (auth_flow_grants) removido por completo", () => {
+  it("dropa o trigger/função de confirmação automática, request/consume da versão anterior e a tabela auth_flow_grants", () => {
+    expect(sql).toContain("drop trigger if exists on_auth_user_created_confirmation_grant on auth.users");
+    expect(sql).toContain("drop function if exists public.handle_new_user_confirmation_grant()");
+    expect(sql).toContain("drop function if exists public.request_password_recovery_grant(text)");
+    expect(sql).toContain("drop function if exists public.consume_auth_flow_grant(text)");
+    expect(sql).toContain("drop table if exists public.auth_flow_grants");
+  });
+
+  it("dropa explicitamente a assinatura antiga (zero parâmetros) de claim_recovery_grant_for_password_change — nenhum overload órfão sobrevive", () => {
+    expect(sql).toContain("drop function if exists public.claim_recovery_grant_for_password_change()");
+  });
+
+  it("nenhuma RPC de emissão/consumo do desenho antigo (request_password_recovery_grant/consume_auth_flow_grant) é recriada nesta migração", () => {
+    expect(sql).not.toMatch(/create or replace function public\.request_password_recovery_grant/);
+    expect(sql).not.toMatch(/create or replace function public\.consume_auth_flow_grant/);
+    expect(sql).not.toMatch(/create or replace function public\.handle_new_user_confirmation_grant/);
+  });
+});
+
+describe("supabase/migrations/0003_recovery_session.sql — password_recovery_grants sem nenhum grant de tabela para cliente", () => {
   it("revoga TUDO de public/anon/authenticated/service_role antes de conceder de volta", () => {
     expect(sql).toContain(
-      "revoke all on public.auth_flow_grants from public, anon, authenticated, service_role",
+      "revoke all on public.password_recovery_grants from public, anon, authenticated, service_role",
     );
   });
 
-  it("nenhum GRANT de tabela para anon nem authenticated — requisito 1: authenticated não consegue inserir/alterar/apagar diretamente", () => {
+  it("nenhum GRANT de tabela para anon nem authenticated", () => {
     const grantLines = sql.split(";").filter((stmt) => /^\s*grant\s+(select|insert|update|delete)/.test(stmt.trimStart()));
     const clientGrant = grantLines.find(
       (stmt) =>
-        /\bon\s+public\.auth_flow_grants\b/.test(stmt) &&
+        /\bon\s+public\.password_recovery_grants\b/.test(stmt) &&
         (/\bto\b[^;]*\banon\b/.test(stmt) || /\bto\b[^;]*\bauthenticated\b/.test(stmt)),
     );
     expect(clientGrant).toBeUndefined();
   });
 
   it("só service_role recebe grant de tabela (uso administrativo)", () => {
-    expect(sql).toContain("grant select, insert, update, delete on public.auth_flow_grants to service_role");
+    expect(sql).toContain("grant select, insert, update, delete on public.password_recovery_grants to service_role");
   });
 
-  it("RLS habilitada, sem nenhuma policy criada (nem authenticated bypassa via RLS — requisito 1: não confiar só em RLS)", () => {
-    expect(sql).toContain("alter table public.auth_flow_grants enable row level security");
-    expect(sql).not.toMatch(/create policy[^;]*auth_flow_grants/);
+  it("RLS habilitada, sem nenhuma policy criada", () => {
+    expect(sql).toContain("alter table public.password_recovery_grants enable row level security");
+    expect(sql).not.toMatch(/create policy[^;]*password_recovery_grants/);
   });
 
-  it("expires_at é NOT NULL (obrigatório) e há colunas purpose/session_id/consumed_at", () => {
+  it("expires_at/session_id/nonce_hash são NOT NULL; um grant por usuário (unique)", () => {
     expect(sql).toMatch(/expires_at timestamptz not null/);
-    expect(sql).toContain("purpose text not null check (purpose in ('email_confirmation', 'password_recovery'))");
-    expect(sql).toContain("session_id uuid,");
-    expect(sql).toContain("consumed_at timestamptz");
+    expect(sql).toContain("session_id uuid not null");
+    expect(sql).toContain("nonce_hash text not null");
+    expect(sql).toContain("constraint password_recovery_grants_user_unique unique (user_id)");
   });
 
-  it("um pedido pendente por usuário e propósito (unique constraint)", () => {
-    expect(sql).toContain("constraint auth_flow_grants_user_purpose_unique unique (user_id, purpose)");
+  it("nonce_hash tem uma constraint de formato (hex sha256) — nunca aceita o nonce em texto puro", () => {
+    expect(sql).toMatch(/constraint password_recovery_grants_nonce_hash_format check \(nonce_hash ~/);
   });
 });
 
-describe("emissão de grant — requisito 3: nenhuma RPC de emissão chamável por authenticated concede acesso sozinha", () => {
-  it("confirmação de cadastro nasce só de um TRIGGER em auth.users — nenhuma RPC equivalente existe", () => {
-    expect(sql).toContain("after insert on auth.users");
-    expect(sql).toContain("execute function public.handle_new_user_confirmation_grant()");
-    // A função do trigger não recebe NENHUM grant de execução direto —
-    // só é invocável pelo próprio mecanismo de trigger do Postgres.
-    expect(sql).not.toMatch(/grant execute[^;]*handle_new_user_confirmation_grant/);
-  });
-
-  it("request_password_recovery_grant só aceita p_email — nunca user_id/session_id vindo do cliente (requisito 2)", () => {
-    expect(sql).toContain("create or replace function public.request_password_recovery_grant(p_email text)");
-    expect(sql).not.toMatch(/request_password_recovery_grant\([^)]*user_id/);
-    expect(sql).not.toMatch(/request_password_recovery_grant\([^)]*session_id/);
-  });
-
-  it("request_password_recovery_grant resolve o usuário pelo e-mail internamente (select ... from auth.users), nunca aceita o id pronto", () => {
-    expect(sql).toContain("select id into v_uid from auth.users where lower(email) = lower(trim(p_email))");
-  });
-
-  it("EXECUTE de request_password_recovery_grant concedido a anon e authenticated (fluxo pré-autenticação)", () => {
+describe("emissão — requisito BUG-CLAUDE-001/003: só service_role emite, nenhuma RPC pública de 'pedir recuperação'", () => {
+  it("issue_password_recovery_grant aceita user_id/session_id/nonce/ttl — mas EXECUTE é só para service_role", () => {
     expect(sql).toContain(
-      "grant execute on function public.request_password_recovery_grant(text) to anon, authenticated",
+      "create or replace function public.issue_password_recovery_grant(\n  p_user_id uuid,\n  p_session_id uuid,\n  p_nonce text,\n  p_ttl_seconds integer default 1800\n)",
+    );
+    expect(sql).toContain(
+      "grant execute on function public.issue_password_recovery_grant(uuid, uuid, text, integer) to service_role",
     );
   });
-});
 
-describe("consumo/reivindicação — requisito 14: nenhuma função aceita nonce/user_id/session_id do cliente", () => {
-  it("consume_auth_flow_grant só aceita p_purpose — usa auth.uid()/auth.jwt() internamente, nunca um id vindo do cliente", () => {
-    expect(sql).toContain("create or replace function public.consume_auth_flow_grant(p_purpose text)");
-    expect(sql).not.toMatch(/consume_auth_flow_grant\([^)]*user_id/);
-    expect(sql).not.toMatch(/consume_auth_flow_grant\([^)]*session_id/);
-    expect(sql).not.toMatch(/consume_auth_flow_grant\([^)]*nonce/);
-    expect(sql).toContain("v_uid uuid := auth.uid()");
+  it("EXECUTE de issue_password_recovery_grant NUNCA concedido a anon/authenticated/PUBLIC", () => {
+    const grantLines = sql.split(";").filter((stmt) => /^\s*grant execute\s/.test(stmt.trimStart()));
+    const clientGrant = grantLines.find(
+      (stmt) =>
+        /\bissue_password_recovery_grant\b/.test(stmt) &&
+        (/\bto\b[^;]*\banon\b/.test(stmt) || /\bto\b[^;]*\bauthenticated\b/.test(stmt) || /\bto\b[^;]*\bpublic\b/.test(stmt)),
+    );
+    expect(clientGrant).toBeUndefined();
   });
 
-  it("claim_recovery_grant_for_password_change não aceita NENHUM parâmetro", () => {
-    expect(sql).toContain("create or replace function public.claim_recovery_grant_for_password_change()\nreturns boolean");
+  it("issue_password_recovery_grant valida ttl_seconds defensivamente (nunca aceita um valor absurdo, mesmo do próprio código server-side)", () => {
+    expect(sql).toMatch(/p_ttl_seconds is null or p_ttl_seconds <= 0 or p_ttl_seconds > 3600/);
+  });
+
+  it("hash do nonce gravado via extensions.digest(..., 'sha256') — nunca o nonce em texto puro", () => {
+    expect(sql).toMatch(/encode\(extensions\.digest\(p_nonce, 'sha256'\), 'hex'\)/);
+  });
+
+  it("nenhuma RPC pública equivalente a 'request_password_recovery_grant' existe nesta migração (BUG-CLAUDE-003)", () => {
+    expect(sql).not.toMatch(/create or replace function public\.request_password_recovery_grant/);
+  });
+});
+
+describe("reivindicação/leitura — requisito BUG-CLAUDE-001: nonce + session_id + user_id simultâneos, nunca vindos livremente do cliente", () => {
+  it("claim_recovery_grant_for_password_change aceita p_nonce — usa auth.uid()/auth.jwt() internamente para user_id/session_id, nunca um id vindo do cliente", () => {
+    expect(sql).toContain("create or replace function public.claim_recovery_grant_for_password_change(p_nonce text)");
+    expect(sql).not.toMatch(/claim_recovery_grant_for_password_change\([^)]*user_id/);
+    expect(sql).not.toMatch(/claim_recovery_grant_for_password_change\([^)]*session_id/);
+    expect(sql).toContain("v_uid uuid := auth.uid()");
+    expect(sql).toContain("v_session_id uuid := nullif(auth.jwt() ->> 'session_id', '')::uuid");
+  });
+
+  it("claim exige nonce_hash correto no WHERE do DELETE — sem ele, uma sessão com grant pendente de verdade ainda não reivindica nada", () => {
+    expect(sql).toMatch(/and nonce_hash = encode\(extensions\.digest\(p_nonce, 'sha256'\), 'hex'\)/);
   });
 
   it("is_current_session_recovery_grant não aceita NENHUM parâmetro", () => {
     expect(sql).toContain("create or replace function public.is_current_session_recovery_grant()\nreturns boolean");
   });
 
-  it("EXECUTE de consume/claim/is_current_session só para authenticated, nunca anon nem PUBLIC", () => {
-    for (const fn of [
-      "consume_auth_flow_grant(text)",
-      "claim_recovery_grant_for_password_change()",
-      "is_current_session_recovery_grant()",
-    ]) {
+  it("EXECUTE de claim/is_current_session só para authenticated, nunca anon nem PUBLIC", () => {
+    for (const fn of ["claim_recovery_grant_for_password_change(text)", "is_current_session_recovery_grant()"]) {
       const escaped = fn.replace(/[()]/g, (c) => `\\${c}`);
       expect(sql).toMatch(new RegExp(`grant execute on function public\\.${escaped} to authenticated`));
     }
     const grantLines = sql.split(";").filter((stmt) => /^\s*grant execute\s/.test(stmt.trimStart()));
     const anonGrant = grantLines.find(
       (stmt) =>
-        /\b(consume_auth_flow_grant|claim_recovery_grant_for_password_change|is_current_session_recovery_grant)\b/.test(
-          stmt,
-        ) && /\bto\b[^;]*\banon\b/.test(stmt),
+        /\b(claim_recovery_grant_for_password_change|is_current_session_recovery_grant)\b/.test(stmt) &&
+        /\bto\b[^;]*\banon\b/.test(stmt),
     );
     expect(anonGrant).toBeUndefined();
   });
 
-  it("todas as funções novas revogam de PUBLIC antes de conceder (EXECUTE não fica implícito a PUBLIC — bloqueador 5)", () => {
+  it("todas as funções novas revogam de PUBLIC antes de conceder (EXECUTE não fica implícito a PUBLIC)", () => {
     const occurrences = sql.match(/revoke all on function[^;]*from public/g) ?? [];
-    // handle_new_user_confirmation_grant, request_password_recovery_grant,
-    // consume_auth_flow_grant, claim_recovery_grant_for_password_change,
-    // is_current_session_recovery_grant = 5 funções.
-    expect(occurrences.length).toBe(5);
+    // issue_password_recovery_grant, claim_recovery_grant_for_password_change,
+    // is_current_session_recovery_grant = 3 funções nesta migração
+    // (handle_email_confirmed_audit vive em 0004_account_audit.sql).
+    expect(occurrences.length).toBe(3);
   });
 });
 
-describe("atomicidade — requisito 16/19: consumo em UPDATE/DELETE único, sem consultar-depois-agir, auditoria dentro da mesma transação", () => {
-  it("consume_auth_flow_grant faz um UPDATE condicional único (consumed_at is null and expires_at > now()) — sem SELECT prévio separado", () => {
-    expect(sql).toContain("update public.auth_flow_grants\n  set consumed_at = now()");
-    expect(sql).toMatch(/and consumed_at is null\s*\n\s*and expires_at > now\(\)/);
+describe("atomicidade — DELETE único, sem consultar-depois-agir, auditoria dentro da mesma transação", () => {
+  it("claim_recovery_grant_for_password_change faz um DELETE condicional único (session_id + nonce_hash + expires_at) — sem SELECT prévio separado", () => {
+    expect(sql).toContain("delete from public.password_recovery_grants");
+    expect(sql).toMatch(/and nonce_hash = encode\(extensions\.digest\(p_nonce, 'sha256'\), 'hex'\)\s*\n\s*and expires_at > now\(\)/);
   });
 
-  it("claim_recovery_grant_for_password_change faz um DELETE condicional único (consumed_at is not null and expires_at > now())", () => {
-    expect(sql).toContain("delete from public.auth_flow_grants");
-    expect(sql).toMatch(/and consumed_at is not null\s*\n\s*and expires_at > now\(\)/);
-  });
-
-  it("auditoria é inserida DENTRO das mesmas funções (sem exception handler ao redor) — falha no insert derruba toda a função (requisito 19)", () => {
-    // As duas inserções em audit_log não podem estar dentro de um bloco
-    // "begin ... exception when ... end" que engoliria o erro — só existe
-    // UM bloco "begin"/"end" por função (o corpo inteiro), sem
-    // "exception when" nenhum nestas duas funções.
-    const consumeFn = sql.slice(
-      sql.indexOf("create or replace function public.consume_auth_flow_grant"),
-      sql.indexOf("create or replace function public.claim_recovery_grant_for_password_change"),
-    );
-    expect(consumeFn).toContain("insert into public.audit_log");
-    expect(consumeFn).not.toContain("exception when");
-
+  it("auditoria é inserida DENTRO da mesma função (sem exception handler ao redor) — falha no insert derruba a função inteira", () => {
     const claimFn = sql.slice(
       sql.indexOf("create or replace function public.claim_recovery_grant_for_password_change"),
       sql.indexOf("create or replace function public.is_current_session_recovery_grant"),
@@ -159,9 +174,9 @@ describe("atomicidade — requisito 16/19: consumo em UPDATE/DELETE único, sem 
   });
 });
 
-describe("SECURITY DEFINER com search_path vazio em todas as funções novas", () => {
-  it("5 funções, todas security definer com search_path vazio", () => {
+describe("SECURITY DEFINER com search_path vazio em todas as funções novas desta migração", () => {
+  it("3 funções (issue/claim/is_current_session), todas security definer com search_path vazio", () => {
     const occurrences = sql.match(/security definer\s*\nset search_path = ''/g) ?? [];
-    expect(occurrences.length).toBe(5);
+    expect(occurrences.length).toBe(3);
   });
 });

@@ -3,22 +3,36 @@
  * qa/reports/TASK-002-RETEST.md): duas requisições concorrentes usando
  * o MESMO access/refresh token (duas abas do mesmo navegador, ou um
  * duplo-clique/duplo-submit do formulário de troca de senha) chamam
- * `claim_recovery_grant_for_password_change()` ao mesmo tempo
+ * `claim_recovery_grant_for_password_change(nonce)` ao mesmo tempo
  * (`Promise.all` — duas conexões de rede reais e independentes ao
  * Postgres local via PostgREST, não apenas "uma depois da outra").
  *
  * Só o DELETE condicional atômico dentro da função (mesma linha do
- * WHERE: usuário, sessão, propósito, já consumido, não expirado) pode
- * garantir que exatamente UMA das duas obtenha `true` — o bug original
- * fazia "consultar depois consumir" em passos separados, então as duas
- * requisições liam "ainda não usado" antes de qualquer uma escrever, e
- * as duas trocavam a senha.
+ * WHERE: usuário, sessão, hash do nonce, não expirado) pode garantir que
+ * exatamente UMA das duas obtenha `true`.
+ *
+ * IMPORTANTE (terceira correção pós-QA, revisão externa sobre
+ * qa/reports/TASK-002-CLAUDE-VERIFICATION.md, BUG-CLAUDE-001): o setup
+ * deste teste NÃO usa mais `request_password_recovery_grant` +
+ * `consume_auth_flow_grant` (a cadeia vulnerável confirmada naquele
+ * relatório — o próprio comentário da versão anterior deste arquivo
+ * racionalizava aquilo como "equivalente" a uma troca de código real,
+ * o que era exatamente o bug). O grant de recuperação agora só nasce
+ * de `issue_password_recovery_grant`, chamável apenas por
+ * `service_role` — este script usa o cliente admin para chamá-la,
+ * exatamente como lib/supabase/service-only/recovery-grant-issuer.ts
+ * faz dentro de app/auth/recovery/route.ts, com `user_id`/`session_id`
+ * vindos de uma sessão obtida por `verifyOtp({type:"recovery"})` REAL
+ * contra um `token_hash` REAL (via `admin.auth.admin.generateLink`,
+ * que faz o GoTrue emitir um token genuíno sem precisar do servidor
+ * Next.js rodando nem de round-trip por e-mail/Mailpit).
  *
  * Como rodar:
  *   npx supabase start && npx supabase db reset && npm run seed:local
  *   npx tsx supabase/tests/recovery-claim-concurrency-check.ts
  */
 import { createClient } from "@supabase/supabase-js";
+import { randomBytes } from "node:crypto";
 import { loadLocalEnv } from "../../lib/env/load-local-env";
 import { createAdminSupabaseClient } from "../../lib/supabase/admin";
 import { getPublicSupabaseEnv } from "../../lib/supabase/env";
@@ -27,7 +41,7 @@ import type { Database } from "../../lib/supabase/types";
 const DEV_ONLY_PASSWORD = "dev-local-only-not-a-real-secret-123!";
 const EMAIL = "recovery-claim-racer@example.test";
 
-async function ensureRacerUser(admin: ReturnType<typeof createAdminSupabaseClient>) {
+async function ensureRacerUser(admin: ReturnType<typeof createAdminSupabaseClient>): Promise<string> {
   const { data: existing } = await admin.auth.admin.listUsers();
   const found = existing.users.find((u) => u.email === EMAIL);
   if (found) {
@@ -56,32 +70,51 @@ async function main() {
 
   await ensureRacerUser(admin);
 
-  // Sessão "de recuperação": login normal + consume_auth_flow_grant
-  // direto (equivalente, para fins deste teste de concorrência, a ter
-  // acabado de trocar um código real em app/auth/recovery/route.ts —
-  // o que importa aqui é ter duas conexões reais compartilhando o MESMO
-  // access/refresh token no momento da reivindicação concorrente).
-  const primary = createClient<Database>(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const { error: signInError } = await primary.auth.signInWithPassword({
+  // Token de recuperação REAL, emitido pelo próprio GoTrue (equivalente
+  // ao que chegaria por e-mail) — sem isso, verifyOtp abaixo falharia
+  // por um motivo totalmente diferente do que este teste quer provar.
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: "recovery",
     email: EMAIL,
-    password: DEV_ONLY_PASSWORD,
   });
-  if (signInError) throw new Error(`Falha ao logar ${EMAIL}: ${signInError.message}`);
+  if (linkError || !linkData?.properties?.hashed_token) {
+    throw new Error(`generateLink(recovery) falhou: ${linkError?.message ?? "sem hashed_token"}`);
+  }
 
-  const { error: requestError } = await primary.rpc("request_password_recovery_grant", { p_email: EMAIL });
-  if (requestError) throw new Error(`request_password_recovery_grant falhou: ${requestError.message}`);
-
-  const { data: consumed, error: consumeError } = await primary.rpc("consume_auth_flow_grant", {
-    p_purpose: "password_recovery",
+  // Sessão "de recuperação" REAL: verifyOtp com o token_hash real —
+  // mesma chamada que app/auth/recovery/route.ts faz.
+  const primary = createClient<Database>(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const { data: verifyData, error: verifyError } = await primary.auth.verifyOtp({
+    type: "recovery",
+    token_hash: linkData.properties.hashed_token,
   });
-  if (consumeError || consumed !== true) {
-    throw new Error(`consume_auth_flow_grant falhou ao preparar o teste: ${consumeError?.message ?? "devolveu false"}`);
+  if (verifyError || !verifyData.session || !verifyData.user) {
+    throw new Error(`verifyOtp(recovery) falhou ao preparar o teste: ${verifyError?.message ?? "sem sessão"}`);
+  }
+
+  const { data: claimsData, error: claimsError } = await primary.auth.getClaims();
+  const sessionId = claimsData?.claims.session_id;
+  if (claimsError || !sessionId) {
+    throw new Error(`getClaims() falhou ao preparar o teste: ${claimsError?.message ?? "sem session_id"}`);
+  }
+
+  // Emissão do grant exatamente como lib/supabase/service-only/recovery-grant-issuer.ts
+  // faz — só service_role pode chamar isto.
+  const nonce = randomBytes(32).toString("base64url");
+  const { error: issueError } = await admin.rpc("issue_password_recovery_grant", {
+    p_user_id: verifyData.user.id,
+    p_session_id: sessionId,
+    p_nonce: nonce,
+    p_ttl_seconds: 1800,
+  });
+  if (issueError) {
+    throw new Error(`issue_password_recovery_grant falhou ao preparar o teste: ${issueError.message}`);
   }
 
   const {
     data: { session },
   } = await primary.auth.getSession();
-  if (!session) throw new Error("Sessão ausente depois do login/consumo do grant.");
+  if (!session) throw new Error("Sessão ausente depois do verifyOtp/emissão do grant.");
 
   // Segunda "aba" real: cliente Supabase INDEPENDENTE (conexão HTTP
   // própria), com a MESMA sessão via setSession — não é o mesmo objeto
@@ -93,11 +126,11 @@ async function main() {
   });
   if (setSessionError) throw new Error(`Falha ao clonar sessão na segunda aba: ${setSessionError.message}`);
 
-  console.log("Sessão de recuperação pronta. Disparando duas reivindicações concorrentes...");
+  console.log("Sessão de recuperação pronta (verifyOtp real + issue_password_recovery_grant). Disparando duas reivindicações concorrentes...");
 
   const [resultA, resultB] = await Promise.all([
-    primary.rpc("claim_recovery_grant_for_password_change"),
-    secondary.rpc("claim_recovery_grant_for_password_change"),
+    primary.rpc("claim_recovery_grant_for_password_change", { p_nonce: nonce }),
+    secondary.rpc("claim_recovery_grant_for_password_change", { p_nonce: nonce }),
   ]);
 
   const outcomes = [
@@ -106,7 +139,7 @@ async function main() {
   ];
 
   for (const o of outcomes) {
-    console.log(`${o.label}: claim_recovery_grant_for_password_change() = ${o.value}`);
+    console.log(`${o.label}: claim_recovery_grant_for_password_change(nonce) = ${o.value}`);
   }
 
   const successes = outcomes.filter((o) => o.value === true);
@@ -140,7 +173,7 @@ async function main() {
   }
 
   console.log(
-    "\nPASS - concorrência da troca de senha: DELETE condicional atômico garantiu exatamente uma autorização sob corrida real.",
+    "\nPASS - concorrência da troca de senha: DELETE condicional atômico garantiu exatamente uma autorização sob corrida real, com grant emitido pelo caminho real (verifyOtp + issue_password_recovery_grant, sem bypass).",
   );
 }
 

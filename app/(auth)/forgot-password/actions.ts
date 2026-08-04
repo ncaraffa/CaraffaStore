@@ -38,25 +38,19 @@ export async function forgotPasswordAction(
 
   try {
     const supabase = await createServerSupabaseClient();
-    // Grava o pedido PENDENTE de recuperação ANTES de disparar o
-    // e-mail — é essa linha (supabase/migrations/0003_recovery_session.sql),
-    // não a rota que recebe o `code` depois, que prova a finalidade do
-    // fluxo (qa/reports/TASK-002-RETEST.md, BUG-RT2-001/003): sem um
-    // pedido pendente correspondente, app/auth/recovery/route.ts recusa
-    // o código e encerra a sessão, mesmo que a troca de código em si
-    // tenha sido bem-sucedida. A função resolve o usuário pelo e-mail
-    // internamente (anti-enumeração preservada — nenhuma linha é criada
-    // nem erro aparece para um e-mail sem conta) e não é suficiente
-    // sozinha para conceder acesso a /reset-password.
-    await supabase.rpc("request_password_recovery_grant", { p_email: parsed.data.email });
-
-    // Aponta para a rota DEDICADA de recuperação. A "solicitação de
-    // recuperação" em si não é gravada em public.audit_log: o próprio
-    // GoTrue já registra isso em auth.audit_log_entries
-    // (user_recovery_requested), confirmado contra o Supabase local
-    // real — reimplementar exigiria aceitar actor_user_id vindo de uma
-    // chamada anônima, exatamente a forja que a TASK-002 proíbe
-    // (BUG-T2-004).
+    // Terceira correção pós-QA (revisão externa sobre
+    // qa/reports/TASK-002-CLAUDE-VERIFICATION.md, BUG-CLAUDE-003): esta
+    // Server Action volta a fazer SÓ UMA COISA — disparar o e-mail. Não
+    // grava mais nenhuma linha/grant aqui (a função
+    // `request_password_recovery_grant`, que era uma RPC pública
+    // chamável fora desta Server Action, sem rate limit nem CAPTCHA, foi
+    // removida por completo — supabase/migrations/0003_recovery_session.sql).
+    // O único jeito de obter privilégio de recuperação agora é o GoTrue
+    // validar de verdade um token_hash real de type=recovery em
+    // app/auth/recovery/route.ts, que emite o grant server-side depois
+    // disso (fecha também BUG-CLAUDE-001). Anti-enumeração é nativa do
+    // GoTrue: resetPasswordForEmail responde com sucesso mesmo para
+    // e-mail inexistente, sem revelar a diferença e sem gravar nada.
     await supabase.auth.resetPasswordForEmail(parsed.data.email, {
       redirectTo: absoluteUrl("/auth/recovery"),
     });
