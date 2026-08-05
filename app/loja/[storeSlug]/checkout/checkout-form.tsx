@@ -161,6 +161,11 @@ export function CheckoutForm({ storeSlug, storeName }: { storeSlug: string; stor
           <textarea id="customerNotes" name="customerNotes" maxLength={1000} />
         </div>
 
+        <p style={{ fontSize: "0.8rem" }}>
+          Ao enviar o pedido, você concorda com os <a href="/termos">Termos de Uso</a> e a{" "}
+          <a href="/privacidade">Política de Privacidade</a>.
+        </p>
+
         <button type="submit" disabled={pending}>
           {pending ? "Enviando..." : "Enviar pedido"}
         </button>

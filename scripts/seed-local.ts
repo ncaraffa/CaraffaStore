@@ -10,6 +10,7 @@
  *   npm run seed:local
  */
 import { loadLocalEnv } from "../lib/env/load-local-env";
+import { assertLocalOnlyScript } from "../lib/env/local-only-guard";
 import { createAdminSupabaseClient } from "../lib/supabase/admin";
 import { FIXTURE_PRODUCTS, FIXTURE_STORES, FIXTURE_USERS } from "../lib/data/fixtures";
 import type { OnboardingStep, PlanCode, StoreStatus } from "../lib/supabase/types";
@@ -174,6 +175,10 @@ async function main() {
   if (loadedEnvFiles.length > 0) {
     console.log(`Ambiente carregado de: ${loadedEnvFiles.join(", ")}\n`);
   }
+
+  // Barreira de segurança (Fase 3, TASK-006): nunca deve rodar contra
+  // produção — ver lib/env/local-only-guard.ts.
+  assertLocalOnlyScript("seed-local");
 
   const admin = createAdminSupabaseClient();
 

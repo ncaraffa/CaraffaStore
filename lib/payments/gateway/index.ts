@@ -1,24 +1,20 @@
 import "server-only";
 import { MercadoPagoPixGateway } from "./mercado-pago";
 import { FakePixGateway } from "./fake";
+import { selectGatewayMode } from "./select-mode";
 import type { PixPaymentGateway } from "./types";
 
 /**
- * Único ponto de seleção de gateway. Falha segura: `PAYMENT_GATEWAY_MODE
- * = "fake"` só é honrado fora de produção — se `NODE_ENV=production`
- * chegar aqui com o modo fake pedido (configuração errada), a aplicação
- * quebra alto e cedo em vez de aceitar pagamentos falsos silenciosamente.
- * Sem a variável (padrão), usa sempre o gateway real.
+ * Único ponto de seleção de gateway. A decisão em si (testável) vive em
+ * select-mode.ts; este módulo só instancia. Sem a variável
+ * `PAYMENT_GATEWAY_MODE` (padrão), usa sempre o gateway real.
  */
 let fakeSingleton: FakePixGateway | null = null;
 
 export function getPixPaymentGateway(): PixPaymentGateway {
-  const mode = process.env.PAYMENT_GATEWAY_MODE;
+  const selection = selectGatewayMode(process.env);
 
-  if (mode === "fake") {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("PAYMENT_GATEWAY_MODE=fake nunca é permitido com NODE_ENV=production.");
-    }
+  if (selection === "fake") {
     fakeSingleton ??= new FakePixGateway();
     return fakeSingleton;
   }

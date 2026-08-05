@@ -43,3 +43,10 @@
 
 - Segurança, QA completo, políticas, termos, privacidade e backup.
 - Monitoramento, onboarding e primeiras lojas piloto.
+- **Production Readiness e Release Candidate: em REVIEW** (TASK-006, `tasks/review/task-006.md`).
+  Validação de variáveis de ambiente, barreiras contra execução acidental de scripts locais em
+  produção, health check, termos/privacidade (minuta), `vercel.json`, `docs/production-runbook.md`,
+  `docs/release-checklist.md`, `npm run release:check` e `npm run db:verify:production`. Matriz do MVP
+  original × implementado em `docs/handoff.md`, seção "TASK-006". Ativação de loja e cobrança da
+  mensalidade do SaaS (planos R$ 30/50/80) permanecem **manuais e documentadas** — cobrança
+  automatizada continua na Fase 4, ainda não iniciada.

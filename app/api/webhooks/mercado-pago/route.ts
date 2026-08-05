@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { handleMercadoPagoWebhook } from "@/lib/payments/webhook-handler";
 
+// Runtime Node.js explícito: a validação de assinatura HMAC usa
+// node:crypto (lib/payments/gateway/webhook-signature.ts), incompatível
+// com o Edge Runtime. Declarado explicitamente para não depender do
+// padrão implícito da plataforma de deploy.
+export const runtime = "nodejs";
+
 /**
  * Notificação de pagamento Pix do Mercado Pago. Rota pública por natureza
  * (o provedor não tem sessão nossa) — `client` (webhook_key) na query só

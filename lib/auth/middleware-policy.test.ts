@@ -34,6 +34,14 @@ describe("resolveMiddlewareDecision", () => {
     }
   });
 
+  it("TASK-006: deixa /termos e /privacidade passarem mesmo sem sessão", () => {
+    // Regressão: sem isto, um cliente final anônimo abrindo o link do
+    // rodapé/checkout era redirecionado para /login em vez de ver a página.
+    for (const path of ["/termos", "/privacidade"]) {
+      expect(decide({ pathname: path, user: null })).toEqual({ action: "next" });
+    }
+  });
+
   it("anônimo em rota protegida é redirecionado para /login com next validado", () => {
     const result = decide({ pathname: "/dashboard", search: "", user: null });
     expect(result).toEqual({ action: "redirect", location: "/login?next=%2Fdashboard" });
