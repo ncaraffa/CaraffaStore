@@ -23,7 +23,7 @@ export default function PrivacidadePage() {
         <br />
         Endereço: [ENDEREÇO — A DEFINIR]
         <br />
-        Contato: [E-MAIL DE CONTATO DO OPERADOR — A DEFINIR]
+        Contato: caraffastore@gmail.com
       </p>
 
       <h2>2. Dados que coletamos do comerciante (lojista)</h2>
