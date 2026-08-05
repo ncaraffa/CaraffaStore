@@ -35,10 +35,27 @@ export type AuditAction =
   | "order_status_changed"
   | "order_cancelled"
   | "order_stock_reserved"
-  | "order_stock_restored";
+  | "order_stock_restored"
+  | "payment_settings_configured"
+  | "payment_settings_disabled"
+  | "pix_payment_creation_started"
+  | "pix_payment_created"
+  | "pix_payment_approved"
+  | "pix_payment_rejected"
+  | "pix_payment_cancelled"
+  | "pix_payment_expired"
+  | "pix_payment_reconciliation_failed"
+  | "order_confirmed_by_payment"
+  | "order_cancelled_by_payment_failure"
+  | "payment_manual_review_required";
 export type ProductStatus = "draft" | "published" | "archived";
 export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "completed" | "cancelled";
 export type FulfillmentMethod = "pickup" | "delivery";
+export type OrderPaymentMode = "manual" | "pix";
+export type PixPaymentEnvironment = "test" | "production";
+export type PixDocType = "CPF" | "CNPJ";
+export type PaymentStatus = "creating" | "pending" | "approved" | "rejected" | "cancelled" | "expired" | "error" | "manual_review";
+export type WebhookProcessingStatus = "received" | "processed" | "ignored" | "rejected" | "error";
 
 /**
  * Minimal hand-written mirror of `supabase/migrations/0001_init.sql`
@@ -403,6 +420,8 @@ export interface Database {
           updated_at: string;
           cancelled_at: string | null;
           completed_at: string | null;
+          payment_mode: OrderPaymentMode;
+          receipt_token_hash: string | null;
         };
         Insert: {
           id?: string;
@@ -422,6 +441,8 @@ export interface Database {
           updated_at?: string;
           cancelled_at?: string | null;
           completed_at?: string | null;
+          payment_mode?: OrderPaymentMode;
+          receipt_token_hash?: string | null;
         };
         Update: {
           id?: string;
@@ -441,6 +462,8 @@ export interface Database {
           updated_at?: string;
           cancelled_at?: string | null;
           completed_at?: string | null;
+          payment_mode?: OrderPaymentMode;
+          receipt_token_hash?: string | null;
         };
         Relationships: [
           {
@@ -502,6 +525,214 @@ export interface Database {
             columns: ["product_id"];
             isOneToOne: false;
             referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      store_payment_settings: {
+        Row: {
+          id: string;
+          store_id: string;
+          provider: "mercado_pago";
+          environment: PixPaymentEnvironment;
+          encrypted_access_token: string;
+          encrypted_webhook_secret: string;
+          access_token_preview: string;
+          webhook_key: string;
+          is_enabled: boolean;
+          credentials_verified_at: string | null;
+          last_error_code: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          store_id: string;
+          provider?: "mercado_pago";
+          environment: PixPaymentEnvironment;
+          encrypted_access_token: string;
+          encrypted_webhook_secret: string;
+          access_token_preview: string;
+          webhook_key: string;
+          is_enabled?: boolean;
+          credentials_verified_at?: string | null;
+          last_error_code?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          store_id?: string;
+          provider?: "mercado_pago";
+          environment?: PixPaymentEnvironment;
+          encrypted_access_token?: string;
+          encrypted_webhook_secret?: string;
+          access_token_preview?: string;
+          webhook_key?: string;
+          is_enabled?: boolean;
+          credentials_verified_at?: string | null;
+          last_error_code?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "store_payment_settings_store_id_fkey";
+            columns: ["store_id"];
+            isOneToOne: true;
+            referencedRelation: "stores";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      order_payments: {
+        Row: {
+          id: string;
+          store_id: string;
+          order_id: string;
+          provider: "mercado_pago";
+          provider_payment_id: string | null;
+          provider_idempotency_key: string;
+          external_reference: string;
+          status: PaymentStatus;
+          provider_status: string | null;
+          provider_status_detail: string | null;
+          amount_cents: number;
+          currency: string;
+          qr_code: string | null;
+          qr_code_base64: string | null;
+          ticket_url: string | null;
+          payer_email: string;
+          payer_doc_type: PixDocType;
+          payer_doc_last4: string;
+          expires_at: string | null;
+          approved_at: string | null;
+          failed_at: string | null;
+          cancelled_at: string | null;
+          last_webhook_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          store_id: string;
+          order_id: string;
+          provider?: "mercado_pago";
+          provider_payment_id?: string | null;
+          provider_idempotency_key: string;
+          external_reference: string;
+          status?: PaymentStatus;
+          provider_status?: string | null;
+          provider_status_detail?: string | null;
+          amount_cents: number;
+          currency?: string;
+          qr_code?: string | null;
+          qr_code_base64?: string | null;
+          ticket_url?: string | null;
+          payer_email: string;
+          payer_doc_type: PixDocType;
+          payer_doc_last4: string;
+          expires_at?: string | null;
+          approved_at?: string | null;
+          failed_at?: string | null;
+          cancelled_at?: string | null;
+          last_webhook_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          store_id?: string;
+          order_id?: string;
+          provider?: "mercado_pago";
+          provider_payment_id?: string | null;
+          provider_idempotency_key?: string;
+          external_reference?: string;
+          status?: PaymentStatus;
+          provider_status?: string | null;
+          provider_status_detail?: string | null;
+          amount_cents?: number;
+          currency?: string;
+          qr_code?: string | null;
+          qr_code_base64?: string | null;
+          ticket_url?: string | null;
+          payer_email?: string;
+          payer_doc_type?: PixDocType;
+          payer_doc_last4?: string;
+          expires_at?: string | null;
+          approved_at?: string | null;
+          failed_at?: string | null;
+          cancelled_at?: string | null;
+          last_webhook_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "order_payments_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: true;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_payments_store_id_fkey";
+            columns: ["store_id"];
+            isOneToOne: false;
+            referencedRelation: "stores";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payment_webhook_events: {
+        Row: {
+          id: string;
+          store_id: string;
+          payment_attempt_id: string | null;
+          provider: "mercado_pago";
+          provider_event_id: string | null;
+          provider_payment_id: string | null;
+          action: string | null;
+          payload_hash: string;
+          received_at: string;
+          processed_at: string | null;
+          processing_status: WebhookProcessingStatus;
+          error_code: string | null;
+        };
+        Insert: {
+          id?: string;
+          store_id: string;
+          payment_attempt_id?: string | null;
+          provider?: "mercado_pago";
+          provider_event_id?: string | null;
+          provider_payment_id?: string | null;
+          action?: string | null;
+          payload_hash: string;
+          received_at?: string;
+          processed_at?: string | null;
+          processing_status?: WebhookProcessingStatus;
+          error_code?: string | null;
+        };
+        Update: {
+          id?: string;
+          store_id?: string;
+          payment_attempt_id?: string | null;
+          provider?: "mercado_pago";
+          provider_event_id?: string | null;
+          provider_payment_id?: string | null;
+          action?: string | null;
+          payload_hash?: string;
+          received_at?: string;
+          processed_at?: string | null;
+          processing_status?: WebhookProcessingStatus;
+          error_code?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payment_webhook_events_payment_attempt_id_fkey";
+            columns: ["payment_attempt_id"];
+            isOneToOne: false;
+            referencedRelation: "order_payments";
             referencedColumns: ["id"];
           },
         ];
@@ -706,6 +937,110 @@ export interface Database {
       order_cancel: {
         Args: { p_order_id: string };
         Returns: Database["public"]["Tables"]["orders"]["Row"];
+      };
+      can_manage_store_payments: {
+        Args: { target_store_id: string };
+        Returns: boolean;
+      };
+      payment_settings_get: {
+        Args: { p_store_id: string };
+        Returns: {
+          is_configured: boolean;
+          environment: PixPaymentEnvironment | null;
+          is_enabled: boolean;
+          credentials_verified_at: string | null;
+          last_error_code: string | null;
+          access_token_preview: string | null;
+          webhook_key: string | null;
+        }[];
+      };
+      payment_settings_upsert: {
+        Args: {
+          p_store_id: string;
+          p_environment: PixPaymentEnvironment;
+          p_encrypted_access_token: string;
+          p_encrypted_webhook_secret: string;
+          p_access_token_preview: string;
+        };
+        Returns: Database["public"]["Tables"]["store_payment_settings"]["Row"];
+      };
+      payment_settings_set_enabled: {
+        Args: { p_store_id: string; p_is_enabled: boolean };
+        Returns: Database["public"]["Tables"]["store_payment_settings"]["Row"];
+      };
+      payment_settings_mark_verified: {
+        Args: { p_store_id: string; p_ok: boolean; p_error_code: string | null };
+        Returns: Database["public"]["Tables"]["store_payment_settings"]["Row"];
+      };
+      pix_payment_attempt_upsert_creating: {
+        Args: {
+          p_order_id: string;
+          p_provider_idempotency_key: string;
+          p_amount_cents: number;
+          p_currency: string;
+          p_payer_email: string;
+          p_payer_doc_type: PixDocType;
+          p_payer_doc_last4: string;
+          p_receipt_token_hash: string;
+        };
+        Returns: Database["public"]["Tables"]["order_payments"]["Row"];
+      };
+      pix_payment_mark_created: {
+        Args: {
+          p_payment_attempt_id: string;
+          p_provider_payment_id: string;
+          p_provider_status: string;
+          p_provider_status_detail: string | null;
+          p_qr_code: string | null;
+          p_qr_code_base64: string | null;
+          p_ticket_url: string | null;
+          p_expires_at: string | null;
+        };
+        Returns: Database["public"]["Tables"]["order_payments"]["Row"];
+      };
+      pix_payment_mark_creation_failed: {
+        Args: { p_payment_attempt_id: string; p_error_code: string };
+        Returns: Database["public"]["Tables"]["order_payments"]["Row"];
+      };
+      pix_payment_apply_provider_state: {
+        Args: {
+          p_payment_attempt_id: string;
+          p_provider_payment_id: string;
+          p_internal_status: string;
+          p_provider_status: string;
+          p_provider_status_detail: string | null;
+          p_amount_cents: number;
+          p_currency: string;
+          p_external_reference: string;
+          p_qr_code: string | null;
+          p_qr_code_base64: string | null;
+          p_ticket_url: string | null;
+          p_expires_at: string | null;
+        };
+        Returns: Database["public"]["Tables"]["order_payments"]["Row"];
+      };
+      pix_webhook_event_record: {
+        Args: {
+          p_store_id: string;
+          p_payment_attempt_id: string | null;
+          p_provider_event_id: string | null;
+          p_provider_payment_id: string;
+          p_action: string | null;
+          p_payload_hash: string;
+          p_processing_status: WebhookProcessingStatus;
+          p_error_code: string | null;
+        };
+        Returns: { event_id: string; is_duplicate: boolean }[];
+      };
+      payment_events_list_sanitized: {
+        Args: { p_order_id: string };
+        Returns: {
+          action: string;
+          processing_status: WebhookProcessingStatus;
+          received_at: string;
+          processed_at: string | null;
+          error_code: string | null;
+        }[];
       };
     };
   };

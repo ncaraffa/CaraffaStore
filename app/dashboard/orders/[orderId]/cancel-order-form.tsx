@@ -2,12 +2,16 @@
 
 import { cancelOrderAction } from "../actions";
 
-export function CancelOrderForm({ storeSlug, orderId }: { storeSlug: string; orderId: string }) {
+export function CancelOrderForm({ storeSlug, orderId, isPix = false }: { storeSlug: string; orderId: string; isPix?: boolean }) {
+  const confirmMessage = isPix
+    ? "Cancelar este pedido? Vamos conferir o pagamento no Mercado Pago antes — se já estiver pago, o cancelamento será recusado (sem reembolso nesta versão)."
+    : "Cancelar este pedido? O estoque reservado será devolvido.";
+
   return (
     <form
       action={cancelOrderAction}
       onSubmit={(e) => {
-        if (!window.confirm("Cancelar este pedido? O estoque reservado será devolvido.")) {
+        if (!window.confirm(confirmMessage)) {
           e.preventDefault();
         }
       }}

@@ -23,7 +23,7 @@ export function CheckoutForm({ storeSlug, storeName }: { storeSlug: string; stor
   useEffect(() => {
     if (state.status === "success" && state.publicCode) {
       clearCart(storeSlug);
-      router.push(`/loja/${storeSlug}/pedido/${state.publicCode}/sucesso`);
+      router.push(`/loja/${storeSlug}/pedido/${state.publicCode}/pagamento`);
     }
   }, [state, storeSlug, router]);
 
@@ -83,6 +83,37 @@ export function CheckoutForm({ storeSlug, storeName }: { storeSlug: string; stor
             aria-invalid={Boolean(state.fieldErrors?.customerPhone)}
           />
           {state.fieldErrors?.customerPhone && <small role="alert">{state.fieldErrors.customerPhone}</small>}
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="payerEmail">E-mail (para o pagamento Pix)</label>
+          <input
+            id="payerEmail"
+            name="payerEmail"
+            type="email"
+            required
+            maxLength={200}
+            placeholder="voce@example.com"
+            aria-invalid={Boolean(state.fieldErrors?.payerEmail)}
+          />
+          {state.fieldErrors?.payerEmail && <small role="alert">{state.fieldErrors.payerEmail}</small>}
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="payerDocument">CPF ou CNPJ (para o pagamento Pix)</label>
+          <input
+            id="payerDocument"
+            name="payerDocument"
+            required
+            inputMode="numeric"
+            maxLength={20}
+            placeholder="000.000.000-00"
+            aria-invalid={Boolean(state.fieldErrors?.payerDocument)}
+          />
+          {state.fieldErrors?.payerDocument && <small role="alert">{state.fieldErrors.payerDocument}</small>}
+          <small>
+            Seus dados são usados só para processar o pagamento Pix — o CPF/CNPJ completo não fica guardado na loja.
+          </small>
         </div>
 
         <div className="form-field">
