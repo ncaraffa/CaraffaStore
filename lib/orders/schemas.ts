@@ -17,6 +17,8 @@ export const checkoutSchema = z
   .object({
     customerName: z.string().trim().min(2, "Informe seu nome.").max(120, "Nome muito longo."),
     customerPhone: z.string().trim().min(8, "Informe um telefone válido.").max(20, "Telefone inválido."),
+    payerEmail: z.string().trim().email("Informe um e-mail válido.").max(200, "E-mail muito longo."),
+    payerDocument: z.string().trim().min(11, "Informe um CPF ou CNPJ válido.").max(20, "Documento inválido."),
     fulfillmentMethod: fulfillmentMethodSchema,
     deliveryAddress: z.string().trim().max(500, "Endereço muito longo.").optional().or(z.literal("")),
     customerNotes: z.string().trim().max(1000, "Observações muito longas.").optional().or(z.literal("")),

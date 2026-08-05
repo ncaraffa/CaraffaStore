@@ -7,6 +7,8 @@ function baseCheckout(overrides: Record<string, unknown> = {}) {
   return {
     customerName: "Maria Cliente",
     customerPhone: "11999998888",
+    payerEmail: "maria@example.test",
+    payerDocument: "111.444.777-35",
     fulfillmentMethod: "pickup",
     deliveryAddress: "",
     customerNotes: "",
@@ -90,5 +92,17 @@ describe("checkoutSchema", () => {
       baseCheckout({ fulfillmentMethod: "delivery", deliveryAddress: "x".repeat(501) }),
     );
     expect(result.success).toBe(false);
+  });
+
+  it("rejeita e-mail do pagador inválido", () => {
+    expect(checkoutSchema.safeParse(baseCheckout({ payerEmail: "nao-e-email" })).success).toBe(false);
+  });
+
+  it("rejeita ausência de e-mail do pagador", () => {
+    expect(checkoutSchema.safeParse(baseCheckout({ payerEmail: "" })).success).toBe(false);
+  });
+
+  it("rejeita documento do pagador muito curto", () => {
+    expect(checkoutSchema.safeParse(baseCheckout({ payerDocument: "123" })).success).toBe(false);
   });
 });

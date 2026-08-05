@@ -35,7 +35,7 @@ STASH_DIR="$(mktemp -d)"
 # diretório temporário, mesmo se o script falhar no meio — nunca deixa
 # os arquivos de migração "presos" só no stash.
 restore_migrations() {
-  for f in 0003_recovery_session.sql 0004_account_audit.sql 0005_catalog.sql 0006_orders.sql; do
+  for f in 0003_recovery_session.sql 0004_account_audit.sql 0005_catalog.sql 0006_orders.sql 0007_payments.sql; do
     if [ -f "$STASH_DIR/$f" ]; then
       mv "$STASH_DIR/$f" "$MIGRATIONS_DIR/"
     fi
@@ -44,11 +44,12 @@ restore_migrations() {
 }
 trap restore_migrations EXIT
 
-echo "==> Movendo 0003/0004/0005/0006 para fora de supabase/migrations/ (simula estado pós-0002)"
+echo "==> Movendo 0003/0004/0005/0006/0007 para fora de supabase/migrations/ (simula estado pós-0002)"
 mv "$MIGRATIONS_DIR/0003_recovery_session.sql" "$STASH_DIR/"
 mv "$MIGRATIONS_DIR/0004_account_audit.sql" "$STASH_DIR/"
 mv "$MIGRATIONS_DIR/0005_catalog.sql" "$STASH_DIR/"
 mv "$MIGRATIONS_DIR/0006_orders.sql" "$STASH_DIR/"
+mv "$MIGRATIONS_DIR/0007_payments.sql" "$STASH_DIR/"
 
 echo "==> supabase db reset (só 0001+0002)"
 npx supabase db reset --local
@@ -342,9 +343,123 @@ if [ "$ORDERS_NO_DIRECT_GRANT" != "0" ]; then
 fi
 echo "PASS - authenticated não tem nenhum GRANT de escrita direta em orders/order_items após o upgrade"
 
+echo "==> TASK-005: simulando o estado real da master atual (0001-0006 aplicadas, TASK-004 concluída)"
+# Insere eventos históricos no estilo TASK-004 (0006 já aplicada nesta
+# altura) ANTES de trazer a 0007 — é exatamente o estado real da master
+# no momento em que a TASK-005 começou (70efe35, ver docs/handoff.md).
+TASK004_STYLE_IDS_RAW=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -q -t -A -c "
+  insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata, created_at) values
+    ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'order_created', 'order', 'historico-pedido-1', '{}'::jsonb, now() - interval '6 hours'),
+    ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'order_status_changed', 'order', 'historico-pedido-1', '{\"new_status\":\"confirmed\"}'::jsonb, now() - interval '5 hours')
+  returning id;
+")
+TASK004_STYLE_IDS=$(echo "$TASK004_STYLE_IDS_RAW" | tr -d ' ')
+TASK004_STYLE_COUNT=$(echo "$TASK004_STYLE_IDS_RAW" | grep -c '.')
+echo "    $TASK004_STYLE_COUNT linhas históricas adicionais (estilo TASK-004, pós-0006) inseridas"
+
+# Pedido histórico real (não só audit_log) para provar que orders
+# pré-TASK-005 sobrevive ao ALTER TABLE (payment_mode default 'manual',
+# receipt_token_hash null) sem quebrar nem precisar de migração de dado.
+HISTORICAL_ORDER_ID=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -q -t -A -c "
+  insert into public.orders (store_id, public_code, idempotency_key, request_fingerprint, customer_name, customer_phone, fulfillment_method, status, subtotal_cents, total_cents)
+  values ('11111111-1111-4111-8111-111111111111', 'HIST0001', gen_random_uuid(), 'fingerprint-historico', 'Cliente Histórico', '11988887777', 'pickup', 'completed', 1000, 1000)
+  returning id;
+" | tr -d ' ')
+
+echo "==> Devolvendo 0007 para supabase/migrations/"
+mv "$STASH_DIR/0007_payments.sql" "$MIGRATIONS_DIR/"
+
+echo "==> supabase migration up (aplica 0007 SOBRE o banco com TODO o histórico anterior, sem reset)"
+npx supabase migration up --local
+
+echo "==> Verificando: histórico completo (0002 + TASK-002 + TASK-003 + TASK-004) sobrevive intacto ao upgrade da TASK-005"
+ALL_HISTORICAL_IDS_V3="$ALL_HISTORICAL_IDS_V2
+$TASK004_STYLE_IDS"
+ALL_HISTORICAL_COUNT_V3=$((ALL_HISTORICAL_COUNT_V2 + TASK004_STYLE_COUNT))
+SURVIVED_ALL_V3=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from public.audit_log where id::text = any(string_to_array('$ALL_HISTORICAL_IDS_V3', E'\n'));
+")
+if [ "$SURVIVED_ALL_V3" != "$ALL_HISTORICAL_COUNT_V3" ]; then
+  echo "FAIL - histórico incompleto sobreviveu ao upgrade da TASK-005 (esperado $ALL_HISTORICAL_COUNT_V3, obtido $SURVIVED_ALL_V3)"
+  exit 1
+fi
+echo "PASS - todo o histórico (0002 + TASK-002 + TASK-003 + TASK-004, $SURVIVED_ALL_V3 linhas) sobreviveu intacto ao upgrade da TASK-005"
+
+HISTORICAL_ORDER_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select payment_mode from public.orders where id = '$HISTORICAL_ORDER_ID';
+" | tr -d ' ')
+if [ "$HISTORICAL_ORDER_OK" != "manual" ]; then
+  echo "FAIL - pedido histórico pré-TASK-005 não ficou com payment_mode='manual' por padrão (obtido '$HISTORICAL_ORDER_OK')"
+  exit 1
+fi
+echo "PASS - pedido histórico pré-TASK-005 preservado com payment_mode='manual' (nunca alterado silenciosamente)"
+
+PAYMENTS_SCHEMA_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from pg_proc
+    where proname in ('can_manage_store_payments', 'payment_settings_get', 'payment_settings_upsert', 'payment_settings_set_enabled',
+      'payment_settings_mark_verified', 'pix_payment_attempt_upsert_creating', 'pix_payment_mark_created',
+      'pix_payment_mark_creation_failed', 'pix_payment_apply_provider_state', 'pix_webhook_event_record', 'payment_events_list_sanitized');
+")
+if [ "$PAYMENTS_SCHEMA_OK" != "11" ]; then
+  echo "FAIL - nem todas as 11 funções de pagamento existem após o upgrade (esperado 11, obtido $PAYMENTS_SCHEMA_OK)"
+  exit 1
+fi
+echo "PASS - as 11 funções de pagamento existem após o upgrade"
+
+PAYMENTS_TABLES_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from information_schema.tables where table_schema = 'public' and table_name in ('store_payment_settings', 'order_payments', 'payment_webhook_events');
+")
+if [ "$PAYMENTS_TABLES_OK" != "3" ]; then
+  echo "FAIL - tabelas de pagamento não existem após o upgrade (esperado 3, obtido $PAYMENTS_TABLES_OK)"
+  exit 1
+fi
+echo "PASS - tabelas store_payment_settings/order_payments/payment_webhook_events existem após o upgrade"
+
+ORDERS_EXTENDED_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name in ('payment_mode', 'receipt_token_hash');
+")
+if [ "$ORDERS_EXTENDED_OK" != "2" ]; then
+  echo "FAIL - orders não foi estendida corretamente após o upgrade (esperado 2 colunas novas, obtido $ORDERS_EXTENDED_OK)"
+  exit 1
+fi
+echo "PASS - public.orders foi estendida em ALTER TABLE (nunca recriada) — payment_mode/receipt_token_hash presentes após o upgrade"
+
+PAYMENTS_ACTION_CHECK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select pg_get_constraintdef(oid) from pg_constraint where conname = 'audit_log_action_check';
+")
+for expected_action in payment_settings_configured pix_payment_approved order_confirmed_by_payment payment_manual_review_required order_created signup_completed; do
+  if ! echo "$PAYMENTS_ACTION_CHECK" | grep -q "$expected_action"; then
+    echo "FAIL - audit_log_action_check não inclui $expected_action após o upgrade da TASK-005"
+    exit 1
+  fi
+done
+echo "PASS - audit_log_action_check inclui os eventos de pagamento sem perder nenhum valor histórico anterior"
+
+PAYMENTS_NO_DIRECT_GRANT=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from information_schema.role_table_grants
+    where table_schema='public' and table_name in ('store_payment_settings','order_payments','payment_webhook_events') and grantee in ('anon','authenticated')
+      and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE');
+")
+if [ "$PAYMENTS_NO_DIRECT_GRANT" != "0" ]; then
+  echo "FAIL - anon/authenticated tem GRANT de escrita direta em tabelas de pagamento após o upgrade (esperado 0, obtido $PAYMENTS_NO_DIRECT_GRANT)"
+  exit 1
+fi
+echo "PASS - anon/authenticated não têm nenhum GRANT de escrita direta em tabelas de pagamento após o upgrade"
+
+SETTINGS_NO_SELECT=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from information_schema.role_table_grants
+    where table_schema='public' and table_name = 'store_payment_settings' and grantee in ('anon','authenticated');
+")
+if [ "$SETTINGS_NO_SELECT" != "0" ]; then
+  echo "FAIL - anon/authenticated tem algum GRANT em store_payment_settings após o upgrade (esperado 0, obtido $SETTINGS_NO_SELECT)"
+  exit 1
+fi
+echo "PASS - store_payment_settings continua sem nenhum GRANT para anon/authenticated após o upgrade (só RPC/service_role)"
+
 echo "==> Restaurando o ambiente para o estado normal de teste (reset completo + reseed)"
 npx supabase db reset --local
 npm run seed:local
 
 echo ""
-echo "PASS - upgrade real desde a migration 0002 (com dados históricos, TASK-002, TASK-003 e TASK-004) até o schema final: sem erro, dado histórico preservado, schema final funcional."
+echo "PASS - upgrade real desde a migration 0002 (com dados históricos, TASK-002, TASK-003, TASK-004 e TASK-005) até o schema final: sem erro, dado histórico preservado, schema final funcional."

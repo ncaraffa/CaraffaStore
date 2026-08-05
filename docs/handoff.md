@@ -2,6 +2,23 @@
 
 ## Estado atual
 
+- **TASK-005: DONE.** Pix e pagamentos (Mercado Pago, por loja). Cada loja usa suas próprias
+  credenciais (sem OAuth, sem split, sem conta global), criptografadas com AES-256-GCM
+  (`lib/payments/crypto.ts`, chave só em `PAYMENT_ENCRYPTION_KEY`). Checkout público passa a exigir
+  Pix configurado e ativo; pedidos manuais anteriores (`payment_mode='manual'`) são preservados sem
+  alteração. Webhook (`/api/webhooks/mercado-pago`) valida assinatura HMAC do Mercado Pago e sempre
+  reconsulta o pagamento real antes de aplicar qualquer transição (`pix_payment_apply_provider_state`,
+  mesma função usada pela reconciliação — `/api/cron/payments/reconcile`, página pública de pagamento
+  e botão "Reconciliar" do painel). Aprovado confirma o pedido uma vez; rejeitado/cancelado/expirado
+  cancela e devolve estoque uma vez; conflito de estado terminal vira `manual_review` (nunca decide
+  sozinho). Pedido pago não pode ser cancelado pelo fluxo comum (`paid_order_requires_refund`, sem
+  reembolso nesta tarefa). Aprovada por revisão externa (ChatGPT) em 2026-08-05
+  (`qa/reports/TASK-005-FINAL-APPROVAL.md`, commit `e46d8d068126c9c001d92f5f84d7a7799dc48d43`) e
+  mesclada na `master` via `git merge --no-ff` (histórico preservado, sem squash). Arquivo da tarefa
+  em `tasks/done/task-005.md`. Branch `feat/TASK-005-pix-payments` preservada (não excluída). Nenhum
+  deploy realizado. Ver `docs/handoff.md`, seção "Entrega da TASK-005", e seção "Encerramento da
+  TASK-005" mais abaixo.
+
 - **TASK-004: DONE.** Carrinho, checkout sem pagamento e gestão de pedidos. Checkout público
   (sem login), preço/total sempre recalculados no banco, estoque reservado/reduzido atomicamente na
   criação do pedido (RPC `create_order`, idempotente via advisory lock + fingerprint, produtos
@@ -1714,4 +1731,93 @@ banco) OK, sem erro de servidor, sem overflow mobile.
 
 **Ação:** TASK-004 movida para `tasks/done/task-004.md` (status `DONE`) e branch
 `feat/TASK-004-cart-orders` mesclada na `master` via `git merge --no-ff` (sem squash — histórico de
+implementação e QA preservado). Branch da tarefa **não** excluída. Nenhum deploy realizado.
+
+## Entrega da TASK-005 — Pix e pagamentos (Mercado Pago, por loja) (2026-08-04)
+
+**Branch:** `feat/TASK-005-pix-payments` (mesclada na `master` via `git merge --no-ff`, histórico preservado)
+**Decisões aprovadas por Caraffa:** Mercado Pago via `POST /v1/payments`; cada loja usa suas próprias
+credenciais (sem OAuth, sem split, sem conta global); credenciais criptografadas (AES-256-GCM); sem
+reembolso (pedido pago cancelado só com erro seguro); checkout público passa a exigir Pix configurado
+e ativo — pedidos manuais anteriores (`payment_mode='manual'`) preservados sem alteração.
+
+### Arquitetura
+
+`store_payment_settings`/`order_payments`/`payment_webhook_events` (novas,
+`supabase/migrations/0007_payments.sql`). Credenciais nunca acessíveis por RLS direta (zero policy) —
+só por RPC `payment_settings_*` (authenticated, reautoriza no banco) ou pelo cliente `service_role`
+dedicado de `lib/payments/service-only/client.ts` (nunca reaproveita a fábrica administrativa
+genérica de scripts, mesma restrição de BUG-T2-004). Orquestração (`pix_payment_*`) só chamável por
+`service_role`, a partir de módulos server-only: `lib/payments/checkout-orchestration.ts` (criação),
+`lib/payments/webhook-handler.ts` (webhook), `lib/payments/reconcile.ts` (núcleo único de
+reconciliação, reusado pelo webhook, pelo cron, pela página pública e pelo painel). `orders` ganhou
+`payment_mode`/`receipt_token_hash` via `ALTER TABLE` (nunca recriada); `order_advance_status`/
+`order_cancel` (TASK-004) ganharam guards de integração (`CREATE OR REPLACE`, comportamento anterior
+preservado para `payment_mode='manual'`).
+
+### Rotas
+
+**Públicas:** `/loja/[storeSlug]/pedido/[publicCode]/pagamento` (exige cookie HttpOnly de recibo além
+do `publicCode` — sem os dois, 404, nenhum dado exposto); `/api/webhooks/mercado-pago` (POST, valida
+assinatura HMAC do Mercado Pago antes de qualquer efeito).
+
+**Administrativas:** `/dashboard/settings/payments` (configurar/testar/ativar credenciais);
+`/dashboard/orders` (coluna e filtros de status de pagamento); `/dashboard/orders/[orderId]` (estado
+do Pix, reconciliar, histórico sanitizado); `/api/cron/payments/reconcile` (POST, protegida por
+`CRON_SECRET`).
+
+### Gateway
+
+`PixPaymentGateway` (`lib/payments/gateway/`): `MercadoPagoPixGateway` (fetch real, server-only) e
+`FakePixGateway` (determinístico, testes/dev — nunca selecionável com `NODE_ENV=production`).
+
+### Resultados reais desta rodada
+
+| Gate | Resultado |
+|---|---|
+| `npm test` | **424/424** |
+| `npm run lint` | OK (4 warnings pré-existentes/aceitos) |
+| `npx tsc --noEmit` / `npm run build` | OK |
+| `npm audit` | 0 vulnerabilidades |
+| `supabase/tests/isolation_check.sql` (TASK-001) | 7/7 PASS |
+| `supabase/tests/onboarding_isolation_check.sql` (TASK-002) | 56/56 PASS |
+| `supabase/tests/catalog_isolation_check.sql` (TASK-003) | 35/35 PASS |
+| `supabase/tests/orders_isolation_check.sql` (TASK-004) | 38/38 PASS |
+| `supabase/tests/payments_isolation_check.sql` (TASK-005, novo) | **24/24 PASS** |
+| `supabase/tests/stock-concurrency-check.ts` | 17/17 PASS |
+| `supabase/tests/order-concurrency-check.ts` | 12/12 PASS |
+| `supabase/tests/payment-concurrency-check.ts` (TASK-005, novo) | **12/12 PASS** — webhooks/reconciliação concorrentes, corrida approved×cancelled, retries de criação |
+| `supabase/tests/migration-upgrade-check.sh` | PASS — banco novo e upgrade real desde a master até a TASK-005 |
+| Navegador real (FakePixGateway) | checkout→QR→aprovação→painel→completed; segundo pedido→rejeição→cancelamento→estoque devolvido; webhook real com assinatura HMAC válida→200; sem overflow em mobile |
+| Scan de segredos/bundle | nenhuma ocorrência de credenciais/`service_role` em `.next/static` |
+
+Detalhamento completo em `qa/reports/TASK-005-CLAUDE-VERIFICATION.md`.
+
+### Limitações remanescentes
+
+- Distinção `cancelled` vs `expired` no mapeamento de status é best-effort (substring no
+  `status_detail` do Mercado Pago).
+- Sem teste real contra a API do Mercado Pago (nenhuma credencial real disponível neste ambiente) —
+  toda a suíte usa `FakePixGateway`, conforme decisão aprovada.
+- Sem cartão, boleto, OAuth, split, assinatura, reembolso, chargeback, nota fiscal — fora do escopo
+  aprovado desta tarefa.
+
+## Encerramento da TASK-005 (2026-08-05)
+
+**Aprovação final:** `qa/reports/TASK-005-FINAL-APPROVAL.md`, **APROVADA PARA MERGE**, commit
+testado `e46d8d068126c9c001d92f5f84d7a7799dc48d43`. Verificação final desta sessão em banco limpo:
+424/424 testes, TASK-001 RLS 7/7, TASK-002 SQL 56/56, TASK-003 SQL 35/35, TASK-004 SQL 38/38,
+TASK-005 SQL 24/24, privilégios estáticos 22/22, concorrência de estoque 17/17, de pedidos 12/12, de
+pagamentos 12/12, migration upgrade desde a 0002 (com histórico TASK-002/003/004/005 e um pedido
+legado real preservado como `manual`) PASS, lint/typecheck/build/audit OK, scan de bundle sem
+segredos, webhook real testado ao vivo (assinatura válida/inválida/ausente, chave desconhecida,
+`data.id` ausente), smoke test real (checkout → QR → aprovação → painel → completed; segundo pedido →
+rejeição → cancelamento → estoque devolvido) OK, sem overflow mobile. Descoberta não bloqueante nesta
+sessão: o `FakePixGateway` não compartilha estado em memória entre a Server Action que cria o
+pagamento e o Route Handler do webhook no `next dev` (Turbopack) — isolado ao duplo de teste em modo
+dev, sem efeito no gateway real nem na lógica de estado (provada por SQL/concorrência independentes);
+detalhado em `qa/reports/TASK-005-FINAL-APPROVAL.md`.
+
+**Ação:** TASK-005 movida para `tasks/done/task-005.md` (status `DONE`) e branch
+`feat/TASK-005-pix-payments` mesclada na `master` via `git merge --no-ff` (sem squash — histórico de
 implementação e QA preservado). Branch da tarefa **não** excluída. Nenhum deploy realizado.
