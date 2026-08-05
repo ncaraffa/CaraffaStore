@@ -1,8 +1,8 @@
 # TASK-004 — Carrinho, checkout sem pagamento e gestão de pedidos
 
-**Status:** REVIEW
+**Status:** DONE
 **Responsável:** Claude Code
-**Branch:** feat/TASK-004-cart-orders
+**Branch:** feat/TASK-004-cart-orders (mesclada na master via `git merge --no-ff`, histórico preservado)
 **HEAD-base:** 66d9760fc6b3dfa5846b8763d389c45e2b233581 (master, TASK-001/002/003 DONE)
 
 **Decisões aprovadas por Caraffa (2026-08-04):** checkout público sem login de cliente; carrinho só no
@@ -11,8 +11,8 @@ como `pending`, comerciante combina o pagamento); estoque reservado/reduzido ato
 do pedido, devolvido exatamente uma vez no cancelamento; sem variantes (item referencia um produto
 simples da TASK-003).
 
-**Entrega para revisão externa:** ver `docs/handoff.md`, seção "Entrega da TASK-004". Não mover para
-`tasks/done/` nem fazer merge até aprovação explícita.
+**Aprovação final:** revisão externa (ChatGPT) em 2026-08-04, ver
+`qa/reports/TASK-004-FINAL-APPROVAL.md`. Commit testado `1c890bbc9c21bae311bdc2724ab2f0dd19687b42`.
 
 ## Objetivo
 

@@ -2,15 +2,18 @@
 
 ## Estado atual
 
-- **TASK-004: REVIEW.** Carrinho, checkout sem pagamento e gestão de pedidos. Checkout público
+- **TASK-004: DONE.** Carrinho, checkout sem pagamento e gestão de pedidos. Checkout público
   (sem login), preço/total sempre recalculados no banco, estoque reservado/reduzido atomicamente na
   criação do pedido (RPC `create_order`, idempotente via advisory lock + fingerprint, produtos
   travados em `ORDER BY id` — sem overselling nem deadlock sob concorrência real), cancelamento
   atômico com devolução de estoque exatamente uma vez (`order_cancel`), máquina de estados linear
   (`order_advance_status`). `orders`/`order_items` sem DML direto para `authenticated`, sem leitura
-  para `anon`. Ver `docs/handoff.md`, seção "Entrega da TASK-004", e
-  `qa/reports/TASK-004-CLAUDE-VERIFICATION.md`. Não mesclada, aguardando aprovação externa. Branch
-  `feat/TASK-004-cart-orders`.
+  para `anon`. Aprovada por revisão externa (ChatGPT) em 2026-08-04
+  (`qa/reports/TASK-004-FINAL-APPROVAL.md`, commit `1c890bbc9c21bae311bdc2724ab2f0dd19687b42`) e
+  mesclada na `master` via `git merge --no-ff` (histórico preservado, sem squash). Arquivo da tarefa
+  em `tasks/done/task-004.md`. Branch `feat/TASK-004-cart-orders` preservada (não excluída). Nenhum
+  deploy realizado. Ver `docs/handoff.md`, seção "Entrega da TASK-004", e seção "Encerramento da
+  TASK-004" mais abaixo.
 
 - **TASK-003: DONE.** Catálogo, produtos, categorias, imagens e estoque. Verificação adversarial
   encontrou 3 bloqueadores (crítico/alto — loja não ativa administrando catálogo via RPC/Storage
@@ -1622,7 +1625,7 @@ realizado.
 
 ## Entrega da TASK-004 — Carrinho, checkout sem pagamento e gestão de pedidos (2026-08-04)
 
-**Branch:** `feat/TASK-004-cart-orders` (não mesclada — aguardando revisão externa)
+**Branch:** `feat/TASK-004-cart-orders` (mesclada na `master` via `git merge --no-ff`, histórico preservado)
 **Decisões aprovadas por Caraffa:** checkout público sem login; carrinho só no navegador
 (localStorage), revalidado inteiramente no servidor; sem Pix/pagamento nesta tarefa (pedido criado
 `pending`, comerciante combina o pagamento); estoque reservado/reduzido atomicamente na criação,
@@ -1698,3 +1701,17 @@ Detalhamento completo em `qa/reports/TASK-004-CLAUDE-VERIFICATION.md`.
   validada exaustivamente por outras vias (SQL, concorrência real, chamada direta).
 - Sem reserva com expiração, cupom, frete calculado, e-mail/WhatsApp automático — fora do escopo
   aprovado desta tarefa.
+
+## Encerramento da TASK-004 (2026-08-04)
+
+**Aprovação final:** `qa/reports/TASK-004-FINAL-APPROVAL.md`, **APROVADA PARA MERGE**, commit
+testado `1c890bbc9c21bae311bdc2724ab2f0dd19687b42`. Verificação final desta sessão em banco limpo:
+338/338 testes, TASK-001 RLS 7/7, TASK-002 SQL 56/56, TASK-003 SQL 35/35, TASK-004 SQL 38/38,
+concorrência de estoque 17/17, concorrência de pedidos 12/12, migration upgrade desde a 0002 (com
+histórico TASK-002/003/004) PASS, lint/typecheck/build/audit OK, smoke test real (carrinho →
+checkout → painel → transições de status → cancelamento com devolução de estoque confirmada em
+banco) OK, sem erro de servidor, sem overflow mobile.
+
+**Ação:** TASK-004 movida para `tasks/done/task-004.md` (status `DONE`) e branch
+`feat/TASK-004-cart-orders` mesclada na `master` via `git merge --no-ff` (sem squash — histórico de
+implementação e QA preservado). Branch da tarefa **não** excluída. Nenhum deploy realizado.
