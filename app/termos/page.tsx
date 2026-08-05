@@ -31,7 +31,7 @@ export default function TermosPage() {
         <br />
         Endereço: [ENDEREÇO — A DEFINIR]
         <br />
-        Contato: [E-MAIL DE CONTATO DO OPERADOR — A DEFINIR]
+        Contato: caraffastore@gmail.com
       </p>
 
       <h2>3. Cadastro do lojista</h2>
@@ -75,7 +75,7 @@ export default function TermosPage() {
 
       <h2>8. Contato</h2>
       <p>
-        Dúvidas sobre estes termos: [E-MAIL DE CONTATO DO OPERADOR — A DEFINIR].
+        Dúvidas sobre estes termos: caraffastore@gmail.com.
       </p>
 
       <p style={{ marginTop: "2rem" }}>
