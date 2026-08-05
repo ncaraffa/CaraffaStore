@@ -1821,3 +1821,266 @@ detalhado em `qa/reports/TASK-005-FINAL-APPROVAL.md`.
 **Ação:** TASK-005 movida para `tasks/done/task-005.md` (status `DONE`) e branch
 `feat/TASK-005-pix-payments` mesclada na `master` via `git merge --no-ff` (sem squash — histórico de
 implementação e QA preservado). Branch da tarefa **não** excluída. Nenhum deploy realizado.
+
+## TASK-006 — Production Readiness e Release Candidate (2026-08-05)
+
+**Status: REVIEW.** Branch `feat/TASK-006-production-readiness`, criada a partir da `master` limpa em
+`cef4b0b430ff304789ef390ada8d783c5533a1a4` (TASK-001 a TASK-005 `DONE`). Sem merge, sem push, sem
+deploy. Não é uma nova fase funcional — verificação do MVP contra os requisitos originais, correção
+de bloqueadores locais de produção e preparação de infraestrutura/documentação/scripts de deploy.
+
+### Matriz do MVP original × implementação real
+
+| # | Requisito | Estado | Bloqueia produção automatizada? | Evidência |
+|---|---|---|---|---|
+| 1 | Cadastro e login do comerciante | Implementado | Não | TASK-002, `app/(auth)/{signup,login}` |
+| 2 | Confirmação de e-mail | Implementado (obrigatória) | Não | T2-DEC-002, `app/auth/confirm` |
+| 3 | Recuperação de senha | Implementado | Não | `app/(auth)/{forgot-password,reset-password}` |
+| 4 | Onboarding e criação da loja | Implementado | Não | `app/onboarding/*` |
+| 5 | Nome, slug e identidade da loja | Nome/slug implementados | Não | `stores.name/slug`, `onboarding_save_*` |
+| 6 | Logo e cores da loja | **Ausente** | Não (cosmético; loja opera sem isso) | nenhuma coluna/UI encontrada |
+| 7 | Escolha de plano | Implementado (registro, sem cobrança) | Não | `store_plans`, `onboarding_save_plan` |
+| 8 | Planos R$ 30/50/80 | Registrados como código fechado, **sem cobrança real** | Sim, para automatizada | `store_plans` check constraint |
+| 9 | Estados onboarding/pending_payment/active/suspended | Implementado | Não | `stores.status` (0002/0005/0006/0007) |
+| 10 | Ativação real de `pending_payment` → `active` | **Ausente automatizada** — só `service_role`/seed grava `active`, fluxo público nunca alcança | Sim, para automatizada; **piloto manual documentado** (ver `docs/production-runbook.md`, seção 13) | grep confirmado: nenhum caminho de app escreve `status='active'` |
+| 11 | Cobrança da mensalidade do SaaS | **Ausente** | Sim, para automatizada; **piloto manual aceitável** (cobrança fora do sistema, ativação manual) | nenhuma rota/RPC de cobrança encontrada |
+| 12 | Painel administrativo da loja | Implementado | Não | `app/dashboard/*` |
+| 13 | Categorias e produtos | Implementado | Não | TASK-003 |
+| 14 | Imagens | Implementado (bucket `product-images`, limite 5) | Não | TASK-003 |
+| 15 | Estoque | Implementado, concorrência real testada | Não | TASK-003/004, 17/17 |
+| 16 | Catálogo público | Implementado | Não | `app/loja/[storeSlug]` |
+| 17 | Carrinho | Implementado | Não | TASK-004 |
+| 18 | Checkout | Implementado | Não | TASK-004 |
+| 19 | Pedidos | Implementado | Não | TASK-004 |
+| 20 | Pix do pedido do cliente final | Implementado | Não | TASK-005 |
+| 21 | Credenciais Mercado Pago por loja | Implementado, criptografadas (AES-256-GCM) | Não | TASK-005, `store_payment_settings` |
+| 22 | Webhook e reconciliação | Implementado | Não | TASK-005 |
+| 23 | Gestão de pedidos e pagamentos | Implementado | Não | `app/dashboard/orders/*` |
+| 24 | Proteção multi-tenant | Implementado, RLS real testada (160 casos SQL) | Não | 7+56+35+38+24 |
+| 25 | Responsividade | Testada nos fluxos críticos (TASK-005: checkout/pagamento sem overflow mobile); sem auditoria visual completa desta vez | Não | `qa/reports/TASK-005-FINAL-APPROVAL.md` |
+| 26 | Termos e privacidade | **Implementado nesta task** (minuta, aguarda revisão jurídica) | Não | `app/termos`, `app/privacidade` |
+| 27 | Configuração de produção | **Implementado nesta task** | Era o objetivo desta task | ver seção seguinte |
+
+**Não confundir:** Pix das vendas da loja (item 20, implementado e testado) é um fluxo totalmente
+separado da cobrança da mensalidade do SaaS (item 11, ausente). O primeiro está pronto para operação
+real; o segundo não existe e não foi implementado nesta task (instrução explícita: não implementar um
+segundo sistema de pagamentos sem confirmação de que é requisito ausente aprovado).
+
+### Decisão de release
+
+**PRONTO PARA PILOTO CONTROLADO.** Todos os fluxos comerciais essenciais (cadastro, onboarding,
+catálogo, carrinho, checkout, Pix real por loja, painel) funcionam e estão testados de ponta a ponta.
+A ativação de loja e a cobrança da mensalidade do SaaS dependem de um procedimento manual documentado
+(`docs/production-runbook.md`, seção 13) — não há vulnerabilidade real nem requisito essencial de
+*venda* ausente; a lacuna é especificamente o SaaS billing da própria plataforma (Fase 4 do roadmap,
+fora do escopo desta task). Não é **PRONTO PARA PRODUÇÃO AUTOMATIZADA** por essa mesma lacuna. Não é
+**BLOQUEADO** — nenhum bloqueador de segurança/produção sobrevivente após as correções desta task (ver
+abaixo).
+
+### Correções e preparação implementadas nesta task
+
+**Fase 2 — Configuração de ambiente:**
+- `lib/env/production-env.ts` (+ `lib/env/production-env.test.ts`, 8 testes): validação centralizada
+  chamada só quando `NODE_ENV=production`. Exige `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`,
+  `PAYMENT_ENCRYPTION_KEY`, `CRON_SECRET`; rejeita `NEXT_PUBLIC_SITE_URL`/`NEXT_PUBLIC_SUPABASE_URL`
+  sem https ou apontando para localhost; rejeita `PAYMENT_GATEWAY_MODE=fake`. Mensagem de erro cita só
+  o NOME da variável, nunca o valor (testado explicitamente).
+- `instrumentation.ts` (novo): chama `assertProductionEnv()` no boot do processo (`register()`,
+  runtime Node.js) — falha rápido antes de aceitar qualquer requisição. Validado com `next start` real
+  (não só chamada isolada): recusa subir com `.env.local` de dev (localhost + `PAYMENT_GATEWAY_MODE=fake`)
+  e sobe normalmente com variáveis de produção válidas (testado com placeholders https, nunca
+  credenciais reais).
+- `.env.production.example` (novo): modelo com placeholders seguros e comentários objetivos, sem
+  nenhum valor real.
+
+**Fase 3 — Segurança contra execução acidental:**
+- `lib/env/local-only-guard.ts` (+ 5 testes): barreira de dois sinais independentes —
+  `NODE_ENV=production` bloqueia incondicionalmente; `NEXT_PUBLIC_SUPABASE_URL` fora de
+  localhost/127.0.0.1 exige `SEED_ALLOW_REMOTE_SUPABASE=true` explícito. `scripts/seed-local.ts`
+  chama `assertLocalOnlyScript()` antes de qualquer escrita — testado ao vivo: recusa rodar com
+  `NODE_ENV=production` mesmo apontando para o Supabase local (`Seed local falhou: seed-local: execução
+  recusada por segurança. Motivo(s): NODE_ENV=production.`).
+
+**Fase 4 — Auth e URLs de produção (revisão, sem bug de código encontrado além do item abaixo):**
+- Cookies (`receipt-cookie`, recuperação de senha) já usavam `secure: NODE_ENV==='production'`,
+  `httpOnly: true`, `sameSite: 'lax'` desde TASK-002/005 — confirmado, sem alteração necessária.
+- Allowlist de redirect (`lib/auth/redirects.ts`) já bloqueia open redirect (URLs absolutas,
+  `//host`, `..`) — confirmado, sem alteração necessária.
+- **Bug encontrado e corrigido nesta task:** `/termos` e `/privacidade` (novas, Fase 10) não estavam
+  em `PUBLIC_PATHS` (`lib/auth/middleware-policy.ts`) — um visitante anônimo clicando no link do
+  rodapé/checkout era redirecionado para `/login` em vez de ver a página. Corrigido; regressão coberta
+  em `lib/auth/middleware-policy.test.ts`. Encontrado durante o smoke test real em modo produção
+  (`next start`), não só por leitura de código.
+- `getSiteUrl()` (`lib/auth/site-url.ts`) mantém o fallback `http://127.0.0.1:3000` só para dev — em
+  produção esse caminho nunca é alcançado porque `assertProductionEnv()` já derrubou o boot antes se
+  `NEXT_PUBLIC_SITE_URL` estiver ausente/inválida.
+
+**Fase 6 — Deploy/Vercel:**
+- `vercel.json` (novo): cron de reconciliação (`*/15 * * * *` → `/api/cron/payments/reconcile`,
+  ajustável) e headers de segurança básicos (`X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy`).
+- `export const runtime = "nodejs"` adicionado explicitamente às rotas que usam `node:crypto`
+  (webhook, cron, health) — sem depender do padrão implícito da plataforma.
+- Rota de cron passou a aceitar `GET` além de `POST` (mesma checagem de `CRON_SECRET`) — Vercel Cron
+  Jobs invocam via `GET` com `Authorization: Bearer $CRON_SECRET` automático quando `CRON_SECRET` está
+  configurada nas env vars do projeto.
+
+**Fase 8/9 — Observabilidade e health:**
+- `app/api/health/route.ts` (novo): `GET /api/health`, runtime Node.js, consulta leve (`select id
+  from stores limit 1` com a anon key, respeitando RLS) — nunca expõe versão, segredo ou dado de loja.
+  Testado em dev (banco alcançável → `200 ok`) e em produção com Supabase inalcançável (→ `503
+  degraded`, sanitizado).
+- Falhas de webhook/reconciliação/`manual_review` já ficam em `audit_log` (Postgres, sanitizado) desde
+  a TASK-005 — mantido sem alteração; documentado em `docs/production-runbook.md` como o mecanismo de
+  observabilidade mínima desta fase (sem provedor externo de logs).
+
+**Fase 10 — Termos e privacidade (novo):**
+- `app/termos/page.tsx`, `app/privacidade/page.tsx`: minutas com placeholders explícitos
+  (`[A DEFINIR POR CARAFFA]`) para razão social/CNPJ/endereço/e-mail — nenhum dado real inventado.
+  Aviso de que o texto precisa de revisão jurídica antes de lançamento público amplo.
+- Links adicionados no rodapé do catálogo público (`app/loja/[storeSlug]/layout.tsx`, novo) e no
+  checkout (`app/loja/[storeSlug]/checkout/checkout-form.tsx`, antes do botão de envio).
+
+**Fase 13 — Preflight automatizado:**
+- `scripts/release-check.ts` + `npm run release:check` (novo): typecheck, lint, test, build, audit,
+  presença dos arquivos obrigatórios desta task, checagem estática do bloqueio do `FakePixGateway` em
+  produção, checagem estática da barreira do `seed-local.ts`, scan de `localhost`/`127.0.0.1`
+  hardcoded fora da allowlist (escopo: `app/`/`lib/`/`instrumentation.ts`, exclui teste/doc/QA), scan
+  de segredos no código-fonte rastreado pelo Git e no bundle de produção (`.next/static`). Não faz
+  reset de banco, seed, migration destrutiva, chamada Pix real nem deploy. **18/18 PASS.**
+- `scripts/production-db-verification.ts` + `npm run db:verify:production` (novo): read-only via REST
+  (PostgREST), sem `pg`/conexão direta nova. Confirma tabelas-chave, grants mínimos (anon
+  genuinamente negado — erro de permissão, não 0 linhas silenciosas — em `audit_log`,
+  `payment_webhook_events`, `store_payment_settings`), funções críticas (`is_slug_available`,
+  `create_order`) respondendo, bucket `product-images` público, ausência de fixtures locais
+  conhecidas. Dry-run real contra o Supabase local (com fixtures) confirmou o script detecta
+  corretamente lojas/usuários fixture — validação de que o script funciona antes de confiar nele
+  contra produção. Limitação documentada no próprio script: não confirma RLS habilitada nem varre
+  DML perigoso via `information_schema` (PostgREST não expõe isso) — auditoria completa de schema
+  precisa do SQL Editor do painel.
+
+**Refatoração para testabilidade (sem mudança de comportamento):**
+- `lib/payments/gateway/select-mode.ts` (novo): lógica pura de seleção fake/real extraída de
+  `lib/payments/gateway/index.ts` (que tem `import "server-only"` e por isso não podia ser importado
+  direto em teste — mesmo padrão já usado em `lib/payments/crypto.ts`/`crypto-core.ts`). Comportamento
+  idêntico; agora coberto por 4 testes diretos (`lib/payments/gateway/index.test.ts`) — antes não havia
+  nenhum teste automatizado deste guard específico.
+
+### Gates executados nesta sessão (banco local real, Docker)
+
+| Gate | Resultado |
+|---|---|
+| `npm test` | **442/442** (424 herdados + 18 novos desta task) |
+| `npm run lint` | OK (4 warnings pré-existentes/aceitos, `no-img-element`) |
+| `npx tsc --noEmit` | OK |
+| `npm run build` | OK |
+| `npm audit` / `npm audit --omit=dev` | 0 vulnerabilidades |
+| `npm run release:check` | **18/18 PASS** |
+| `supabase/tests/isolation_check.sql` (TASK-001) | 7/7 PASS |
+| `supabase/tests/onboarding_isolation_check.sql` (TASK-002) | 56/56 PASS |
+| `supabase/tests/catalog_isolation_check.sql` (TASK-003) | 35/35 PASS |
+| `supabase/tests/orders_isolation_check.sql` (TASK-004) | 38/38 PASS |
+| `supabase/tests/payments_isolation_check.sql` (TASK-005) | 24/24 PASS |
+| `supabase/tests/stock-concurrency-check.ts` | 17/17 PASS |
+| `supabase/tests/order-concurrency-check.ts` | 12/12 PASS |
+| `supabase/tests/payment-concurrency-check.ts` | 12/12 PASS |
+| `supabase/tests/migration-upgrade-check.sh` | PASS (upgrade real 0002→0007 com dado histórico preservado) |
+| `npm run db:verify:production` (dry-run contra o local) | detectou corretamente tabelas/grants/funções/bucket OK e as fixtures locais (esperado nesta base) |
+| `NODE_ENV=production` + `next start` com `.env.local` de dev | **recusou subir** (localhost + `PAYMENT_GATEWAY_MODE=fake`) — comportamento correto |
+| `NODE_ENV=production` + `next start` com placeholders https válidos | subiu; `/termos`/`/privacidade` 200; `/api/health` 503 sanitizado (Supabase placeholder inalcançável, esperado); cron sem auth 401; webhook sem assinatura 400 |
+| Smoke test funcional (catálogo, footer, links termos/privacidade) | via `npm run dev` + navegador real, ver bug do item Fase 4 acima (corrigido) |
+
+Todas as SQL/concorrência rodaram contra o Postgres local real (Docker), não simulação em memória.
+Nenhuma chamada real ao Mercado Pago foi feita (sem credencial real disponível neste ambiente,
+conforme já documentado na TASK-005).
+
+### Bloqueadores externos (fornecidos por Caraffa ou criados fora deste repositório)
+
+Nenhum valor abaixo foi inventado ou colocado no repositório:
+
+- Conta Vercel (ou host equivalente).
+- Projeto Supabase de produção (novo).
+- Domínio próprio com DNS configurável.
+- Conta/aplicação Mercado Pago para a loja piloto (Access Token de produção).
+- Webhook Secret real (gerado ao configurar o webhook no painel do Mercado Pago).
+- `PAYMENT_ENCRYPTION_KEY` e `CRON_SECRET` de produção (gerados no momento do deploy, nunca reaproveitados de dev).
+- E-mail de contato do operador e dados legais (razão social/CNPJ/endereço) para `/termos`/`/privacidade`.
+- Decisão sobre plataforma de logs externa (opcional).
+- Decisão/execução sobre SMTP de produção e CAPTCHA real no Supabase Auth (checklist já existente desde a TASK-002, não avançado nesta task — fora do escopo).
+
+### Documentação criada/atualizada nesta task
+
+- `docs/production-runbook.md` (novo): pré-requisitos, criação do Supabase de produção, migrations,
+  verificação pós-migration, variáveis, domínio/HTTPS, Supabase Auth, deploy, Mercado Pago, cron,
+  smoke test, monitoramento, **ativação manual de loja `pending_payment` → `active`** (procedimento
+  SQL documentado, seção 13), rollback, incidentes de `manual_review`.
+- `docs/release-checklist.md` (novo): checklist curto e marcável.
+- **Backup e rollback** (Fase 11, resumo — detalhes completos ficam para quando o projeto Supabase de
+  produção existir de fato, já que dependem do plano contratado):
+  - Backup: confirmar o backup automático do plano Supabase escolhido *antes* da primeira migration de
+    produção (Point-in-Time Recovery, se disponível no plano, ou snapshot manual via painel).
+  - Rollback de aplicação: reverter para o deployment anterior na Vercel (um clique no painel/CLI,
+    plataforma já mantém histórico de deployments) — não depende de nenhuma configuração adicional
+    deste repositório.
+  - Rollback de migration sem perda de dados: migrations `0001`–`0007` são aditivas (`create table`,
+    `alter table ... add column`, `create or replace function`) — nenhuma dropa dado existente. Reverter
+    uma migration específica exige uma migration nova e explícita de rollback (nunca editar uma
+    migration já aplicada em produção), escrita e revisada no momento em que for necessária.
+  - Desativação emergencial do Pix: `update public.store_payment_settings set is_active = false where
+    store_id = '<id>';` (por loja) ou, para desativar tudo, revogar o `PAYMENT_ENCRYPTION_KEY` (torna
+    toda leitura de credencial impossível — último recurso, exige rotação coordenada, ver abaixo).
+  - **Rotação de `PAYMENT_ENCRYPTION_KEY` — NUNCA uma simples troca de variável**, porque os valores já
+    gravados em `store_payment_settings.encrypted_access_token`/`encrypted_webhook_secret` foram
+    cifrados com a chave antiga; trocar a variável sem mais nada torna toda credencial existente
+    ilegível (não corrompida — apenas não descriptografável com a chave nova). Procedimento seguro:
+    1. Gerar a chave nova.
+    2. Rodar, em uma janela de manutenção curta (checkout Pix pausado), um script único de
+       re-criptografia: ler cada linha com a chave antiga (`PAYMENT_ENCRYPTION_KEY` atual),
+       descriptografar, re-criptografar com a chave nova, gravar de volta — nunca commitado, executado
+       manualmente com as duas chaves passadas como variáveis efêmeras.
+    3. Só então atualizar `PAYMENT_ENCRYPTION_KEY` no ambiente de produção e reiniciar a aplicação.
+    4. Confirmar (via `/dashboard/settings/payments` de uma loja de teste) que a credencial ainda é
+       legível após a troca, antes de considerar a rotação concluída.
+    Este script de re-criptografia **não foi implementado nesta task** (não é necessário até a primeira
+    rotação real acontecer) — não é um KMS, é um script único e revisado no momento do uso.
+  - Rotação do Access Token Mercado Pago: feita pelo próprio lojista em
+    `/dashboard/settings/payments` (gera um token novo no painel do Mercado Pago, cola no formulário —
+    a aplicação já criptografa o novo valor com a chave atual, sem downtime).
+  - Rotação do Webhook Secret: mesma tela, mesmo fluxo — atualizar no Mercado Pago e na aplicação
+    juntos (uma janela curta em que o webhook pode falhar validação de assinatura até os dois lados
+    ficarem sincronizados).
+  - Rotação do `CRON_SECRET`: trocar a variável de ambiente e o valor configurado no agendador (Vercel
+    Cron não usa `CRON_SECRET` diretamente no `vercel.json` — a env var do projeto é lida em runtime
+    pela própria rota) — sem impacto em dado persistido, pode ser feita a qualquer momento.
+
+### Atualização mínima de `docs/roadmap.md`
+
+Fase 6 (Lançamento) marcada com o progresso desta task — ver arquivo.
+
+### Próxima ação
+
+TASK-006 fica em `tasks/review/task-006.md`, aguardando decisão de Caraffa sobre seguir para o piloto
+controlado (usando o runbook desta task) ou revisar algum ponto da matriz antes. Nenhum merge, push ou
+deploy foi realizado nesta sessão.
+
+## Encerramento da TASK-006 (2026-08-05)
+
+**Verificação final:** releitura curta (sem nova auditoria completa do MVP), confirmação objetiva das
+12 garantias de produção (localhost/https/`FakePixGateway`/segredos não-públicos/scripts locais
+recusam produção/`/termos`+`/privacidade` públicas/`/api/health` sanitizado/cron exige
+`CRON_SECRET`/webhook valida assinatura/`.env.production.example` sem valor real/`production-db-verification`
+só leitura/`release:check` sem operação destrutiva) e bateria completa de gates — todos verdes:
+442/442 testes, lint/typecheck/build/audit OK, `release:check` 18/18, TASK-001-005 SQL
+(7+56+35+38+24), concorrência (17+12+12), `migration-upgrade-check.sh` PASS,
+`db:verify:production` 20/22 contra o local (as 2 únicas falhas são a detecção correta das fixtures
+locais, comportamento esperado). Boot real em modo produção com placeholders válidos: `/api/health`
+degradado sanitizado (domínio placeholder inalcançável), `/termos`/`/privacidade`/`/login` 200;
+catálogo público confirmado funcional em separado, contra o Supabase local real. Nenhum bug novo
+encontrado nesta sessão — detalhamento completo em `qa/reports/TASK-006-FINAL-APPROVAL.md`.
+
+**Ação:** TASK-006 movida para `tasks/done/task-006.md` (status `DONE`) e branch
+`feat/TASK-006-production-readiness` mesclada na `master` via `git merge --no-ff` (sem squash —
+histórico preservado). Branch da tarefa **não** excluída. Nenhum push, nenhum deploy realizado.
+Próxima tarefa recomendada: **TASK-007 — Cobrança dos planos e ativação automática** (não implementada
+nesta sessão).

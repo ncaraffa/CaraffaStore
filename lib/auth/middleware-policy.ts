@@ -16,6 +16,8 @@ export const PUBLIC_PATHS = [
   "/auth/confirm",
   "/auth/recovery",
   "/loja",
+  "/termos",
+  "/privacidade",
 ];
 
 /**

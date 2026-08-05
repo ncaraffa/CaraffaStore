@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed:local": "tsx scripts/seed-local.ts"
+    "seed:local": "tsx scripts/seed-local.ts",
+    "db:verify:production": "tsx scripts/production-db-verification.ts",
+    "release:check": "tsx scripts/release-check.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",
