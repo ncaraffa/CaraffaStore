@@ -1,8 +1,8 @@
 # TASK-005 — Pix e pagamentos (Mercado Pago, por loja)
 
-**Status:** REVIEW
+**Status:** DONE
 **Responsável:** Claude Code
-**Branch:** feat/TASK-005-pix-payments
+**Branch:** feat/TASK-005-pix-payments (mesclada na master via `git merge --no-ff`, histórico preservado)
 **HEAD-base:** 70efe3556753cdbfaa7967ca2b061fdd6126104d (master, TASK-001/002/003/004 DONE)
 
 **Decisões aprovadas por Caraffa (2026-08-04):** Mercado Pago via `POST /v1/payments`; cada loja usa
@@ -12,9 +12,8 @@ cancelado só com erro seguro `paid_order_requires_refund`); checkout público p
 configurado e ativo na loja — pedidos manuais anteriores à TASK-005 são preservados como
 `payment_mode = 'manual'`, nunca alterados.
 
-**Entrega para revisão externa:** ver `docs/handoff.md`, seção "Entrega da TASK-005", e
-`qa/reports/TASK-005-CLAUDE-VERIFICATION.md`. Não mover para `tasks/done/` nem fazer merge até
-aprovação explícita.
+**Aprovação final:** revisão externa (ChatGPT) em 2026-08-05, ver
+`qa/reports/TASK-005-FINAL-APPROVAL.md`. Commit testado `e46d8d068126c9c001d92f5f84d7a7799dc48d43`.
 
 ## Objetivo
 

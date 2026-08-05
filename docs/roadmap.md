@@ -26,8 +26,8 @@
 
 - Configuração, cobrança, webhooks, confirmação e idempotência.
 - Reserva/baixa de estoque, expiração, logs seguros e testes.
-- **Pix e pagamentos (Mercado Pago, por loja): em revisão** (TASK-005, `tasks/review/task-005.md`,
-  branch `feat/TASK-005-pix-payments`, aguardando aprovação externa — ver `docs/handoff.md`).
+- **Pix e pagamentos (Mercado Pago, por loja): concluída** (TASK-005, `tasks/done/task-005.md`,
+  aprovada em `qa/reports/TASK-005-FINAL-APPROVAL.md`).
 
 ## Fase 4 — SaaS e assinaturas
 

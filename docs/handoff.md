@@ -2,7 +2,7 @@
 
 ## Estado atual
 
-- **TASK-005: REVIEW.** Pix e pagamentos (Mercado Pago, por loja). Cada loja usa suas próprias
+- **TASK-005: DONE.** Pix e pagamentos (Mercado Pago, por loja). Cada loja usa suas próprias
   credenciais (sem OAuth, sem split, sem conta global), criptografadas com AES-256-GCM
   (`lib/payments/crypto.ts`, chave só em `PAYMENT_ENCRYPTION_KEY`). Checkout público passa a exigir
   Pix configurado e ativo; pedidos manuais anteriores (`payment_mode='manual'`) são preservados sem
@@ -12,9 +12,12 @@
   e botão "Reconciliar" do painel). Aprovado confirma o pedido uma vez; rejeitado/cancelado/expirado
   cancela e devolve estoque uma vez; conflito de estado terminal vira `manual_review` (nunca decide
   sozinho). Pedido pago não pode ser cancelado pelo fluxo comum (`paid_order_requires_refund`, sem
-  reembolso nesta tarefa). Ver `docs/handoff.md`, seção "Entrega da TASK-005", e
-  `qa/reports/TASK-005-CLAUDE-VERIFICATION.md`. Não mesclada, aguardando aprovação externa. Branch
-  `feat/TASK-005-pix-payments`.
+  reembolso nesta tarefa). Aprovada por revisão externa (ChatGPT) em 2026-08-05
+  (`qa/reports/TASK-005-FINAL-APPROVAL.md`, commit `e46d8d068126c9c001d92f5f84d7a7799dc48d43`) e
+  mesclada na `master` via `git merge --no-ff` (histórico preservado, sem squash). Arquivo da tarefa
+  em `tasks/done/task-005.md`. Branch `feat/TASK-005-pix-payments` preservada (não excluída). Nenhum
+  deploy realizado. Ver `docs/handoff.md`, seção "Entrega da TASK-005", e seção "Encerramento da
+  TASK-005" mais abaixo.
 
 - **TASK-004: DONE.** Carrinho, checkout sem pagamento e gestão de pedidos. Checkout público
   (sem login), preço/total sempre recalculados no banco, estoque reservado/reduzido atomicamente na
@@ -1732,7 +1735,7 @@ implementação e QA preservado). Branch da tarefa **não** excluída. Nenhum de
 
 ## Entrega da TASK-005 — Pix e pagamentos (Mercado Pago, por loja) (2026-08-04)
 
-**Branch:** `feat/TASK-005-pix-payments` (não mesclada — aguardando revisão externa)
+**Branch:** `feat/TASK-005-pix-payments` (mesclada na `master` via `git merge --no-ff`, histórico preservado)
 **Decisões aprovadas por Caraffa:** Mercado Pago via `POST /v1/payments`; cada loja usa suas próprias
 credenciais (sem OAuth, sem split, sem conta global); credenciais criptografadas (AES-256-GCM); sem
 reembolso (pedido pago cancelado só com erro seguro); checkout público passa a exigir Pix configurado
@@ -1798,3 +1801,23 @@ Detalhamento completo em `qa/reports/TASK-005-CLAUDE-VERIFICATION.md`.
   toda a suíte usa `FakePixGateway`, conforme decisão aprovada.
 - Sem cartão, boleto, OAuth, split, assinatura, reembolso, chargeback, nota fiscal — fora do escopo
   aprovado desta tarefa.
+
+## Encerramento da TASK-005 (2026-08-05)
+
+**Aprovação final:** `qa/reports/TASK-005-FINAL-APPROVAL.md`, **APROVADA PARA MERGE**, commit
+testado `e46d8d068126c9c001d92f5f84d7a7799dc48d43`. Verificação final desta sessão em banco limpo:
+424/424 testes, TASK-001 RLS 7/7, TASK-002 SQL 56/56, TASK-003 SQL 35/35, TASK-004 SQL 38/38,
+TASK-005 SQL 24/24, privilégios estáticos 22/22, concorrência de estoque 17/17, de pedidos 12/12, de
+pagamentos 12/12, migration upgrade desde a 0002 (com histórico TASK-002/003/004/005 e um pedido
+legado real preservado como `manual`) PASS, lint/typecheck/build/audit OK, scan de bundle sem
+segredos, webhook real testado ao vivo (assinatura válida/inválida/ausente, chave desconhecida,
+`data.id` ausente), smoke test real (checkout → QR → aprovação → painel → completed; segundo pedido →
+rejeição → cancelamento → estoque devolvido) OK, sem overflow mobile. Descoberta não bloqueante nesta
+sessão: o `FakePixGateway` não compartilha estado em memória entre a Server Action que cria o
+pagamento e o Route Handler do webhook no `next dev` (Turbopack) — isolado ao duplo de teste em modo
+dev, sem efeito no gateway real nem na lógica de estado (provada por SQL/concorrência independentes);
+detalhado em `qa/reports/TASK-005-FINAL-APPROVAL.md`.
+
+**Ação:** TASK-005 movida para `tasks/done/task-005.md` (status `DONE`) e branch
+`feat/TASK-005-pix-payments` mesclada na `master` via `git merge --no-ff` (sem squash — histórico de
+implementação e QA preservado). Branch da tarefa **não** excluída. Nenhum deploy realizado.
