@@ -19,6 +19,8 @@
 - Carrinho, checkout, pedidos e painel do comerciante.
 - **Catálogo, produtos, categorias e estoque: concluída** (TASK-003, `tasks/done/task-003.md`,
   aprovada em `qa/reports/TASK-003-FINAL-APPROVAL.md`).
+- **Carrinho, checkout sem pagamento e gestão de pedidos: concluída** (TASK-004, `tasks/done/task-004.md`,
+  aprovada em `qa/reports/TASK-004-FINAL-APPROVAL.md`).
 
 ## Fase 3 — Pix
 

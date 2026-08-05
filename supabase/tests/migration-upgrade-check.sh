@@ -31,11 +31,11 @@ cd "$(dirname "$0")/../.."
 MIGRATIONS_DIR="supabase/migrations"
 STASH_DIR="$(mktemp -d)"
 
-# Sempre devolve 0003/0004/0005 para o lugar antes de limpar o diretório
-# temporário, mesmo se o script falhar no meio — nunca deixa os
-# arquivos de migração "presos" só no stash.
+# Sempre devolve 0003/0004/0005/0006 para o lugar antes de limpar o
+# diretório temporário, mesmo se o script falhar no meio — nunca deixa
+# os arquivos de migração "presos" só no stash.
 restore_migrations() {
-  for f in 0003_recovery_session.sql 0004_account_audit.sql 0005_catalog.sql; do
+  for f in 0003_recovery_session.sql 0004_account_audit.sql 0005_catalog.sql 0006_orders.sql; do
     if [ -f "$STASH_DIR/$f" ]; then
       mv "$STASH_DIR/$f" "$MIGRATIONS_DIR/"
     fi
@@ -44,10 +44,11 @@ restore_migrations() {
 }
 trap restore_migrations EXIT
 
-echo "==> Movendo 0003/0004/0005 para fora de supabase/migrations/ (simula estado pós-0002)"
+echo "==> Movendo 0003/0004/0005/0006 para fora de supabase/migrations/ (simula estado pós-0002)"
 mv "$MIGRATIONS_DIR/0003_recovery_session.sql" "$STASH_DIR/"
 mv "$MIGRATIONS_DIR/0004_account_audit.sql" "$STASH_DIR/"
 mv "$MIGRATIONS_DIR/0005_catalog.sql" "$STASH_DIR/"
+mv "$MIGRATIONS_DIR/0006_orders.sql" "$STASH_DIR/"
 
 echo "==> supabase db reset (só 0001+0002)"
 npx supabase db reset --local
@@ -267,9 +268,83 @@ if [ "$PRODUCTS_EXTENDED_OK" != "5" ]; then
 fi
 echo "PASS - public.products foi estendida em ALTER TABLE (nunca recriada) — colunas novas presentes após o upgrade"
 
+echo "==> TASK-004: simulando o estado real da master atual (0001-0005 aplicadas, TASK-003 concluída)"
+# Insere eventos históricos no estilo TASK-003 (0005 já aplicada nesta
+# altura) ANTES de trazer a 0006 — é exatamente o estado real da master
+# no momento em que a TASK-004 começou (66d9760, ver docs/handoff.md).
+TASK003_STYLE_IDS_RAW=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -q -t -A -c "
+  insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata, created_at) values
+    ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'product_created', 'product', 'historico-produto-1', '{}'::jsonb, now() - interval '12 hours'),
+    ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'product_stock_adjusted', 'product', 'historico-produto-1', '{\"delta\":-3,\"new_stock\":7}'::jsonb, now() - interval '11 hours')
+  returning id;
+")
+TASK003_STYLE_IDS=$(echo "$TASK003_STYLE_IDS_RAW" | tr -d ' ')
+TASK003_STYLE_COUNT=$(echo "$TASK003_STYLE_IDS_RAW" | grep -c '.')
+echo "    $TASK003_STYLE_COUNT linhas históricas adicionais (estilo TASK-003, pós-0005) inseridas"
+
+echo "==> Devolvendo 0006 para supabase/migrations/"
+mv "$STASH_DIR/0006_orders.sql" "$MIGRATIONS_DIR/"
+
+echo "==> supabase migration up (aplica 0006 SOBRE o banco com TODO o histórico anterior, sem reset)"
+npx supabase migration up --local
+
+echo "==> Verificando: histórico completo (0002 + TASK-002 + TASK-003) sobrevive intacto ao upgrade da TASK-004"
+ALL_HISTORICAL_IDS_V2="$ALL_HISTORICAL_IDS
+$TASK003_STYLE_IDS"
+ALL_HISTORICAL_COUNT_V2=$((ALL_HISTORICAL_COUNT + TASK003_STYLE_COUNT))
+SURVIVED_ALL_V2=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from public.audit_log where id::text = any(string_to_array('$ALL_HISTORICAL_IDS_V2', E'\n'));
+")
+if [ "$SURVIVED_ALL_V2" != "$ALL_HISTORICAL_COUNT_V2" ]; then
+  echo "FAIL - histórico incompleto sobreviveu ao upgrade da TASK-004 (esperado $ALL_HISTORICAL_COUNT_V2, obtido $SURVIVED_ALL_V2)"
+  exit 1
+fi
+echo "PASS - todo o histórico (0002 + TASK-002 + TASK-003, $SURVIVED_ALL_V2 linhas) sobreviveu intacto ao upgrade da TASK-004"
+
+ORDERS_SCHEMA_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from pg_proc
+    where proname in ('can_view_store_orders', 'can_manage_store_orders', 'create_order', 'order_advance_status', 'order_cancel');
+")
+if [ "$ORDERS_SCHEMA_OK" != "5" ]; then
+  echo "FAIL - nem todas as 5 funções de pedidos existem após o upgrade (esperado 5, obtido $ORDERS_SCHEMA_OK)"
+  exit 1
+fi
+echo "PASS - as 5 funções de pedidos (can_view_store_orders/can_manage_store_orders/create_order/order_advance_status/order_cancel) existem após o upgrade"
+
+ORDERS_TABLES_OK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from information_schema.tables where table_schema = 'public' and table_name in ('orders', 'order_items');
+")
+if [ "$ORDERS_TABLES_OK" != "2" ]; then
+  echo "FAIL - tabelas orders/order_items não existem após o upgrade (esperado 2, obtido $ORDERS_TABLES_OK)"
+  exit 1
+fi
+echo "PASS - tabelas orders/order_items existem após o upgrade"
+
+ORDERS_ACTION_CHECK=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select pg_get_constraintdef(oid) from pg_constraint where conname = 'audit_log_action_check';
+")
+for expected_action in order_created order_status_changed order_cancelled order_stock_reserved order_stock_restored category_created product_stock_adjusted signup_completed; do
+  if ! echo "$ORDERS_ACTION_CHECK" | grep -q "$expected_action"; then
+    echo "FAIL - audit_log_action_check não inclui $expected_action após o upgrade da TASK-004"
+    exit 1
+  fi
+done
+echo "PASS - audit_log_action_check inclui os eventos de pedido sem perder nenhum valor histórico anterior"
+
+ORDERS_NO_DIRECT_GRANT=$(docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -t -A -c "
+  select count(*) from information_schema.role_table_grants
+    where table_schema='public' and table_name in ('orders','order_items') and grantee='authenticated'
+      and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE');
+")
+if [ "$ORDERS_NO_DIRECT_GRANT" != "0" ]; then
+  echo "FAIL - authenticated tem GRANT de escrita direta em orders/order_items após o upgrade (esperado 0, obtido $ORDERS_NO_DIRECT_GRANT)"
+  exit 1
+fi
+echo "PASS - authenticated não tem nenhum GRANT de escrita direta em orders/order_items após o upgrade"
+
 echo "==> Restaurando o ambiente para o estado normal de teste (reset completo + reseed)"
 npx supabase db reset --local
 npm run seed:local
 
 echo ""
-echo "PASS - upgrade real desde a migration 0002 (com dados históricos, TASK-002 e TASK-003) até o schema final: sem erro, dado histórico preservado, schema final funcional."
+echo "PASS - upgrade real desde a migration 0002 (com dados históricos, TASK-002, TASK-003 e TASK-004) até o schema final: sem erro, dado histórico preservado, schema final funcional."

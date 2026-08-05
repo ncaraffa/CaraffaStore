@@ -30,8 +30,15 @@ export type AuditAction =
   | "product_stock_adjusted"
   | "product_image_added"
   | "product_image_removed"
-  | "product_cover_changed";
+  | "product_cover_changed"
+  | "order_created"
+  | "order_status_changed"
+  | "order_cancelled"
+  | "order_stock_reserved"
+  | "order_stock_restored";
 export type ProductStatus = "draft" | "published" | "archived";
+export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "completed" | "cancelled";
+export type FulfillmentMethod = "pickup" | "delivery";
 
 /**
  * Minimal hand-written mirror of `supabase/migrations/0001_init.sql`
@@ -377,6 +384,128 @@ export interface Database {
           },
         ];
       };
+      orders: {
+        Row: {
+          id: string;
+          store_id: string;
+          public_code: string;
+          idempotency_key: string;
+          request_fingerprint: string;
+          customer_name: string;
+          customer_phone: string;
+          fulfillment_method: FulfillmentMethod;
+          delivery_address: string | null;
+          customer_notes: string | null;
+          status: OrderStatus;
+          subtotal_cents: number;
+          total_cents: number;
+          created_at: string;
+          updated_at: string;
+          cancelled_at: string | null;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          store_id: string;
+          public_code: string;
+          idempotency_key: string;
+          request_fingerprint: string;
+          customer_name: string;
+          customer_phone: string;
+          fulfillment_method: FulfillmentMethod;
+          delivery_address?: string | null;
+          customer_notes?: string | null;
+          status?: OrderStatus;
+          subtotal_cents: number;
+          total_cents: number;
+          created_at?: string;
+          updated_at?: string;
+          cancelled_at?: string | null;
+          completed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          store_id?: string;
+          public_code?: string;
+          idempotency_key?: string;
+          request_fingerprint?: string;
+          customer_name?: string;
+          customer_phone?: string;
+          fulfillment_method?: FulfillmentMethod;
+          delivery_address?: string | null;
+          customer_notes?: string | null;
+          status?: OrderStatus;
+          subtotal_cents?: number;
+          total_cents?: number;
+          created_at?: string;
+          updated_at?: string;
+          cancelled_at?: string | null;
+          completed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "orders_store_id_fkey";
+            columns: ["store_id"];
+            isOneToOne: false;
+            referencedRelation: "stores";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      order_items: {
+        Row: {
+          id: string;
+          order_id: string;
+          store_id: string;
+          product_id: string;
+          product_name_snapshot: string;
+          product_slug_snapshot: string | null;
+          unit_price_cents: number;
+          quantity: number;
+          line_total_cents: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          order_id: string;
+          store_id: string;
+          product_id: string;
+          product_name_snapshot: string;
+          product_slug_snapshot?: string | null;
+          unit_price_cents: number;
+          quantity: number;
+          line_total_cents: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          order_id?: string;
+          store_id?: string;
+          product_id?: string;
+          product_name_snapshot?: string;
+          product_slug_snapshot?: string | null;
+          unit_price_cents?: number;
+          quantity?: number;
+          line_total_cents?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_items_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       password_recovery_grants: {
         Row: {
           id: string;
@@ -548,6 +677,35 @@ export interface Database {
       catalog_move_product_image: {
         Args: { p_image_id: string; p_direction: "up" | "down" };
         Returns: void;
+      };
+      can_view_store_orders: {
+        Args: { target_store_id: string };
+        Returns: boolean;
+      };
+      can_manage_store_orders: {
+        Args: { target_store_id: string };
+        Returns: boolean;
+      };
+      create_order: {
+        Args: {
+          p_store_slug: string;
+          p_idempotency_key: string;
+          p_customer_name: string;
+          p_customer_phone: string;
+          p_fulfillment_method: FulfillmentMethod;
+          p_delivery_address: string | null;
+          p_customer_notes: string | null;
+          p_items: { product_id: string; quantity: number }[];
+        };
+        Returns: Database["public"]["Tables"]["orders"]["Row"];
+      };
+      order_advance_status: {
+        Args: { p_order_id: string; p_new_status: OrderStatus };
+        Returns: Database["public"]["Tables"]["orders"]["Row"];
+      };
+      order_cancel: {
+        Args: { p_order_id: string };
+        Returns: Database["public"]["Tables"]["orders"]["Row"];
       };
     };
   };

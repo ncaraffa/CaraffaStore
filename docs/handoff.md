@@ -2,6 +2,19 @@
 
 ## Estado atual
 
+- **TASK-004: DONE.** Carrinho, checkout sem pagamento e gestão de pedidos. Checkout público
+  (sem login), preço/total sempre recalculados no banco, estoque reservado/reduzido atomicamente na
+  criação do pedido (RPC `create_order`, idempotente via advisory lock + fingerprint, produtos
+  travados em `ORDER BY id` — sem overselling nem deadlock sob concorrência real), cancelamento
+  atômico com devolução de estoque exatamente uma vez (`order_cancel`), máquina de estados linear
+  (`order_advance_status`). `orders`/`order_items` sem DML direto para `authenticated`, sem leitura
+  para `anon`. Aprovada por revisão externa (ChatGPT) em 2026-08-04
+  (`qa/reports/TASK-004-FINAL-APPROVAL.md`, commit `1c890bbc9c21bae311bdc2724ab2f0dd19687b42`) e
+  mesclada na `master` via `git merge --no-ff` (histórico preservado, sem squash). Arquivo da tarefa
+  em `tasks/done/task-004.md`. Branch `feat/TASK-004-cart-orders` preservada (não excluída). Nenhum
+  deploy realizado. Ver `docs/handoff.md`, seção "Entrega da TASK-004", e seção "Encerramento da
+  TASK-004" mais abaixo.
+
 - **TASK-003: DONE.** Catálogo, produtos, categorias, imagens e estoque. Verificação adversarial
   encontrou 3 bloqueadores (crítico/alto — loja não ativa administrando catálogo via RPC/Storage
   direta, DML direto em `products` contornando as RPCs, limite de 5 imagens vencível sob
@@ -1609,3 +1622,96 @@ build/audit OK, smoke test real OK.
 `feat/TASK-003-catalog-products` mesclada na `master` via `git merge --no-ff` (sem squash — histórico
 de implementação, correções e QA preservado). Branch da tarefa **não** excluída. Nenhum deploy
 realizado.
+
+## Entrega da TASK-004 — Carrinho, checkout sem pagamento e gestão de pedidos (2026-08-04)
+
+**Branch:** `feat/TASK-004-cart-orders` (mesclada na `master` via `git merge --no-ff`, histórico preservado)
+**Decisões aprovadas por Caraffa:** checkout público sem login; carrinho só no navegador
+(localStorage), revalidado inteiramente no servidor; sem Pix/pagamento nesta tarefa (pedido criado
+`pending`, comerciante combina o pagamento); estoque reservado/reduzido atomicamente na criação,
+devolvido exatamente uma vez no cancelamento; sem variantes.
+
+### Arquitetura
+
+`orders`/`order_items` (novas, `supabase/migrations/0006_orders.sql`). Toda mutação exclusivamente via
+3 funções `SECURITY DEFINER`: `create_order` (única chamável por `anon`, checkout público),
+`order_advance_status` e `order_cancel` (só `authenticated`, owner/admin, loja `active`, via
+`can_manage_store_orders`). Leitura via RLS (`can_view_store_orders`: qualquer membro, loja `active`
+— exige loja ativa mesmo para leitura, diferente do catálogo da TASK-003, porque pedidos carregam
+dados pessoais do cliente).
+
+`create_order` nunca aceita preço/total do cliente (só `product_id`+`quantity`); resolve a loja,
+exige `active`, valida/consolida itens, serializa por `(store_id, idempotency_key)` via
+`pg_advisory_xact_lock` + comparação de `request_fingerprint` (idempotente: reenvio idêntico devolve
+o mesmo pedido, reenvio com conteúdo diferente sob a mesma key é rejeitado), trava os produtos em
+`ORDER BY id` (evita deadlock entre pedidos concorrentes com produtos em comum), reduz o estoque por
+compare-and-swap (mesmo padrão de `catalog_adjust_stock`, TASK-003) e grava `order_created`/
+`order_stock_reserved` na mesma transação. `order_cancel` trava a linha do pedido primeiro — isso
+sozinho serializa cancelamentos concorrentes do mesmo pedido (só um sucede, `completed`/`cancelled`
+são terminais) — e devolve o estoque com o mesmo lock determinístico sobre os produtos.
+
+`authenticated` não tem nenhum GRANT de INSERT/UPDATE/DELETE/TRUNCATE em `orders`/`order_items`;
+`anon` não tem GRANT algum nas duas tabelas (nunca lista pedidos).
+
+### Rotas
+
+**Públicas** (`/loja/[storeSlug]/{carrinho,checkout,pedido/[publicCode]/sucesso}`): cobertas pelo
+prefixo `/loja` já público em `PUBLIC_PATHS` — nenhuma mudança de middleware necessária. A página de
+sucesso não consulta o banco (só exibe o `publicCode` recebido do checkout), então não há como vazar
+dado de outro pedido por ali mesmo que alguém manipule a URL.
+
+**Administrativas** (`/dashboard/orders`, `/dashboard/orders/[orderId]`): mesmo guard
+`requireStoreStatus(supabase, "active", storeSlug)` da TASK-002/003, sem alteração.
+
+### Carrinho
+
+`lib/cart/storage.ts` (localStorage, chave `cart:<storeSlug>` — isolamento por loja pela própria
+chave) + `lib/cart/use-cart.ts` (`useSyncExternalStore`, não `useEffect`+`setState`, para evitar
+cascata de renders e manter sincronia entre componentes/abas sem Context/Provider).
+
+### Auditoria
+
+5 eventos novos (`order_created`, `order_status_changed`, `order_cancelled`, `order_stock_reserved`,
+`order_stock_restored`) — `audit_log_action_check` só ALARGADO.
+
+### Resultados reais desta rodada
+
+| Gate | Resultado |
+|---|---|
+| `npm test` | **338/338** |
+| `npm run lint` | OK (3 warnings pré-existentes, aceitos) |
+| `npx tsc --noEmit` / `npm run build` | OK |
+| `npm audit` / `--omit=dev` | 0 vulnerabilidades |
+| `supabase/tests/isolation_check.sql` (TASK-001) | 7/7 PASS |
+| `supabase/tests/onboarding_isolation_check.sql` (TASK-002) | 56/56 PASS |
+| `supabase/tests/catalog_isolation_check.sql` (TASK-003) | 35/35 PASS |
+| `supabase/tests/orders_isolation_check.sql` (TASK-004, novo) | **38/38 PASS** |
+| `supabase/tests/stock-concurrency-check.ts` | 17/17 PASS |
+| `supabase/tests/order-concurrency-check.ts` (TASK-004, novo) | **12/12 PASS** — overselling, deadlock, idempotência e cancelamento sob concorrência real |
+| `supabase/tests/migration-upgrade-check.sh` | PASS — banco novo e upgrade real desde a master até a TASK-004 |
+| Navegador real | fluxo completo carrinho→checkout→painel→transições de status funcionando; sem overflow em mobile (375×812) |
+| Scan de segredos | nenhuma ocorrência de `SERVICE_ROLE`/`service_role` no bundle |
+
+Detalhamento completo em `qa/reports/TASK-004-CLAUDE-VERIFICATION.md`.
+
+### Limitações remanescentes
+
+- Botão "Cancelar pedido" usa `window.confirm()` nativo — não testável via navegador headless
+  automatizado (rejeita o diálogo sem suporte a aceitar/rejeitar); a RPC `order_cancel` em si foi
+  validada exaustivamente por outras vias (SQL, concorrência real, chamada direta).
+- Sem reserva com expiração, cupom, frete calculado, e-mail/WhatsApp automático — fora do escopo
+  aprovado desta tarefa.
+
+## Encerramento da TASK-004 (2026-08-04)
+
+**Aprovação final:** `qa/reports/TASK-004-FINAL-APPROVAL.md`, **APROVADA PARA MERGE**, commit
+testado `1c890bbc9c21bae311bdc2724ab2f0dd19687b42`. Verificação final desta sessão em banco limpo:
+338/338 testes, TASK-001 RLS 7/7, TASK-002 SQL 56/56, TASK-003 SQL 35/35, TASK-004 SQL 38/38,
+concorrência de estoque 17/17, concorrência de pedidos 12/12, migration upgrade desde a 0002 (com
+histórico TASK-002/003/004) PASS, lint/typecheck/build/audit OK, smoke test real (carrinho →
+checkout → painel → transições de status → cancelamento com devolução de estoque confirmada em
+banco) OK, sem erro de servidor, sem overflow mobile.
+
+**Ação:** TASK-004 movida para `tasks/done/task-004.md` (status `DONE`) e branch
+`feat/TASK-004-cart-orders` mesclada na `master` via `git merge --no-ff` (sem squash — histórico de
+implementação e QA preservado). Branch da tarefa **não** excluída. Nenhum deploy realizado.

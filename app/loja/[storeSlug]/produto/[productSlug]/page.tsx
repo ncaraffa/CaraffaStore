@@ -3,6 +3,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 import * as catalog from "@/lib/catalog/service";
 import { formatPriceCents } from "@/lib/catalog/format";
+import { AddToCartButton } from "../../add-to-cart-button";
+import { CartBadge } from "../../cart-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +32,12 @@ export default async function ProductPage({
 
   return (
     <main>
-      <p>
-        <a href={`/loja/${storeSlug}`}>← {store.name}</a>
-      </p>
+      <div className="storefront-header">
+        <p>
+          <a href={`/loja/${storeSlug}`}>← {store.name}</a>
+        </p>
+        <CartBadge storeSlug={storeSlug} />
+      </div>
 
       <article className="product-detail">
         <div className="product-detail-gallery">
@@ -66,10 +71,14 @@ export default async function ProductPage({
 
           {product.description && <p>{product.description}</p>}
 
-          <p className="form-hint">
-            Compra online ainda não disponível nesta loja — fale diretamente com o comerciante para adquirir este
-            produto.
-          </p>
+          <AddToCartButton
+            storeSlug={storeSlug}
+            productId={product.id}
+            name={product.name}
+            slug={product.slug}
+            priceCents={product.price_cents}
+            stock={product.stock}
+          />
         </div>
       </article>
     </main>
