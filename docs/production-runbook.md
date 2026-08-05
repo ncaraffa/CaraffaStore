@@ -118,9 +118,17 @@ A configuração de credenciais Mercado Pago é feita **pelo próprio lojista**,
 Rota: `POST /api/cron/payments/reconcile`, protegida por `Authorization: Bearer <CRON_SECRET>`.
 
 Na Vercel, usar Vercel Cron (`vercel.json`, já preparado neste repositório) ou, em outro host, um
-agendador externo que faça uma requisição `POST` autenticada. Frequência sugerida: a cada 15 minutos
-— ajustável conforme volume real de pedidos. Verificar periodicamente `manual_review` (pagamentos que
-a reconciliação não conseguiu decidir sozinha) na tabela `order_payments`/painel de pedidos.
+agendador externo que faça uma requisição `POST`/`GET` autenticada. **Limitação real do plano Hobby da
+Vercel:** cron jobs só podem rodar no máximo uma vez por dia — `vercel.json` está configurado para
+`0 3 * * *` (03:00 UTC, diariamente). Isso é uma degradação aceita para o piloto: a confirmação de
+pagamento continua imediata via webhook (`/api/webhooks/mercado-pago`) na grande maioria dos casos; a
+reconciliação diária cobre só os casos em que o webhook falhou ou não chegou. Se o volume do piloto
+justificar reconciliação mais frequente, as opções são: (a) upgrade do projeto Vercel para o plano Pro
+(libera frequências menores) ou (b) um agendador externo simples (ex.: cron-job.org, GitHub Actions
+scheduled workflow) fazendo `POST` autenticado com `CRON_SECRET` na frequência desejada — sem
+necessidade de mudar código, só de configurar o novo agendador externo apontando para a mesma rota.
+Verificar periodicamente `manual_review` (pagamentos que a reconciliação não conseguiu decidir
+sozinha) na tabela `order_payments`/painel de pedidos.
 
 ## 11. Smoke test em produção
 
