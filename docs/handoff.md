@@ -2063,3 +2063,24 @@ Fase 6 (Lançamento) marcada com o progresso desta task — ver arquivo.
 TASK-006 fica em `tasks/review/task-006.md`, aguardando decisão de Caraffa sobre seguir para o piloto
 controlado (usando o runbook desta task) ou revisar algum ponto da matriz antes. Nenhum merge, push ou
 deploy foi realizado nesta sessão.
+
+## Encerramento da TASK-006 (2026-08-05)
+
+**Verificação final:** releitura curta (sem nova auditoria completa do MVP), confirmação objetiva das
+12 garantias de produção (localhost/https/`FakePixGateway`/segredos não-públicos/scripts locais
+recusam produção/`/termos`+`/privacidade` públicas/`/api/health` sanitizado/cron exige
+`CRON_SECRET`/webhook valida assinatura/`.env.production.example` sem valor real/`production-db-verification`
+só leitura/`release:check` sem operação destrutiva) e bateria completa de gates — todos verdes:
+442/442 testes, lint/typecheck/build/audit OK, `release:check` 18/18, TASK-001-005 SQL
+(7+56+35+38+24), concorrência (17+12+12), `migration-upgrade-check.sh` PASS,
+`db:verify:production` 20/22 contra o local (as 2 únicas falhas são a detecção correta das fixtures
+locais, comportamento esperado). Boot real em modo produção com placeholders válidos: `/api/health`
+degradado sanitizado (domínio placeholder inalcançável), `/termos`/`/privacidade`/`/login` 200;
+catálogo público confirmado funcional em separado, contra o Supabase local real. Nenhum bug novo
+encontrado nesta sessão — detalhamento completo em `qa/reports/TASK-006-FINAL-APPROVAL.md`.
+
+**Ação:** TASK-006 movida para `tasks/done/task-006.md` (status `DONE`) e branch
+`feat/TASK-006-production-readiness` mesclada na `master` via `git merge --no-ff` (sem squash —
+histórico preservado). Branch da tarefa **não** excluída. Nenhum push, nenhum deploy realizado.
+Próxima tarefa recomendada: **TASK-007 — Cobrança dos planos e ativação automática** (não implementada
+nesta sessão).

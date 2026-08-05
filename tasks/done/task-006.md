@@ -1,9 +1,10 @@
 # TASK-006 — Production Readiness e Release Candidate
 
-**Status:** REVIEW
+**Status:** DONE
 **Responsável:** Claude Code
-**Branch:** feat/TASK-006-production-readiness (não mesclada)
+**Branch:** feat/TASK-006-production-readiness (mesclada na `master` via `git merge --no-ff`, histórico preservado)
 **HEAD-base:** cef4b0b430ff304789ef390ada8d783c5533a1a4 (master, TASK-001/002/003/004/005 DONE)
+**Aprovação final:** `qa/reports/TASK-006-FINAL-APPROVAL.md` — APROVADA PARA MERGE
 
 ## Objetivo
 
@@ -63,7 +64,21 @@ subir com config de dev; sobe com placeholders de produção válidos).
 Ver `docs/handoff.md`, seção "TASK-006" → "Bloqueadores externos". Nenhum valor real foi colocado no
 repositório.
 
+## Encerramento (verificação final e merge)
+
+Sessão de fechamento: releitura curta (sem nova auditoria completa), verificação objetiva das 12
+garantias de produção, bateria completa de gates pré-merge (todos verdes, ver
+`qa/reports/TASK-006-FINAL-APPROVAL.md`) e um boot real em modo produção com placeholders válidos
+(`/api/health`, `/termos`, `/privacidade`, `/login` respondendo corretamente; catálogo público
+confirmado funcional contra o Supabase local real, separadamente). Nenhum bug novo encontrado — o
+único bug de produto desta task (`/termos`/`/privacidade` fora da allowlist do middleware) já havia
+sido corrigido antes do commit `fb27bae06414a06f6e1416039f13820d466477c3`.
+
+Mesclada na `master` via `git merge --no-ff` (sem squash — histórico de implementação e verificação
+preservado). Branch `feat/TASK-006-production-readiness` preservada (não excluída). Nenhum push, nenhum
+deploy realizado.
+
 ## Próxima ação
 
-Aguardando decisão de Caraffa: seguir para o piloto controlado usando `docs/production-runbook.md`, ou
-revisar algum ponto da matriz do MVP antes. Não mover para `tasks/done/` sem essa decisão.
+TASK-007 — Cobrança dos planos e ativação automática — registrada como próxima task recomendada (não
+implementada nesta sessão). Ver `docs/roadmap.md`.

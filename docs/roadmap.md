@@ -34,6 +34,9 @@
 - Planos de R$ 30, R$ 50 e R$ 80 via Pix.
 - Renovação, vencimento, tolerância, suspensão, reativação e superadmin.
 - Limites de plano somente após aprovação de Caraffa.
+- **Próxima tarefa recomendada: TASK-007 — Cobrança dos planos e ativação automática**
+  (`pending_payment → active`), ainda não implementada nem refinada. Até lá, a ativação de loja
+  continua manual e documentada (`docs/production-runbook.md`, seção 13).
 
 ## Fase 5 — Recursos comerciais
 
@@ -43,10 +46,11 @@
 
 - Segurança, QA completo, políticas, termos, privacidade e backup.
 - Monitoramento, onboarding e primeiras lojas piloto.
-- **Production Readiness e Release Candidate: em REVIEW** (TASK-006, `tasks/review/task-006.md`).
-  Validação de variáveis de ambiente, barreiras contra execução acidental de scripts locais em
-  produção, health check, termos/privacidade (minuta), `vercel.json`, `docs/production-runbook.md`,
-  `docs/release-checklist.md`, `npm run release:check` e `npm run db:verify:production`. Matriz do MVP
-  original × implementado em `docs/handoff.md`, seção "TASK-006". Ativação de loja e cobrança da
-  mensalidade do SaaS (planos R$ 30/50/80) permanecem **manuais e documentadas** — cobrança
-  automatizada continua na Fase 4, ainda não iniciada.
+- **Production Readiness e Release Candidate: concluída** (TASK-006, `tasks/done/task-006.md`,
+  aprovada em `qa/reports/TASK-006-FINAL-APPROVAL.md`). Classificação: **PRONTO PARA PILOTO
+  CONTROLADO**. Validação de variáveis de ambiente, barreiras contra execução acidental de scripts
+  locais em produção, health check, termos/privacidade (minuta), `vercel.json`,
+  `docs/production-runbook.md`, `docs/release-checklist.md`, `npm run release:check` e
+  `npm run db:verify:production`. Matriz do MVP original × implementado em `docs/handoff.md`, seção
+  "TASK-006". Ativação de loja e cobrança da mensalidade do SaaS (planos R$ 30/50/80) permanecem
+  **manuais e documentadas** — cobrança automatizada é a TASK-007 (Fase 4), ainda não implementada.
