@@ -17,7 +17,7 @@ export default function TermosPage() {
 
       <h2>1. O que é a plataforma</h2>
       <p>
-        Esta plataforma (&quot;Commerce Platform&quot;) é um serviço SaaS multi-tenant que permite a
+        Esta plataforma (&quot;CaraffaStore&quot;) é um serviço SaaS multi-tenant que permite a
         pequenos comerciantes (&quot;lojistas&quot;) criar, administrar e operar lojas virtuais
         próprias, incluindo catálogo de produtos, carrinho, checkout e recebimento de pagamentos via
         Pix.
