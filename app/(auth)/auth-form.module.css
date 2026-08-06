@@ -1,0 +1,30 @@
+.links {
+  margin-top: var(--cs-space-6);
+  padding-top: var(--cs-space-5);
+  border-top: 1px solid var(--cs-border);
+  font-size: 0.875rem;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cs-space-4);
+  flex-wrap: wrap;
+}
+
+.links a {
+  color: var(--cs-primary-600);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.links a:hover {
+  text-decoration: underline;
+}
+
+.alertGap {
+  margin-bottom: var(--cs-space-5);
+}
+
+.subtitle {
+  color: var(--cs-text-secondary);
+  font-size: 0.9375rem;
+  margin-bottom: var(--cs-space-6);
+}

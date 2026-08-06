@@ -1,0 +1,50 @@
+.shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cs-space-6);
+  padding: var(--cs-space-6);
+  background: var(--cs-surface);
+}
+
+.logoLink {
+  text-decoration: none;
+}
+
+.card {
+  width: 100%;
+  max-width: 26rem;
+  padding: var(--cs-space-8);
+  border-radius: var(--cs-radius-xl);
+  background: var(--cs-bg);
+  border: 1px solid var(--cs-border);
+  box-shadow: var(--cs-shadow-md);
+}
+
+.card h1 {
+  font-size: 1.375rem;
+  margin-bottom: var(--cs-space-2);
+}
+
+.footer {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--cs-text-muted);
+}
+
+.footer a {
+  color: var(--cs-text-muted);
+}
+
+.footer a:hover {
+  color: var(--cs-primary-600);
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: var(--cs-space-6);
+  }
+}

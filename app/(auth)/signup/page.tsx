@@ -5,48 +5,52 @@ import Link from "next/link";
 import { signupAction } from "./actions";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/password-policy";
 import { IDLE_ACTION_STATE } from "@/lib/auth/action-state";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
+import styles from "../auth-form.module.css";
 
 export default function SignupPage() {
   const [state, formAction, pending] = useActionState(signupAction, IDLE_ACTION_STATE);
 
   return (
     <>
-      <h1>Criar conta</h1>
+      <h1>Criar conta na CaraffaStore</h1>
+      <p className={styles.subtitle}>Comece a vender online em poucos minutos.</p>
 
       {state.status === "success" && state.message && (
-        <p className="form-status" data-tone="success" role="status">
-          {state.message}
-        </p>
+        <div className={styles.alertGap}>
+          <Alert tone="success">{state.message}</Alert>
+        </div>
       )}
       {state.status === "error" && state.message && (
-        <p className="form-status" data-tone="error" role="alert">
-          {state.message}
-        </p>
+        <div className={styles.alertGap}>
+          <Alert tone="danger">{state.message}</Alert>
+        </div>
       )}
 
       {state.status !== "success" && (
         <form action={formAction} noValidate>
-          <div className="form-field">
-            <label htmlFor="email">E-mail</label>
-            <input
+          <Field label="E-mail" htmlFor="email" required error={state.fieldErrors?.email}>
+            <Input
               id="email"
               name="email"
               type="email"
               autoComplete="email"
               required
               aria-invalid={Boolean(state.fieldErrors?.email)}
-              aria-describedby={state.fieldErrors?.email ? "email-error" : undefined}
             />
-            {state.fieldErrors?.email && (
-              <small id="email-error" role="alert">
-                {state.fieldErrors.email}
-              </small>
-            )}
-          </div>
+          </Field>
 
-          <div className="form-field">
-            <label htmlFor="password">Senha</label>
-            <input
+          <Field
+            label="Senha"
+            htmlFor="password"
+            required
+            error={state.fieldErrors?.password}
+            hint={`Pelo menos ${MIN_PASSWORD_LENGTH} caracteres. Frases com espaços são aceitas; não é obrigatório usar maiúsculas, números ou símbolos.`}
+          >
+            <Input
               id="password"
               name="password"
               type="password"
@@ -54,28 +58,20 @@ export default function SignupPage() {
               required
               minLength={MIN_PASSWORD_LENGTH}
               aria-invalid={Boolean(state.fieldErrors?.password)}
-              aria-describedby="password-hint"
             />
-            <small id="password-hint">
-              Pelo menos {MIN_PASSWORD_LENGTH} caracteres. Frases com espaços são aceitas; não é
-              obrigatório usar maiúsculas, números ou símbolos.
-            </small>
-            {state.fieldErrors?.password && (
-              <small role="alert">{state.fieldErrors.password}</small>
-            )}
-          </div>
+          </Field>
 
           {/* Preenchido por um widget de CAPTCHA real quando ativado
               (CAPTCHA_ENABLED=true); sem efeito no dev local. */}
           <input type="hidden" name="captchaToken" value="" />
 
-          <button type="submit" disabled={pending}>
-            {pending ? "Criando conta..." : "Criar conta"}
-          </button>
+          <Button type="submit" fullWidth loading={pending}>
+            Criar conta
+          </Button>
         </form>
       )}
 
-      <p className="auth-links">
+      <p className={styles.links}>
         <Link href="/login">Já tenho conta</Link>
       </p>
     </>
