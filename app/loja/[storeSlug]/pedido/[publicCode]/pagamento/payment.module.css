@@ -1,0 +1,106 @@
+.main {
+  max-width: 30rem;
+  margin: 0 auto;
+  padding: var(--cs-space-8) var(--cs-space-6);
+  width: 100%;
+  flex: 1;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: var(--cs-space-6);
+}
+
+.title {
+  font-size: 1.375rem;
+  margin-bottom: var(--cs-space-2);
+}
+
+.subtitle {
+  font-size: 0.875rem;
+  color: var(--cs-text-secondary);
+}
+
+.amountRow,
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0;
+}
+
+.amountRow {
+  border-bottom: 1px solid var(--cs-border);
+}
+
+.amountLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cs-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.amount {
+  font-size: 1.375rem;
+  font-weight: 800;
+  color: var(--cs-text);
+}
+
+.alertGap {
+  margin: var(--cs-space-4) 0;
+}
+
+.qrWrap {
+  display: flex;
+  justify-content: center;
+  padding: var(--cs-space-5) 0;
+}
+
+.qrImage {
+  border-radius: var(--cs-radius-lg);
+  border: 1px solid var(--cs-border);
+  max-width: 100%;
+  height: auto;
+}
+
+.copyPaste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: var(--cs-space-4);
+}
+
+.copyLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cs-text-secondary);
+}
+
+.ticketLink {
+  text-align: center;
+  margin-bottom: var(--cs-space-4);
+  font-size: 0.875rem;
+}
+
+.expiresAt {
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--cs-text-muted);
+  margin-bottom: var(--cs-space-4);
+}
+
+.backLink {
+  text-align: center;
+  margin-top: var(--cs-space-6);
+  font-size: 0.875rem;
+}
+
+.backLink a {
+  color: var(--cs-text-secondary);
+  text-decoration: none;
+}
+
+.backLink a:hover {
+  color: var(--cs-primary-600);
+}

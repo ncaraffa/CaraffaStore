@@ -1,12 +1,23 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart/use-cart";
 import { clearCart } from "@/lib/cart/storage";
 import { formatPriceCents } from "@/lib/catalog/format";
 import { IDLE_ACTION_STATE } from "@/lib/auth/action-state";
 import { submitCheckoutAction, type CheckoutState } from "./actions";
+import { StorefrontHeader } from "@/components/storefront/StorefrontHeader";
+import { Card } from "@/components/ui/Card";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { Button } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { IconShoppingCart } from "@/components/ui/icons";
+import styles from "./checkout.module.css";
 
 export function CheckoutForm({ storeSlug, storeName }: { storeSlug: string; storeName: string }) {
   const router = useRouter();
@@ -29,147 +40,129 @@ export function CheckoutForm({ storeSlug, storeName }: { storeSlug: string; stor
 
   if (cart.items.length === 0 && state.status !== "success") {
     return (
-      <main>
-        <p>
-          <a href={`/loja/${storeSlug}`}>← {storeName}</a>
-        </p>
-        <p>Seu carrinho está vazio.</p>
-      </main>
+      <>
+        <StorefrontHeader storeSlug={storeSlug} storeName={storeName} backHref={`/loja/${storeSlug}`} />
+        <main className={styles.main}>
+          <EmptyState icon={<IconShoppingCart />} title="Seu carrinho está vazio" />
+        </main>
+      </>
     );
   }
 
   const itemsJson = JSON.stringify(cart.items.map((item) => ({ productId: item.productId, quantity: item.quantity })));
 
   return (
-    <main>
-      <p>
-        <a href={`/loja/${storeSlug}/carrinho`}>← Carrinho</a>
-      </p>
-      <h1>Finalizar pedido — {storeName}</h1>
-      <p className="cart-subtotal">Total: {formatPriceCents(subtotalCents)}</p>
+    <>
+      <StorefrontHeader storeSlug={storeSlug} storeName={storeName} backHref={`/loja/${storeSlug}/carrinho`} backLabel="Carrinho" />
+      <main className={styles.main}>
+        <h1 className={styles.title}>Finalizar pedido</h1>
+        <p className={styles.total}>Total: {formatPriceCents(subtotalCents)}</p>
 
-      <form action={formAction} noValidate>
-        <input type="hidden" name="storeSlug" value={storeSlug} />
-        <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-        <input type="hidden" name="items" value={itemsJson} />
+        <Card>
+          <form action={formAction} noValidate>
+            <input type="hidden" name="storeSlug" value={storeSlug} />
+            <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+            <input type="hidden" name="items" value={itemsJson} />
 
-        {state.status === "error" && state.message && (
-          <p className="form-status" data-tone="error" role="alert">
-            {state.message}
-          </p>
-        )}
+            {state.status === "error" && state.message && (
+              <div className={styles.alertGap}>
+                <Alert tone="danger">{state.message}</Alert>
+              </div>
+            )}
 
-        <div className="form-field">
-          <label htmlFor="customerName">Nome</label>
-          <input
-            id="customerName"
-            name="customerName"
-            required
-            maxLength={120}
-            aria-invalid={Boolean(state.fieldErrors?.customerName)}
-          />
-          {state.fieldErrors?.customerName && <small role="alert">{state.fieldErrors.customerName}</small>}
-        </div>
+            <Field label="Nome" htmlFor="customerName" required error={state.fieldErrors?.customerName}>
+              <Input id="customerName" name="customerName" required maxLength={120} aria-invalid={Boolean(state.fieldErrors?.customerName)} />
+            </Field>
 
-        <div className="form-field">
-          <label htmlFor="customerPhone">Telefone / WhatsApp</label>
-          <input
-            id="customerPhone"
-            name="customerPhone"
-            required
-            maxLength={30}
-            inputMode="tel"
-            placeholder="(11) 99999-8888"
-            aria-invalid={Boolean(state.fieldErrors?.customerPhone)}
-          />
-          {state.fieldErrors?.customerPhone && <small role="alert">{state.fieldErrors.customerPhone}</small>}
-        </div>
-
-        <div className="form-field">
-          <label htmlFor="payerEmail">E-mail (para o pagamento Pix)</label>
-          <input
-            id="payerEmail"
-            name="payerEmail"
-            type="email"
-            required
-            maxLength={200}
-            placeholder="voce@example.com"
-            aria-invalid={Boolean(state.fieldErrors?.payerEmail)}
-          />
-          {state.fieldErrors?.payerEmail && <small role="alert">{state.fieldErrors.payerEmail}</small>}
-        </div>
-
-        <div className="form-field">
-          <label htmlFor="payerDocument">CPF ou CNPJ (para o pagamento Pix)</label>
-          <input
-            id="payerDocument"
-            name="payerDocument"
-            required
-            inputMode="numeric"
-            maxLength={20}
-            placeholder="000.000.000-00"
-            aria-invalid={Boolean(state.fieldErrors?.payerDocument)}
-          />
-          {state.fieldErrors?.payerDocument && <small role="alert">{state.fieldErrors.payerDocument}</small>}
-          <small>
-            Seus dados são usados só para processar o pagamento Pix — o CPF/CNPJ completo não fica guardado na loja.
-          </small>
-        </div>
-
-        <div className="form-field">
-          <label>Modalidade</label>
-          <div className="fulfillment-options">
-            <label>
-              <input
-                type="radio"
-                name="fulfillmentMethod"
-                value="pickup"
-                checked={fulfillment === "pickup"}
-                onChange={() => setFulfillment("pickup")}
+            <Field label="Telefone / WhatsApp" htmlFor="customerPhone" required error={state.fieldErrors?.customerPhone}>
+              <Input
+                id="customerPhone"
+                name="customerPhone"
+                required
+                maxLength={30}
+                inputMode="tel"
+                placeholder="(11) 99999-8888"
+                aria-invalid={Boolean(state.fieldErrors?.customerPhone)}
               />
-              Retirada
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="fulfillmentMethod"
-                value="delivery"
-                checked={fulfillment === "delivery"}
-                onChange={() => setFulfillment("delivery")}
-              />
-              Entrega
-            </label>
-          </div>
-        </div>
+            </Field>
 
-        {fulfillment === "delivery" && (
-          <div className="form-field">
-            <label htmlFor="deliveryAddress">Endereço de entrega</label>
-            <textarea
-              id="deliveryAddress"
-              name="deliveryAddress"
-              maxLength={500}
+            <Field label="E-mail (para o pagamento Pix)" htmlFor="payerEmail" required error={state.fieldErrors?.payerEmail}>
+              <Input
+                id="payerEmail"
+                name="payerEmail"
+                type="email"
+                required
+                maxLength={200}
+                placeholder="voce@example.com"
+                aria-invalid={Boolean(state.fieldErrors?.payerEmail)}
+              />
+            </Field>
+
+            <Field
+              label="CPF ou CNPJ (para o pagamento Pix)"
+              htmlFor="payerDocument"
               required
-              aria-invalid={Boolean(state.fieldErrors?.deliveryAddress)}
-            />
-            {state.fieldErrors?.deliveryAddress && <small role="alert">{state.fieldErrors.deliveryAddress}</small>}
-          </div>
-        )}
+              error={state.fieldErrors?.payerDocument}
+              hint="Seus dados são usados só para processar o pagamento Pix — o CPF/CNPJ completo não fica guardado na loja."
+            >
+              <Input
+                id="payerDocument"
+                name="payerDocument"
+                required
+                inputMode="numeric"
+                maxLength={20}
+                placeholder="000.000.000-00"
+                aria-invalid={Boolean(state.fieldErrors?.payerDocument)}
+              />
+            </Field>
 
-        <div className="form-field">
-          <label htmlFor="customerNotes">Observações (opcional)</label>
-          <textarea id="customerNotes" name="customerNotes" maxLength={1000} />
-        </div>
+            <div className={styles.fulfillmentField}>
+              <span className={styles.fulfillmentLabel}>Modalidade</span>
+              <div className={styles.fulfillmentOptions}>
+                <label className={styles.fulfillmentOption}>
+                  <input
+                    type="radio"
+                    name="fulfillmentMethod"
+                    value="pickup"
+                    checked={fulfillment === "pickup"}
+                    onChange={() => setFulfillment("pickup")}
+                  />
+                  Retirada
+                </label>
+                <label className={styles.fulfillmentOption}>
+                  <input
+                    type="radio"
+                    name="fulfillmentMethod"
+                    value="delivery"
+                    checked={fulfillment === "delivery"}
+                    onChange={() => setFulfillment("delivery")}
+                  />
+                  Entrega
+                </label>
+              </div>
+            </div>
 
-        <p style={{ fontSize: "0.8rem" }}>
-          Ao enviar o pedido, você concorda com os <a href="/termos">Termos de Uso</a> e a{" "}
-          <a href="/privacidade">Política de Privacidade</a>.
-        </p>
+            {fulfillment === "delivery" && (
+              <Field label="Endereço de entrega" htmlFor="deliveryAddress" required error={state.fieldErrors?.deliveryAddress}>
+                <Textarea id="deliveryAddress" name="deliveryAddress" maxLength={500} required aria-invalid={Boolean(state.fieldErrors?.deliveryAddress)} />
+              </Field>
+            )}
 
-        <button type="submit" disabled={pending}>
-          {pending ? "Enviando..." : "Enviar pedido"}
-        </button>
-      </form>
-    </main>
+            <Field label="Observações (opcional)" htmlFor="customerNotes">
+              <Textarea id="customerNotes" name="customerNotes" maxLength={1000} />
+            </Field>
+
+            <p className={styles.legal}>
+              Ao enviar o pedido, você concorda com os <Link href="/termos">Termos de Uso</Link> e a{" "}
+              <Link href="/privacidade">Política de Privacidade</Link>.
+            </p>
+
+            <Button type="submit" fullWidth loading={pending}>
+              Enviar pedido
+            </Button>
+          </form>
+        </Card>
+      </main>
+    </>
   );
 }

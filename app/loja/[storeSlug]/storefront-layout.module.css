@@ -1,0 +1,47 @@
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--cs-bg);
+}
+
+.footer {
+  margin-top: auto;
+  padding: var(--cs-space-8) var(--cs-space-6);
+  border-top: 1px solid var(--cs-border);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-2);
+}
+
+.attribution {
+  font-size: 0.8125rem;
+  color: var(--cs-text-muted);
+}
+
+.brandLink {
+  color: var(--cs-primary-600);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.brandLink:hover {
+  text-decoration: underline;
+}
+
+.legalLinks {
+  display: flex;
+  justify-content: center;
+  gap: var(--cs-space-4);
+  font-size: 0.75rem;
+}
+
+.legalLinks a {
+  color: var(--cs-text-muted);
+  text-decoration: none;
+}
+
+.legalLinks a:hover {
+  color: var(--cs-primary-600);
+}

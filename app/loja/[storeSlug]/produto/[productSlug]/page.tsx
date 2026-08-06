@@ -4,7 +4,9 @@ import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 import * as catalog from "@/lib/catalog/service";
 import { formatPriceCents } from "@/lib/catalog/format";
 import { AddToCartButton } from "../../add-to-cart-button";
-import { CartBadge } from "../../cart-badge";
+import { StorefrontHeader } from "@/components/storefront/StorefrontHeader";
+import { Badge } from "@/components/ui/Badge";
+import styles from "./product-detail.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -31,56 +33,48 @@ export default async function ProductPage({
   const sortedImages = [...images].sort((a, b) => (a.is_cover === b.is_cover ? 0 : a.is_cover ? -1 : 1));
 
   return (
-    <main>
-      <div className="storefront-header">
-        <p>
-          <a href={`/loja/${storeSlug}`}>← {store.name}</a>
-        </p>
-        <CartBadge storeSlug={storeSlug} />
-      </div>
+    <>
+      <StorefrontHeader storeSlug={storeSlug} storeName={store.name} backHref={`/loja/${storeSlug}`} />
+      <main className={styles.main}>
+        <article className={styles.layout}>
+          <div className={styles.gallery}>
+            {sortedImages.length === 0 ? (
+              <div className={styles.placeholder} aria-hidden="true" />
+            ) : (
+              sortedImages.map((image) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={image.id}
+                  src={catalog.publicImageUrl(NEXT_PUBLIC_SUPABASE_URL, image.storage_path)}
+                  alt=""
+                  loading="lazy"
+                  className={styles.image}
+                />
+              ))
+            )}
+          </div>
 
-      <article className="product-detail">
-        <div className="product-detail-gallery">
-          {sortedImages.length === 0 ? (
-            <div className="catalog-card-image-placeholder" aria-hidden="true" />
-          ) : (
-            sortedImages.map((image) => (
-              <img
-                key={image.id}
-                src={catalog.publicImageUrl(NEXT_PUBLIC_SUPABASE_URL, image.storage_path)}
-                alt=""
-                loading="lazy"
+          <div className={styles.info}>
+            <h1 className={styles.title}>{product.name}</h1>
+            <p className={styles.price}>{formatPriceCents(product.price_cents)}</p>
+
+            {product.stock === 0 ? <Badge tone="warning">Esgotado</Badge> : <Badge tone="success">Disponível</Badge>}
+
+            {product.description && <p className={styles.description}>{product.description}</p>}
+
+            <div className={styles.actions}>
+              <AddToCartButton
+                storeSlug={storeSlug}
+                productId={product.id}
+                name={product.name}
+                slug={product.slug}
+                priceCents={product.price_cents}
+                stock={product.stock}
               />
-            ))
-          )}
-        </div>
-
-        <div>
-          <h1>{product.name}</h1>
-          <p className="catalog-card-price">{formatPriceCents(product.price_cents)}</p>
-
-          {product.stock === 0 ? (
-            <span className="badge" data-tone="warning">
-              Esgotado
-            </span>
-          ) : (
-            <span className="badge" data-tone="success">
-              Disponível
-            </span>
-          )}
-
-          {product.description && <p>{product.description}</p>}
-
-          <AddToCartButton
-            storeSlug={storeSlug}
-            productId={product.id}
-            name={product.name}
-            slug={product.slug}
-            priceCents={product.price_cents}
-            stock={product.stock}
-          />
-        </div>
-      </article>
-    </main>
+            </div>
+          </div>
+        </article>
+      </main>
+    </>
   );
 }

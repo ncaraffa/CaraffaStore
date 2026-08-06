@@ -4,7 +4,13 @@ import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 import * as catalog from "@/lib/catalog/service";
 import { formatPriceCents } from "@/lib/catalog/format";
 import { AddToCartButton } from "./add-to-cart-button";
-import { CartBadge } from "./cart-badge";
+import { StorefrontHeader } from "@/components/storefront/StorefrontHeader";
+import { Badge } from "@/components/ui/Badge";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { IconSearch, IconBox } from "@/components/ui/icons";
+import styles from "./storefront.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -36,74 +42,74 @@ export default async function StorefrontPage({
   const { NEXT_PUBLIC_SUPABASE_URL } = getPublicSupabaseEnv();
 
   return (
-    <main>
-      <div className="storefront-header">
-        <h1>{store.name}</h1>
-        <CartBadge storeSlug={storeSlug} />
-      </div>
+    <>
+      <StorefrontHeader storeSlug={storeSlug} storeName={store.name} />
+      <main className={styles.main}>
+        <form className={styles.search} method="get">
+          <Input type="search" name="q" placeholder="Buscar produtos..." defaultValue={q ?? ""} aria-label="Buscar produtos" />
+          {category && <input type="hidden" name="category" value={category} />}
+          <Button type="submit" variant="outline" icon={<IconSearch />}>
+            Buscar
+          </Button>
+        </form>
 
-      <form className="storefront-search" method="get">
-        <input
-          type="search"
-          name="q"
-          placeholder="Buscar produtos..."
-          defaultValue={q ?? ""}
-          aria-label="Buscar produtos"
-        />
-        {category && <input type="hidden" name="category" value={category} />}
-        <button type="submit">Buscar</button>
-      </form>
-
-      {categories.length > 0 && (
-        <nav className="storefront-categories" aria-label="Categorias">
-          <a href={`/loja/${storeSlug}`} aria-current={!category}>
-            Todas
-          </a>
-          {categories.map((c) => (
-            <a key={c.id} href={`/loja/${storeSlug}?category=${c.slug}`} aria-current={category === c.slug}>
-              {c.name}
+        {categories.length > 0 && (
+          <nav className={styles.categories} aria-label="Categorias">
+            <a href={`/loja/${storeSlug}`} className={styles.categoryPill} data-active={!category || undefined}>
+              Todas
             </a>
-          ))}
-        </nav>
-      )}
+            {categories.map((c) => (
+              <a
+                key={c.id}
+                href={`/loja/${storeSlug}?category=${c.slug}`}
+                className={styles.categoryPill}
+                data-active={category === c.slug || undefined}
+              >
+                {c.name}
+              </a>
+            ))}
+          </nav>
+        )}
 
-      {products.length === 0 ? (
-        <p>Nenhum produto encontrado.</p>
-      ) : (
-        <div className="catalog-grid">
-          {products.map((product) => {
-            const cover = covers.get(product.id);
-            return (
-              <div key={product.id} className="catalog-card">
-                <a className="catalog-card-link" href={`/loja/${storeSlug}/produto/${product.slug}`}>
-                  <div className="catalog-card-image">
-                    {cover ? (
-                      <img src={catalog.publicImageUrl(NEXT_PUBLIC_SUPABASE_URL, cover.storage_path)} alt="" loading="lazy" />
-                    ) : (
-                      <div className="catalog-card-image-placeholder" aria-hidden="true" />
-                    )}
-                  </div>
-                  <h2>{product.name}</h2>
-                  <p className="catalog-card-price">{formatPriceCents(product.price_cents)}</p>
-                  {product.stock === 0 && (
-                    <span className="badge" data-tone="warning">
-                      Esgotado
-                    </span>
-                  )}
-                </a>
-                <AddToCartButton
-                  storeSlug={storeSlug}
-                  productId={product.id}
-                  name={product.name}
-                  slug={product.slug}
-                  priceCents={product.price_cents}
-                  stock={product.stock}
-                />
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </main>
+        {products.length === 0 ? (
+          <EmptyState icon={<IconBox />} title="Nenhum produto encontrado" description="Tente buscar por outro termo ou categoria." />
+        ) : (
+          <div className={styles.grid}>
+            {products.map((product) => {
+              const cover = covers.get(product.id);
+              return (
+                <div key={product.id} className={styles.card}>
+                  <a className={styles.cardLink} href={`/loja/${storeSlug}/produto/${product.slug}`}>
+                    <div className={styles.cardImage}>
+                      {cover ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={catalog.publicImageUrl(NEXT_PUBLIC_SUPABASE_URL, cover.storage_path)} alt="" loading="lazy" />
+                      ) : (
+                        <span className={styles.cardImagePlaceholder} aria-hidden="true" />
+                      )}
+                      {product.stock === 0 && (
+                        <span className={styles.outOfStockBadge}>
+                          <Badge tone="warning">Esgotado</Badge>
+                        </span>
+                      )}
+                    </div>
+                    <h2 className={styles.cardTitle}>{product.name}</h2>
+                    <p className={styles.cardPrice}>{formatPriceCents(product.price_cents)}</p>
+                  </a>
+                  <AddToCartButton
+                    storeSlug={storeSlug}
+                    productId={product.id}
+                    name={product.name}
+                    slug={product.slug}
+                    priceCents={product.price_cents}
+                    stock={product.stock}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </main>
+    </>
   );
 }

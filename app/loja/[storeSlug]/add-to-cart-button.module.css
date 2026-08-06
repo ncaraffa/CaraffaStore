@@ -1,0 +1,11 @@
+.row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.qtyInput {
+  width: 4.5rem;
+  flex-shrink: 0;
+  text-align: center;
+}

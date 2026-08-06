@@ -1,0 +1,58 @@
+.main {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: var(--cs-space-6);
+  width: 100%;
+  flex: 1;
+}
+
+.title {
+  font-size: 1.375rem;
+}
+
+.total {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--cs-text-secondary);
+  margin-bottom: var(--cs-space-5);
+}
+
+.alertGap {
+  margin-bottom: var(--cs-space-4);
+}
+
+.fulfillmentField {
+  margin-bottom: var(--cs-space-5);
+}
+
+.fulfillmentLabel {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cs-text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.fulfillmentOptions {
+  display: flex;
+  gap: var(--cs-space-5);
+}
+
+.fulfillmentOption {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--cs-text);
+}
+
+.fulfillmentOption input {
+  accent-color: var(--cs-primary-600);
+}
+
+.legal {
+  font-size: 0.8125rem;
+  color: var(--cs-text-muted);
+  margin-bottom: var(--cs-space-5);
+}

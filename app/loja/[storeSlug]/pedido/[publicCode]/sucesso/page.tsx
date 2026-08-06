@@ -1,4 +1,8 @@
 import { notFound } from "next/navigation";
+import { StatusPage } from "@/components/onboarding/StatusPage";
+import { Button } from "@/components/ui/Button";
+import { IconCheck } from "@/components/ui/icons";
+import Link from "next/link";
 
 const PUBLIC_CODE_FORMAT = /^[0-9A-Z]{8}$/;
 
@@ -21,15 +25,19 @@ export default async function OrderSuccessPage({
   }
 
   return (
-    <main>
-      <h1>Pedido recebido!</h1>
+    <StatusPage
+      icon={<IconCheck />}
+      title="Pedido recebido!"
+      actions={
+        <Link href={`/loja/${storeSlug}`}>
+          <Button variant="outline">Voltar para a loja</Button>
+        </Link>
+      }
+    >
       <p>
         Código do pedido: <strong>{publicCode}</strong>
       </p>
       <p>Guarde este código. O comerciante vai entrar em contato para combinar o pagamento e os próximos passos.</p>
-      <p>
-        <a href={`/loja/${storeSlug}`}>← Voltar para a loja</a>
-      </p>
-    </main>
+    </StatusPage>
   );
 }
