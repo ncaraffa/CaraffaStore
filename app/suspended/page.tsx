@@ -1,6 +1,8 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireStoreStatus } from "@/lib/tenant/access-control";
 import { LogoutButton } from "@/app/logout/logout-button";
+import { StatusPage } from "@/components/onboarding/StatusPage";
+import { IconAlertTriangle } from "@/components/ui/icons";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +25,11 @@ export default async function SuspendedPage({
   const { store } = await requireStoreStatus(supabase, "suspended", storeSlug);
 
   return (
-    <main>
-      <h1>Loja suspensa</h1>
+    <StatusPage icon={<IconAlertTriangle />} title="Loja suspensa" actions={<LogoutButton />}>
       <p>
-        A loja &quot;{store.name}&quot; está suspensa. Nenhuma operação comercial está disponível
-        enquanto este estado persistir.
+        A loja &quot;{store.name}&quot; está suspensa. Nenhuma operação comercial está disponível enquanto este
+        estado persistir.
       </p>
-      <LogoutButton />
-    </main>
+    </StatusPage>
   );
 }

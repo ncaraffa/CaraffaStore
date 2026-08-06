@@ -1,0 +1,55 @@
+.shell {
+  min-height: 100dvh;
+  background: var(--cs-surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cs-space-6);
+  padding: var(--cs-space-6);
+}
+
+.logoLink {
+  text-decoration: none;
+}
+
+.card {
+  width: 100%;
+  max-width: 28rem;
+  background: var(--cs-bg);
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-radius-xl);
+  box-shadow: var(--cs-shadow-md);
+  padding: var(--cs-space-8);
+  text-align: center;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 50%;
+  background: var(--cs-primary-50);
+  color: var(--cs-primary-600);
+  margin-bottom: var(--cs-space-5);
+}
+
+.title {
+  font-size: 1.25rem;
+  margin-bottom: var(--cs-space-3);
+}
+
+.body {
+  font-size: 0.9375rem;
+  color: var(--cs-text-secondary);
+  line-height: 1.6;
+}
+
+.actions {
+  margin-top: var(--cs-space-6);
+  display: flex;
+  justify-content: center;
+  gap: var(--cs-space-3);
+}

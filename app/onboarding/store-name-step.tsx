@@ -4,6 +4,10 @@ import { useActionState } from "react";
 import { saveStoreNameAction } from "./actions";
 import { IDLE_ACTION_STATE } from "@/lib/auth/action-state";
 import type { Database } from "@/lib/supabase/types";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
 
 type OnboardingRow = Database["public"]["Tables"]["onboarding_progress"]["Row"];
 
@@ -14,14 +18,13 @@ export function StoreNameStep({ progress }: { progress: OnboardingRow }) {
     <form action={formAction} noValidate>
       <h2>Nome da loja</h2>
       {state.status === "error" && state.message && (
-        <p className="form-status" data-tone="error" role="alert">
-          {state.message}
-        </p>
+        <div style={{ marginBottom: "1.25rem" }}>
+          <Alert tone="danger">{state.message}</Alert>
+        </div>
       )}
 
-      <div className="form-field">
-        <label htmlFor="storeName">Nome da loja</label>
-        <input
+      <Field label="Nome da loja" htmlFor="storeName" required error={state.fieldErrors?.storeName}>
+        <Input
           id="storeName"
           name="storeName"
           defaultValue={progress.store_name ?? ""}
@@ -30,12 +33,11 @@ export function StoreNameStep({ progress }: { progress: OnboardingRow }) {
           maxLength={120}
           aria-invalid={Boolean(state.fieldErrors?.storeName)}
         />
-        {state.fieldErrors?.storeName && <small role="alert">{state.fieldErrors.storeName}</small>}
-      </div>
+      </Field>
 
-      <button type="submit" disabled={pending}>
-        {pending ? "Salvando..." : "Continuar"}
-      </button>
+      <Button type="submit" loading={pending}>
+        Continuar
+      </Button>
     </form>
   );
 }

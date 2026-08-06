@@ -4,8 +4,18 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { storeStatusRedirectPath } from "@/lib/tenant/store-redirect";
 import { requireVerifiedSession } from "@/lib/tenant/access-control";
 import { LogoutButton } from "@/app/logout/logout-button";
+import { Badge } from "@/components/ui/Badge";
+import { Logo } from "@/components/ui/Logo";
+import styles from "./select-store.module.css";
 
 export const dynamic = "force-dynamic";
+
+const STATUS_LABEL: Record<string, { label: string; tone: "success" | "warning" | "danger" | "neutral" }> = {
+  active: { label: "Ativa", tone: "success" },
+  pending_payment: { label: "Pagamento pendente", tone: "warning" },
+  suspended: { label: "Suspensa", tone: "danger" },
+  onboarding: { label: "Configurando", tone: "neutral" },
+};
 
 /**
  * Seleção EXPLÍCITA de loja para usuários com mais de um membership —
@@ -47,17 +57,30 @@ export default async function SelectStorePage() {
   }
 
   return (
-    <main>
-      <h1>Escolha uma loja</h1>
-      <ul>
-        {stores.map((store) => (
-          <li key={store.id}>
-            <Link href={storeStatusRedirectPath(store.status, store.slug)}>{store.name}</Link>{" "}
-            <span>({store.status})</span>
-          </li>
-        ))}
-      </ul>
-      <LogoutButton />
-    </main>
+    <div className={styles.shell}>
+      <Link href="/" className={styles.logoLink}>
+        <Logo size="md" />
+      </Link>
+      <div className={styles.card}>
+        <h1 className={styles.title}>Escolha uma loja</h1>
+        <p className={styles.subtitle}>Você faz parte de mais de uma loja. Selecione qual deseja acessar.</p>
+        <ul className={styles.list}>
+          {stores.map((store) => {
+            const status = STATUS_LABEL[store.status] ?? { label: store.status, tone: "neutral" as const };
+            return (
+              <li key={store.id}>
+                <Link href={storeStatusRedirectPath(store.status, store.slug)} className={styles.item}>
+                  <span className={styles.itemName}>{store.name}</span>
+                  <Badge tone={status.tone}>{status.label}</Badge>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        <div className={styles.actions}>
+          <LogoutButton />
+        </div>
+      </div>
+    </div>
   );
 }

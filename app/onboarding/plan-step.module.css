@@ -1,0 +1,63 @@
+.hint {
+  font-size: 0.875rem;
+  color: var(--cs-text-secondary);
+  margin-bottom: var(--cs-space-5);
+}
+
+.fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 var(--cs-space-6);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--cs-space-3);
+}
+
+.option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: var(--cs-space-4);
+  border: 1.5px solid var(--cs-border);
+  border-radius: var(--cs-radius-lg);
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.option:hover {
+  border-color: var(--cs-primary-200);
+}
+
+.option:has(input:checked) {
+  border-color: var(--cs-primary-600);
+  background: var(--cs-primary-50);
+}
+
+.option input {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  accent-color: var(--cs-primary-600);
+}
+
+.optionName {
+  font-weight: 700;
+  font-size: 0.9375rem;
+  color: var(--cs-text);
+}
+
+.optionPrice {
+  font-size: 0.8125rem;
+  color: var(--cs-text-secondary);
+}
+
+.error {
+  margin-top: var(--cs-space-2);
+  font-size: 0.8125rem;
+  color: var(--cs-danger-600);
+  font-weight: 500;
+}

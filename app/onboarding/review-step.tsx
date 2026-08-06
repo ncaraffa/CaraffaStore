@@ -5,6 +5,9 @@ import Link from "next/link";
 import { completeOnboardingAction } from "./actions";
 import { IDLE_ACTION_STATE } from "@/lib/auth/action-state";
 import type { Database } from "@/lib/supabase/types";
+import { Button } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
+import styles from "./review-step.module.css";
 
 type OnboardingRow = Database["public"]["Tables"]["onboarding_progress"]["Row"];
 
@@ -13,48 +16,47 @@ const PLAN_LABEL: Record<number, string> = { 30: "R$ 30/mês", 50: "R$ 50/mês",
 export function ReviewStep({ progress }: { progress: OnboardingRow }) {
   const [state, formAction, pending] = useActionState(completeOnboardingAction, IDLE_ACTION_STATE);
 
+  const rows = [
+    { label: "Seu nome", value: progress.merchant_name, step: "profile" },
+    { label: "WhatsApp", value: progress.whatsapp, step: "profile" },
+    { label: "Nome da loja", value: progress.store_name, step: "store_name" },
+    { label: "Endereço", value: progress.slug, step: "slug" },
+    { label: "Plano", value: progress.plan_code ? PLAN_LABEL[progress.plan_code] : "—", step: "plan" },
+  ];
+
   return (
     <div>
       <h2>Revisão</h2>
       {state.status === "error" && state.message && (
-        <p className="form-status" data-tone="error" role="alert">
-          {state.message}
-        </p>
+        <div style={{ marginBottom: "1.25rem" }}>
+          <Alert tone="danger">{state.message}</Alert>
+        </div>
       )}
 
-      <dl>
-        <dt>Seu nome</dt>
-        <dd>
-          {progress.merchant_name} <Link href="/onboarding?step=profile">Editar</Link>
-        </dd>
-        <dt>WhatsApp</dt>
-        <dd>
-          {progress.whatsapp} <Link href="/onboarding?step=profile">Editar</Link>
-        </dd>
-        <dt>Nome da loja</dt>
-        <dd>
-          {progress.store_name} <Link href="/onboarding?step=store_name">Editar</Link>
-        </dd>
-        <dt>Endereço</dt>
-        <dd>
-          {progress.slug} <Link href="/onboarding?step=slug">Editar</Link>
-        </dd>
-        <dt>Plano</dt>
-        <dd>
-          {progress.plan_code ? PLAN_LABEL[progress.plan_code] : "—"}{" "}
-          <Link href="/onboarding?step=plan">Editar</Link>
-        </dd>
+      <dl className={styles.list}>
+        {rows.map((row) => (
+          <div key={row.label} className={styles.row}>
+            <div>
+              <dt>{row.label}</dt>
+              <dd>{row.value}</dd>
+            </div>
+            <Link href={`/onboarding?step=${row.step}`} className={styles.edit}>
+              Editar
+            </Link>
+          </div>
+        ))}
       </dl>
 
-      <p className="form-hint">
-        Ao concluir, sua loja é criada em modo de configuração pendente de pagamento — sem
-        cobrança nesta etapa.
-      </p>
+      <div className={styles.noticeGap}>
+        <Alert tone="info">
+          Ao concluir, sua loja é criada em modo de configuração pendente de pagamento — sem cobrança nesta etapa.
+        </Alert>
+      </div>
 
       <form action={formAction}>
-        <button type="submit" disabled={pending}>
-          {pending ? "Concluindo..." : "Concluir cadastro da loja"}
-        </button>
+        <Button type="submit" loading={pending}>
+          Concluir cadastro da loja
+        </Button>
       </form>
     </div>
   );
