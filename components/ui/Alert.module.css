@@ -1,0 +1,67 @@
+.alert {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  padding: var(--cs-space-4);
+  border-radius: var(--cs-radius-md);
+  border: 1px solid transparent;
+  font-size: 0.875rem;
+}
+
+.icon {
+  flex-shrink: 0;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-top: 0.05rem;
+}
+
+.title {
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+}
+
+.body {
+  color: inherit;
+}
+
+.success {
+  background: var(--cs-success-bg);
+  color: var(--cs-success-text);
+  border-color: var(--cs-success-border);
+}
+.success .icon {
+  background: rgba(22, 101, 52, 0.12);
+}
+
+.warning {
+  background: var(--cs-warning-bg);
+  color: var(--cs-warning-text);
+  border-color: var(--cs-warning-border);
+}
+.warning .icon {
+  background: rgba(146, 64, 14, 0.12);
+}
+
+.danger {
+  background: var(--cs-danger-bg);
+  color: var(--cs-danger-text);
+  border-color: var(--cs-danger-border);
+}
+.danger .icon {
+  background: rgba(185, 28, 28, 0.12);
+}
+
+.info {
+  background: var(--cs-primary-50);
+  color: var(--cs-primary-900);
+  border-color: var(--cs-primary-100);
+}
+.info .icon {
+  background: rgba(37, 99, 235, 0.12);
+}

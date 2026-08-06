@@ -1,0 +1,53 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--cs-text);
+  white-space: nowrap;
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--cs-primary-600), var(--cs-primary-900));
+  color: #fff;
+  border-radius: var(--cs-radius-md);
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.storeWord {
+  color: var(--cs-primary-600);
+}
+
+.sm {
+  font-size: 0.9375rem;
+}
+.sm .mark {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.8125rem;
+  border-radius: var(--cs-radius-sm);
+}
+
+.md {
+  font-size: 1.125rem;
+}
+.md .mark {
+  width: 1.875rem;
+  height: 1.875rem;
+  font-size: 0.9375rem;
+}
+
+.lg {
+  font-size: 1.5rem;
+}
+.lg .mark {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.25rem;
+  border-radius: var(--cs-radius-lg);
+}

@@ -1,0 +1,239 @@
+.shell {
+  min-height: 100dvh;
+  background: var(--cs-surface);
+}
+
+.navToggle {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ===== Sidebar ===== */
+
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 15.5rem;
+  background: var(--cs-bg);
+  border-right: 1px solid var(--cs-border);
+  display: flex;
+  flex-direction: column;
+  z-index: 40;
+  transition: transform 200ms ease;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.15rem 1.25rem;
+  border-bottom: 1px solid var(--cs-border);
+}
+
+.closeButton {
+  display: none;
+  color: var(--cs-text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: var(--cs-space-4);
+  flex: 1;
+  overflow-y: auto;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--cs-radius-md);
+  color: var(--cs-text-secondary);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.navItem:hover {
+  background: var(--cs-surface);
+  color: var(--cs-text);
+}
+
+.navItem[data-active] {
+  background: var(--cs-primary-50);
+  color: var(--cs-primary-700);
+}
+
+.navItem svg {
+  flex-shrink: 0;
+}
+
+.sidebarFooter {
+  padding: var(--cs-space-4);
+  border-top: 1px solid var(--cs-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.footerLink {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cs-text-secondary);
+  text-decoration: none;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--cs-radius-md);
+}
+
+.footerLink:hover {
+  background: var(--cs-surface);
+  color: var(--cs-primary-600);
+}
+
+.logoutButton {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  background: none;
+  border: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cs-text-muted);
+  cursor: pointer;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--cs-radius-md);
+  font-family: inherit;
+}
+
+.logoutButton:hover {
+  background: var(--cs-danger-bg);
+  color: var(--cs-danger-600);
+}
+
+.backdrop {
+  display: none;
+}
+
+/* ===== Main / topbar ===== */
+
+.main {
+  margin-left: 15.5rem;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--cs-space-4);
+  padding: 0 var(--cs-space-6);
+  height: 4rem;
+  background: var(--cs-bg);
+  border-bottom: 1px solid var(--cs-border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.menuButton {
+  display: none;
+  color: var(--cs-text-secondary);
+  cursor: pointer;
+  padding: 0.4rem;
+  margin-left: -0.4rem;
+  border-radius: var(--cs-radius-md);
+}
+
+.menuButton:hover {
+  background: var(--cs-surface);
+}
+
+.storeSwitcher {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--cs-radius-md);
+  color: var(--cs-text);
+}
+
+.storeSwitcher:hover {
+  background: var(--cs-surface);
+}
+
+.storeName {
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.switcherIcon {
+  color: var(--cs-text-muted);
+}
+
+.topbarSpacer {
+  flex: 1;
+}
+
+.content {
+  flex: 1;
+  padding: var(--cs-space-8) var(--cs-space-6);
+  max-width: 72rem;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ===== Mobile ===== */
+
+@media (max-width: 960px) {
+  .sidebar {
+    transform: translateX(-100%);
+    box-shadow: var(--cs-shadow-lg);
+  }
+
+  .closeButton {
+    display: inline-flex;
+  }
+
+  .navToggle:checked ~ .sidebar {
+    transform: translateX(0);
+  }
+
+  .navToggle:checked ~ .backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.4);
+    z-index: 30;
+  }
+
+  .main {
+    margin-left: 0;
+  }
+
+  .menuButton {
+    display: inline-flex;
+  }
+
+  .storeName {
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .content {
+    padding: var(--cs-space-6) var(--cs-space-4);
+  }
+}

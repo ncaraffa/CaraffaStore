@@ -1,0 +1,111 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--cs-radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease,
+    opacity 120ms ease;
+  line-height: 1.2;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.sm {
+  font-size: 0.8125rem;
+  padding: 0.4rem 0.75rem;
+}
+
+.md {
+  font-size: 0.9375rem;
+  padding: 0.6rem 1.1rem;
+}
+
+.lg {
+  font-size: 1rem;
+  padding: 0.8rem 1.5rem;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.primary {
+  background: var(--cs-primary-600);
+  color: var(--cs-text-inverse);
+  box-shadow: var(--cs-shadow-sm);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--cs-primary-700);
+}
+
+.secondary {
+  background: var(--cs-primary-50);
+  color: var(--cs-primary-700);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--cs-primary-100);
+}
+
+.outline {
+  background: var(--cs-bg);
+  color: var(--cs-text);
+  border-color: var(--cs-border-strong);
+}
+
+.outline:hover:not(:disabled) {
+  background: var(--cs-surface);
+  border-color: var(--cs-text-muted);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--cs-text-secondary);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--cs-surface);
+  color: var(--cs-text);
+}
+
+.destructive {
+  background: var(--cs-bg);
+  color: var(--cs-danger-600);
+  border-color: var(--cs-danger-border);
+}
+
+.destructive:hover:not(:disabled) {
+  background: var(--cs-danger-bg);
+  border-color: var(--cs-danger-600);
+}
+
+.spinner {
+  width: 0.9em;
+  height: 0.9em;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: cs-spin 650ms linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes cs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 1.4s;
+  }
+}

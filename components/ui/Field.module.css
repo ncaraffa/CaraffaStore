@@ -1,0 +1,27 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: var(--cs-space-5);
+}
+
+.label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cs-text-secondary);
+}
+
+.required {
+  color: var(--cs-danger-600);
+}
+
+.hint {
+  font-size: 0.8125rem;
+  color: var(--cs-text-muted);
+}
+
+.error {
+  font-size: 0.8125rem;
+  color: var(--cs-danger-600);
+  font-weight: 500;
+}

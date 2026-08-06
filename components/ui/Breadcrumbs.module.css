@@ -1,0 +1,38 @@
+.nav {
+  margin-bottom: var(--cs-space-4);
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.link {
+  color: var(--cs-text-secondary);
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--cs-primary-600);
+}
+
+.current {
+  color: var(--cs-text);
+  font-weight: 600;
+}
+
+.separator {
+  color: var(--cs-text-muted);
+}
