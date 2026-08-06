@@ -3,6 +3,12 @@
 import { useActionState, useState } from "react";
 import { IDLE_ACTION_STATE } from "@/lib/auth/action-state";
 import { slugify } from "@/lib/catalog/slugify";
+import { Card } from "@/components/ui/Card";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { Button } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
 import type { CategoryFormState } from "./actions";
 
 type Category = {
@@ -27,70 +33,66 @@ export function CategoryForm({
   const [slugValue, setSlugValue] = useState(category?.slug ?? "");
 
   return (
-    <form action={formAction} noValidate>
-      <input type="hidden" name="storeSlug" value={storeSlug} />
-      {category && <input type="hidden" name="categoryId" value={category.id} />}
+    <Card>
+      <form action={formAction} noValidate>
+        <input type="hidden" name="storeSlug" value={storeSlug} />
+        {category && <input type="hidden" name="categoryId" value={category.id} />}
 
-      {state.status === "error" && state.message && (
-        <p className="form-status" data-tone="error" role="alert">
-          {state.message}
-        </p>
-      )}
+        {state.status === "error" && state.message && (
+          <div style={{ marginBottom: "1.25rem" }}>
+            <Alert tone="danger">{state.message}</Alert>
+          </div>
+        )}
 
-      <div className="form-field">
-        <label htmlFor="name">Nome</label>
-        <input
-          id="name"
-          name="name"
-          required
-          minLength={2}
-          maxLength={120}
-          defaultValue={category?.name ?? ""}
-          onChange={(e) => {
-            if (!slugTouched) setSlugValue(slugify(e.target.value));
-          }}
-          aria-invalid={Boolean(state.fieldErrors?.name)}
-        />
-        {state.fieldErrors?.name && <small role="alert">{state.fieldErrors.name}</small>}
-      </div>
+        <Field label="Nome" htmlFor="name" required error={state.fieldErrors?.name}>
+          <Input
+            id="name"
+            name="name"
+            required
+            minLength={2}
+            maxLength={120}
+            defaultValue={category?.name ?? ""}
+            onChange={(e) => {
+              if (!slugTouched) setSlugValue(slugify(e.target.value));
+            }}
+            aria-invalid={Boolean(state.fieldErrors?.name)}
+          />
+        </Field>
 
-      <div className="form-field">
-        <label htmlFor="slug">Endereço (slug)</label>
-        <input
-          id="slug"
-          name="slug"
-          required
-          maxLength={80}
-          value={slugValue}
-          onChange={(e) => {
-            setSlugTouched(true);
-            setSlugValue(e.target.value);
-          }}
-          aria-invalid={Boolean(state.fieldErrors?.slug)}
-        />
-        {state.fieldErrors?.slug && <small role="alert">{state.fieldErrors.slug}</small>}
-      </div>
+        <Field label="Endereço (slug)" htmlFor="slug" required error={state.fieldErrors?.slug}>
+          <Input
+            id="slug"
+            name="slug"
+            required
+            maxLength={80}
+            value={slugValue}
+            onChange={(e) => {
+              setSlugTouched(true);
+              setSlugValue(e.target.value);
+            }}
+            aria-invalid={Boolean(state.fieldErrors?.slug)}
+          />
+        </Field>
 
-      <div className="form-field">
-        <label htmlFor="description">Descrição (opcional)</label>
-        <textarea id="description" name="description" maxLength={2000} defaultValue={category?.description ?? ""} />
-      </div>
+        <Field label="Descrição (opcional)" htmlFor="description">
+          <Textarea id="description" name="description" maxLength={2000} defaultValue={category?.description ?? ""} />
+        </Field>
 
-      <div className="form-field">
-        <label htmlFor="displayOrder">Ordem de exibição</label>
-        <input
-          id="displayOrder"
-          name="displayOrder"
-          type="number"
-          min={0}
-          max={10000}
-          defaultValue={category?.display_order ?? 0}
-        />
-      </div>
+        <Field label="Ordem de exibição" htmlFor="displayOrder">
+          <Input
+            id="displayOrder"
+            name="displayOrder"
+            type="number"
+            min={0}
+            max={10000}
+            defaultValue={category?.display_order ?? 0}
+          />
+        </Field>
 
-      <button type="submit" disabled={pending}>
-        {pending ? "Salvando..." : category ? "Salvar alterações" : "Criar categoria"}
-      </button>
-    </form>
+        <Button type="submit" loading={pending}>
+          {category ? "Salvar alterações" : "Criar categoria"}
+        </Button>
+      </form>
+    </Card>
   );
 }

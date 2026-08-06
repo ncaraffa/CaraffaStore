@@ -1,0 +1,14 @@
+.current {
+  font-size: 0.9375rem;
+  color: var(--cs-text-secondary);
+  margin-bottom: var(--cs-space-4);
+}
+
+.current strong {
+  color: var(--cs-text);
+  font-size: 1.125rem;
+}
+
+.alertGap {
+  margin-bottom: var(--cs-space-4);
+}

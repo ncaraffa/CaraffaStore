@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireStoreStatus } from "@/lib/tenant/access-control";
-import { DashboardNav } from "@/app/dashboard/dashboard-nav";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { getPaymentSettings } from "@/lib/payments/settings-service";
 import { absoluteUrl } from "@/lib/auth/site-url";
 import { PaymentSettingsForm } from "./payment-settings-form";
@@ -18,11 +18,14 @@ export default async function PaymentSettingsPage({ searchParams }: { searchPara
     : null;
 
   return (
-    <main>
-      <h1>Pagamentos — {store.name}</h1>
-      <DashboardNav storeSlug={store.slug} />
-
+    <DashboardShell
+      storeName={store.name}
+      storeSlug={store.slug}
+      storeStatus={store.status}
+      active="pagamentos"
+      breadcrumbs={[{ label: "Painel", href: `/dashboard?store=${store.slug}` }, { label: "Pagamentos" }]}
+    >
       <PaymentSettingsForm storeSlug={store.slug} settings={settings} webhookUrl={webhookUrl} />
-    </main>
+    </DashboardShell>
   );
 }

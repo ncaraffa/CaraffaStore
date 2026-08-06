@@ -8,6 +8,13 @@ import {
   moveProductImageAction,
   type ImageFormState,
 } from "./actions";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { ConfirmSubmitButton } from "@/components/ui/ConfirmSubmitButton";
+import { Field } from "@/components/ui/Field";
+import { Alert } from "@/components/ui/Alert";
+import { EmptyState } from "@/components/ui/EmptyState";
+import styles from "./image-manager.module.css";
 
 type ProductImage = {
   id: string;
@@ -36,40 +43,53 @@ export function ImageManager({
   return (
     <div>
       {images.length === 0 ? (
-        <p>Nenhuma imagem ainda.</p>
+        <EmptyState title="Nenhuma imagem ainda" description="Produtos com foto vendem mais — adicione ao menos uma imagem." />
       ) : (
-        <div className="image-grid">
+        <div className={styles.grid}>
           {images.map((image, index) => (
-            <figure key={image.id} className="image-grid-item">
-              <img src={`${publicBaseUrl}/${image.storage_path}`} alt="" width={160} height={160} />
-              {image.is_cover && <figcaption className="badge" data-tone="success">Capa</figcaption>}
-              <div className="image-grid-actions">
+            <figure key={image.id} className={styles.item}>
+              <div className={styles.imageWrap}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`${publicBaseUrl}/${image.storage_path}`} alt="" width={160} height={160} />
+                {image.is_cover && (
+                  <span className={styles.coverBadge}>
+                    <Badge tone="success">Capa</Badge>
+                  </span>
+                )}
+              </div>
+              <div className={styles.actions}>
                 <form action={moveProductImageAction}>
                   <input type="hidden" name="storeSlug" value={storeSlug} />
                   <input type="hidden" name="productId" value={productId} />
                   <input type="hidden" name="imageId" value={image.id} />
                   <input type="hidden" name="direction" value="up" />
-                  <button type="submit" className="btn-link" disabled={index === 0}>
+                  <Button type="submit" variant="ghost" size="sm" disabled={index === 0} aria-label="Mover para cima">
                     ↑
-                  </button>
+                  </Button>
                 </form>
                 <form action={moveProductImageAction}>
                   <input type="hidden" name="storeSlug" value={storeSlug} />
                   <input type="hidden" name="productId" value={productId} />
                   <input type="hidden" name="imageId" value={image.id} />
                   <input type="hidden" name="direction" value="down" />
-                  <button type="submit" className="btn-link" disabled={index === images.length - 1}>
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    size="sm"
+                    disabled={index === images.length - 1}
+                    aria-label="Mover para baixo"
+                  >
                     ↓
-                  </button>
+                  </Button>
                 </form>
                 {!image.is_cover && (
                   <form action={setCoverImageAction}>
                     <input type="hidden" name="storeSlug" value={storeSlug} />
                     <input type="hidden" name="productId" value={productId} />
                     <input type="hidden" name="imageId" value={image.id} />
-                    <button type="submit" className="btn-link">
-                      Definir como capa
-                    </button>
+                    <Button type="submit" variant="ghost" size="sm">
+                      Definir capa
+                    </Button>
                   </form>
                 )}
                 <form action={removeProductImageAction}>
@@ -77,9 +97,12 @@ export function ImageManager({
                   <input type="hidden" name="productId" value={productId} />
                   <input type="hidden" name="imageId" value={image.id} />
                   <input type="hidden" name="storagePath" value={image.storage_path} />
-                  <button type="submit" className="btn-link" data-tone="danger">
-                    Excluir
-                  </button>
+                  <ConfirmSubmitButton
+                    label="Excluir"
+                    confirmTitle="Excluir imagem"
+                    confirmMessage="Esta imagem será removida definitivamente do produto."
+                    confirmLabel="Excluir"
+                  />
                 </form>
               </div>
             </figure>
@@ -88,27 +111,26 @@ export function ImageManager({
       )}
 
       {images.length < maxImages ? (
-        <form action={formAction} noValidate>
+        <form action={formAction} noValidate className={styles.uploadForm}>
           <input type="hidden" name="storeSlug" value={storeSlug} />
           <input type="hidden" name="productId" value={productId} />
 
           {state.status === "error" && state.message && (
-            <p className="form-status" data-tone="error" role="alert">
-              {state.message}
-            </p>
+            <div className={styles.alertGap}>
+              <Alert tone="danger">{state.message}</Alert>
+            </div>
           )}
 
-          <div className="form-field">
-            <label htmlFor="file">Adicionar imagem (JPEG, PNG ou WebP, até 5&nbsp;MB)</label>
-            <input id="file" name="file" type="file" accept="image/jpeg,image/png,image/webp" required />
-          </div>
+          <Field label="Adicionar imagem (JPEG, PNG ou WebP, até 5 MB)" htmlFor="file">
+            <input id="file" name="file" type="file" accept="image/jpeg,image/png,image/webp" required className={styles.fileInput} />
+          </Field>
 
-          <button type="submit" disabled={pending}>
-            {pending ? "Enviando..." : "Enviar imagem"}
-          </button>
+          <Button type="submit" variant="outline" loading={pending}>
+            Enviar imagem
+          </Button>
         </form>
       ) : (
-        <p className="form-hint">Limite de {maxImages} imagens por produto atingido.</p>
+        <p className={styles.limitHint}>Limite de {maxImages} imagens por produto atingido.</p>
       )}
     </div>
   );

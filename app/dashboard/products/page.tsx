@@ -1,9 +1,17 @@
+import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireStoreStatus } from "@/lib/tenant/access-control";
-import { DashboardNav } from "@/app/dashboard/dashboard-nav";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import * as catalog from "@/lib/catalog/service";
 import { formatPriceCents } from "@/lib/catalog/format";
 import type { ProductStatus } from "@/lib/supabase/types";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { Table, TableActions } from "@/components/ui/Table";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { IconBox, IconPlus } from "@/components/ui/icons";
+import pageStyles from "../dashboard-list.module.css";
+import filterStyles from "../filter-pills.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -27,81 +35,101 @@ export default async function ProductsPage({
   const products = await catalog.listProducts(supabase, store.id, { status: statusFilter });
   const canManage = role === "owner" || role === "admin";
 
-  return (
-    <main>
-      <h1>Produtos — {store.name}</h1>
-      <DashboardNav storeSlug={store.slug} />
+  const filters: Array<{ label: string; value?: ProductStatus }> = [
+    { label: "Todos" },
+    { label: "Rascunhos", value: "draft" },
+    { label: "Publicados", value: "published" },
+    { label: "Arquivados", value: "archived" },
+  ];
 
-      <nav aria-label="Filtrar por status" className="dashboard-nav">
-        <a href={`/dashboard/products?store=${store.slug}`} aria-current={!statusFilter}>
-          Todos
-        </a>
-        <a href={`/dashboard/products?store=${store.slug}&status=draft`} aria-current={statusFilter === "draft"}>
-          Rascunhos
-        </a>
-        <a
-          href={`/dashboard/products?store=${store.slug}&status=published`}
-          aria-current={statusFilter === "published"}
-        >
-          Publicados
-        </a>
-        <a
-          href={`/dashboard/products?store=${store.slug}&status=archived`}
-          aria-current={statusFilter === "archived"}
-        >
-          Arquivados
-        </a>
+  return (
+    <DashboardShell
+      storeName={store.name}
+      storeSlug={store.slug}
+      storeStatus={store.status}
+      active="produtos"
+      breadcrumbs={[{ label: "Painel", href: `/dashboard?store=${store.slug}` }, { label: "Produtos" }]}
+    >
+      <div className={pageStyles.header}>
+        <div>
+          <h1 className={pageStyles.title}>Produtos</h1>
+          <p className={pageStyles.subtitle}>Gerencie o catálogo, preços, estoque e imagens.</p>
+        </div>
+        {canManage && (
+          <Link href={`/dashboard/products/new?store=${store.slug}`}>
+            <Button icon={<IconPlus />}>Novo produto</Button>
+          </Link>
+        )}
+      </div>
+
+      <nav aria-label="Filtrar por status" className={filterStyles.pills}>
+        {filters.map((filter) => {
+          const isActive = filter.value === statusFilter;
+          const href = filter.value
+            ? `/dashboard/products?store=${store.slug}&status=${filter.value}`
+            : `/dashboard/products?store=${store.slug}`;
+          return (
+            <Link key={filter.label} href={href} className={filterStyles.pill} data-active={isActive || undefined}>
+              {filter.label}
+            </Link>
+          );
+        })}
       </nav>
 
-      {canManage && (
-        <p>
-          <a href={`/dashboard/products/new?store=${store.slug}`}>+ Novo produto</a>
-        </p>
-      )}
-
       {products.length === 0 ? (
-        <p>Nenhum produto encontrado.</p>
+        <EmptyState
+          icon={<IconBox />}
+          title="Nenhum produto encontrado"
+          description="Cadastre produtos para começar a vender no seu catálogo público."
+          action={
+            canManage && (
+              <Link href={`/dashboard/products/new?store=${store.slug}`}>
+                <Button icon={<IconPlus />}>Criar primeiro produto</Button>
+              </Link>
+            )
+          }
+        />
       ) : (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Nome</th>
-                <th>Preço</th>
-                <th>Estoque</th>
-                <th>Status</th>
-                {canManage && <th>Ações</th>}
+        <Table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Preço</th>
+              <th>Estoque</th>
+              <th>Status</th>
+              {canManage && <th>Ações</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((product) => (
+              <tr key={product.id}>
+                <td>{product.name}</td>
+                <td>{formatPriceCents(product.price_cents)}</td>
+                <td>
+                  <TableActions>
+                    <span>{product.stock}</span>
+                    {product.status === "published" && product.stock === 0 && <Badge tone="warning">Esgotado</Badge>}
+                  </TableActions>
+                </td>
+                <td>
+                  <Badge tone={product.status === "published" ? "success" : "neutral"}>
+                    {STATUS_LABEL[product.status]}
+                  </Badge>
+                </td>
+                {canManage && (
+                  <td>
+                    <Link href={`/dashboard/products/${product.id}/edit?store=${store.slug}`}>
+                      <Button variant="ghost" size="sm">
+                        Editar
+                      </Button>
+                    </Link>
+                  </td>
+                )}
               </tr>
-            </thead>
-            <tbody>
-              {products.map((product) => (
-                <tr key={product.id}>
-                  <td>{product.name}</td>
-                  <td>{formatPriceCents(product.price_cents)}</td>
-                  <td>
-                    {product.stock}
-                    {product.status === "published" && product.stock === 0 && (
-                      <span className="badge" data-tone="warning">
-                        Esgotado
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <span className="badge" data-tone={product.status === "published" ? "success" : "neutral"}>
-                      {STATUS_LABEL[product.status]}
-                    </span>
-                  </td>
-                  {canManage && (
-                    <td>
-                      <a href={`/dashboard/products/${product.id}/edit?store=${store.slug}`}>Editar</a>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </Table>
       )}
-    </main>
+    </DashboardShell>
   );
 }

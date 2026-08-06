@@ -1,0 +1,97 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-6);
+  max-width: 40rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cs-space-3);
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 1.5rem;
+}
+
+.subtitle {
+  margin-top: 0.35rem;
+  color: var(--cs-text-secondary);
+  font-size: 0.9375rem;
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--cs-space-5);
+  margin: 0;
+}
+
+.infoGrid dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cs-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.35rem;
+}
+
+.infoGrid dd {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--cs-text);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875rem;
+}
+
+.verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--cs-success-text);
+}
+
+.textMuted {
+  color: var(--cs-text-muted);
+}
+
+.errorAlert {
+  margin-top: var(--cs-space-4);
+}
+
+.actionsRow {
+  display: flex;
+  gap: var(--cs-space-3);
+  flex-wrap: wrap;
+  margin-top: var(--cs-space-5);
+  padding-top: var(--cs-space-5);
+  border-top: 1px solid var(--cs-border);
+}
+
+.webhookRow {
+  display: flex;
+  gap: var(--cs-space-3);
+  flex-wrap: wrap;
+}
+
+.webhookRow > :first-child {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.form {
+  margin-top: var(--cs-space-5);
+}
+
+.fieldError {
+  margin: -0.75rem 0 var(--cs-space-4);
+  font-size: 0.8125rem;
+  color: var(--cs-danger-600);
+  font-weight: 500;
+}

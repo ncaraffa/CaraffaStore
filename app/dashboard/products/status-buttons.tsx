@@ -1,25 +1,29 @@
 import { setProductStatusAction } from "./actions";
 import type { ProductStatus } from "@/lib/supabase/types";
+import { Button } from "@/components/ui/Button";
+import styles from "./status-buttons.module.css";
 
 function StatusButton({
   storeSlug,
   productId,
   targetStatus,
   label,
+  variant,
 }: {
   storeSlug: string;
   productId: string;
   targetStatus: ProductStatus;
   label: string;
+  variant: "primary" | "outline";
 }) {
   return (
-    <form action={setProductStatusAction} style={{ display: "inline" }}>
+    <form action={setProductStatusAction}>
       <input type="hidden" name="storeSlug" value={storeSlug} />
       <input type="hidden" name="productId" value={productId} />
       <input type="hidden" name="status" value={targetStatus} />
-      <button type="submit" className="btn-link">
+      <Button type="submit" variant={variant} size="sm">
         {label}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -34,18 +38,24 @@ export function StatusButtons({
   status: ProductStatus;
 }) {
   return (
-    <div className="table-actions">
+    <div className={styles.row}>
       {status !== "published" && (
-        <StatusButton storeSlug={storeSlug} productId={productId} targetStatus="published" label="Publicar" />
+        <StatusButton storeSlug={storeSlug} productId={productId} targetStatus="published" label="Publicar" variant="primary" />
       )}
       {status === "published" && (
-        <StatusButton storeSlug={storeSlug} productId={productId} targetStatus="draft" label="Despublicar" />
+        <StatusButton storeSlug={storeSlug} productId={productId} targetStatus="draft" label="Despublicar" variant="outline" />
       )}
       {status !== "archived" && (
-        <StatusButton storeSlug={storeSlug} productId={productId} targetStatus="archived" label="Arquivar" />
+        <StatusButton storeSlug={storeSlug} productId={productId} targetStatus="archived" label="Arquivar" variant="outline" />
       )}
       {status === "archived" && (
-        <StatusButton storeSlug={storeSlug} productId={productId} targetStatus="draft" label="Reativar (rascunho)" />
+        <StatusButton
+          storeSlug={storeSlug}
+          productId={productId}
+          targetStatus="draft"
+          label="Reativar (rascunho)"
+          variant="outline"
+        />
       )}
     </div>
   );

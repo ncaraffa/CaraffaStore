@@ -1,0 +1,27 @@
+.pills {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: var(--cs-space-5);
+}
+
+.pill {
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--cs-radius-full);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cs-text-secondary);
+  text-decoration: none;
+  border: 1px solid var(--cs-border);
+  background: var(--cs-bg);
+}
+
+.pill:hover {
+  border-color: var(--cs-text-muted);
+}
+
+.pill[data-active] {
+  background: var(--cs-primary-600);
+  border-color: var(--cs-primary-600);
+  color: var(--cs-text-inverse);
+}
