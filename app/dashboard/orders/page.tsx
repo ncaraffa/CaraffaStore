@@ -1,10 +1,18 @@
+import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireStoreStatus } from "@/lib/tenant/access-control";
-import { DashboardNav } from "@/app/dashboard/dashboard-nav";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import * as orders from "@/lib/orders/service";
 import { listOrderPaymentsForStore } from "@/lib/payments/order-payments-service";
 import { formatPriceCents } from "@/lib/catalog/format";
 import type { Database, OrderStatus } from "@/lib/supabase/types";
+import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Table } from "@/components/ui/Table";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { IconReceipt } from "@/components/ui/icons";
+import pageStyles from "../dashboard-list.module.css";
+import filterStyles from "../filter-pills.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -20,16 +28,16 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   cancelled: "Cancelado",
 };
 
-const STATUS_TONE: Record<OrderStatus, "neutral" | "success" | "warning"> = {
+const STATUS_TONE: Record<OrderStatus, BadgeTone> = {
   pending: "warning",
-  confirmed: "neutral",
-  preparing: "neutral",
-  ready: "neutral",
+  confirmed: "info",
+  preparing: "info",
+  ready: "info",
   completed: "success",
   cancelled: "neutral",
 };
 
-const PAYMENT_BADGE: Record<string, { label: string; tone: "neutral" | "success" | "warning" | "danger" }> = {
+const PAYMENT_BADGE: Record<string, { label: string; tone: BadgeTone }> = {
   creating: { label: "Gerando cobrança", tone: "warning" },
   pending: { label: "Aguardando pagamento", tone: "warning" },
   approved: { label: "Pago", tone: "success" },
@@ -74,73 +82,91 @@ export default async function OrdersPage({
   const paymentByOrderId = new Map(payments.map((p) => [p.order_id, p]));
   const filtered = list.filter((order) => matchesFilter(paymentByOrderId.get(order.id), paymentFilter));
 
-  return (
-    <main>
-      <h1>Pedidos — {store.name}</h1>
-      <DashboardNav storeSlug={store.slug} />
+  const filters: Array<{ label: string; value?: PaymentFilter }> = [
+    { label: "Todos" },
+    { label: "Aguardando pagamento", value: "awaiting" },
+    { label: "Pago", value: "paid" },
+    { label: "Erro", value: "error" },
+    { label: "Expirado/cancelado", value: "expired_cancelled" },
+  ];
 
-      <nav aria-label="Filtro de pagamento" className="table-actions">
-        <a href={`/dashboard/orders?store=${store.slug}`}>Todos</a>
-        <a href={`/dashboard/orders?store=${store.slug}&payment=awaiting`}>Aguardando pagamento</a>
-        <a href={`/dashboard/orders?store=${store.slug}&payment=paid`}>Pago</a>
-        <a href={`/dashboard/orders?store=${store.slug}&payment=error`}>Erro</a>
-        <a href={`/dashboard/orders?store=${store.slug}&payment=expired_cancelled`}>Expirado/cancelado</a>
+  return (
+    <DashboardShell
+      storeName={store.name}
+      storeSlug={store.slug}
+      storeStatus={store.status}
+      active="pedidos"
+      breadcrumbs={[{ label: "Painel", href: `/dashboard?store=${store.slug}` }, { label: "Pedidos" }]}
+    >
+      <div className={pageStyles.header}>
+        <div>
+          <h1 className={pageStyles.title}>Pedidos</h1>
+          <p className={pageStyles.subtitle}>Acompanhe vendas, pagamentos e status de preparo.</p>
+        </div>
+      </div>
+
+      <nav aria-label="Filtro de pagamento" className={filterStyles.pills}>
+        {filters.map((filter) => {
+          const isActive = filter.value === paymentFilter;
+          const href = filter.value
+            ? `/dashboard/orders?store=${store.slug}&payment=${filter.value}`
+            : `/dashboard/orders?store=${store.slug}`;
+          return (
+            <Link key={filter.label} href={href} className={filterStyles.pill} data-active={isActive || undefined}>
+              {filter.label}
+            </Link>
+          );
+        })}
       </nav>
 
       {filtered.length === 0 ? (
-        <p>Nenhum pedido encontrado.</p>
+        <EmptyState icon={<IconReceipt />} title="Nenhum pedido encontrado" description="Pedidos feitos no seu catálogo público aparecem aqui." />
       ) : (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Cliente</th>
-                <th>Telefone</th>
-                <th>Data</th>
-                <th>Modalidade</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th>Pagamento</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((order) => {
-                const payment = paymentByOrderId.get(order.id);
-                const badge = payment ? PAYMENT_BADGE[payment.status] : undefined;
-                return (
-                  <tr key={order.id}>
-                    <td>{order.public_code}</td>
-                    <td>{order.customer_name}</td>
-                    <td>{order.customer_phone}</td>
-                    <td>{new Date(order.created_at).toLocaleString("pt-BR")}</td>
-                    <td>{order.fulfillment_method === "pickup" ? "Retirada" : "Entrega"}</td>
-                    <td>{formatPriceCents(order.total_cents)}</td>
-                    <td>
-                      <span className="badge" data-tone={STATUS_TONE[order.status]}>
-                        {STATUS_LABEL[order.status]}
-                      </span>
-                    </td>
-                    <td>
-                      {badge ? (
-                        <span className="badge" data-tone={badge.tone}>
-                          {badge.label}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td>
-                      <a href={`/dashboard/orders/${order.id}?store=${store.slug}`}>Abrir</a>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Cliente</th>
+              <th>Telefone</th>
+              <th>Data</th>
+              <th>Modalidade</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th>Pagamento</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((order) => {
+              const payment = paymentByOrderId.get(order.id);
+              const badge = payment ? PAYMENT_BADGE[payment.status] : undefined;
+              return (
+                <tr key={order.id}>
+                  <td>
+                    <strong>{order.public_code}</strong>
+                  </td>
+                  <td>{order.customer_name}</td>
+                  <td>{order.customer_phone}</td>
+                  <td>{new Date(order.created_at).toLocaleString("pt-BR")}</td>
+                  <td>{order.fulfillment_method === "pickup" ? "Retirada" : "Entrega"}</td>
+                  <td>{formatPriceCents(order.total_cents)}</td>
+                  <td>
+                    <Badge tone={STATUS_TONE[order.status]}>{STATUS_LABEL[order.status]}</Badge>
+                  </td>
+                  <td>{badge ? <Badge tone={badge.tone}>{badge.label}</Badge> : "—"}</td>
+                  <td>
+                    <Link href={`/dashboard/orders/${order.id}?store=${store.slug}`}>
+                      <Button variant="ghost" size="sm">
+                        Abrir
+                      </Button>
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
       )}
-    </main>
+    </DashboardShell>
   );
 }

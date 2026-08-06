@@ -1,0 +1,92 @@
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--cs-space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--cs-space-6);
+}
+
+.title {
+  font-size: 1.5rem;
+}
+
+.subtitle {
+  margin-top: 0.35rem;
+  color: var(--cs-text-secondary);
+  font-size: 0.875rem;
+}
+
+.headerBadges {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--cs-space-6);
+  align-items: start;
+}
+
+.mainCol,
+.sideCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-6);
+  min-width: 0;
+}
+
+@media (min-width: 1000px) {
+  .layout {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: var(--cs-space-4);
+  margin: 0;
+}
+
+.infoGrid dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cs-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.3rem;
+}
+
+.infoGrid dd {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--cs-text);
+}
+
+.spanAll {
+  grid-column: 1 / -1;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875rem;
+}
+
+.reconcileForm {
+  margin-top: var(--cs-space-5);
+  padding-top: var(--cs-space-5);
+  border-top: 1px solid var(--cs-border);
+}
+
+.muted {
+  color: var(--cs-text-muted);
+  font-size: 0.875rem;
+}
+
+.actionsRow {
+  display: flex;
+  gap: var(--cs-space-3);
+  flex-wrap: wrap;
+}
