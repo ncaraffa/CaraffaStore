@@ -9,6 +9,7 @@ import { isAllowedRedirect } from "@/lib/auth/redirects";
  * de qualquer página de loja carregar.
  */
 export const PUBLIC_PATHS = [
+  "/",
   "/login",
   "/signup",
   "/forgot-password",
