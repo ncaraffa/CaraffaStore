@@ -65,7 +65,7 @@ export default function SignupPage() {
               (CAPTCHA_ENABLED=true); sem efeito no dev local. */}
           <input type="hidden" name="captchaToken" value="" />
 
-          <Button type="submit" fullWidth loading={pending}>
+          <Button type="submit" size="lg" fullWidth loading={pending}>
             Criar conta
           </Button>
         </form>

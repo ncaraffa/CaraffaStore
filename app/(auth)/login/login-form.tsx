@@ -48,7 +48,7 @@ export function LoginForm({ next, linkError }: { next: string; linkError?: strin
           />
         </Field>
 
-        <Button type="submit" fullWidth loading={pending}>
+        <Button type="submit" size="lg" fullWidth loading={pending}>
           Entrar
         </Button>
       </form>

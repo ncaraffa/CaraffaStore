@@ -1,0 +1,30 @@
+.preview {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: var(--cs-space-5);
+  padding: 0.625rem 0.875rem;
+  background: var(--cs-blue-50);
+  border: 1px solid var(--cs-blue-100);
+  border-radius: var(--cs-radius-md);
+  color: var(--cs-blue-700);
+}
+
+.preview svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.previewPath {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-sm);
+  color: var(--cs-blue-800);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewPath strong {
+  font-weight: 700;
+}

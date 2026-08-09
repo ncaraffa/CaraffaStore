@@ -4,17 +4,26 @@
   justify-content: space-between;
   gap: var(--cs-space-4);
   flex-wrap: wrap;
-  margin-bottom: var(--cs-space-6);
+  margin-bottom: var(--cs-space-5);
 }
 
 .title {
-  font-size: 1.5rem;
+  font-size: var(--cs-text-h2);
+  letter-spacing: var(--cs-tracking-tight);
+}
+
+.code {
+  font-family: var(--cs-font-mono);
+  font-size: 0.7em;
+  font-weight: 500;
+  color: var(--cs-ink-muted);
+  letter-spacing: 0;
 }
 
 .subtitle {
-  margin-top: 0.35rem;
-  color: var(--cs-text-secondary);
-  font-size: 0.875rem;
+  margin-top: 0.375rem;
+  color: var(--cs-ink-muted);
+  font-size: var(--cs-text-sm);
 }
 
 .headerBadges {
@@ -22,6 +31,158 @@
   gap: 0.5rem;
 }
 
+/* ============================================================
+   Régua de status
+   ============================================================ */
+.stepperCard {
+  padding: var(--cs-space-5) var(--cs-space-6);
+  margin-bottom: var(--cs-space-6);
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-xs);
+  overflow-x: auto;
+}
+
+.stepper {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cs-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 30rem;
+}
+
+.stepper::before,
+.stepper::after {
+  content: "";
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  height: 2px;
+  z-index: 0;
+}
+
+.stepper::before {
+  right: 0.75rem;
+  background: var(--cs-line-strong);
+}
+
+/* Preenchimento real via custom property — nada de JS para animar isto,
+   só a proporção --current/--last calculada no componente. */
+.stepper::after {
+  width: calc((100% - 1.5rem) * var(--current, 0) / var(--last, 1));
+  background: var(--cs-blue-500);
+  transition: width var(--cs-duration-slow) var(--cs-ease-out);
+}
+
+.stepperCaption {
+  margin: var(--cs-space-3) 0 0;
+  font-size: var(--cs-text-xs);
+  font-weight: 600;
+  color: var(--cs-ink-muted);
+  text-align: center;
+  display: none;
+}
+
+.stepperItem {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4375rem;
+  flex: 1;
+}
+
+.stepperDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--cs-white);
+  border: 2px solid var(--cs-line-strong);
+  color: var(--cs-ink-faint);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  transition:
+    background-color var(--cs-duration) var(--cs-ease),
+    border-color var(--cs-duration) var(--cs-ease),
+    color var(--cs-duration) var(--cs-ease);
+}
+
+.stepperDot svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.stepperItem[data-done] .stepperDot {
+  background: var(--cs-success);
+  border-color: var(--cs-success);
+  color: #fff;
+}
+
+.stepperItem[data-active] .stepperDot {
+  background: var(--cs-blue-600);
+  border-color: var(--cs-blue-600);
+  color: #fff;
+  box-shadow: 0 0 0 4px var(--cs-blue-100);
+}
+
+.stepperLabel {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--cs-ink-faint);
+  white-space: nowrap;
+}
+
+.stepperItem[data-done] .stepperLabel {
+  color: var(--cs-ink-muted);
+}
+
+.stepperItem[data-active] .stepperLabel {
+  color: var(--cs-blue-700);
+}
+
+@media (max-width: 480px) {
+  .stepperCard {
+    overflow-x: visible;
+    padding: var(--cs-space-4);
+  }
+
+  /* A régua de pontos continua correta, só deixa de rolar de lado: os
+     rótulos somem e o resumo textual embaixo assume a leitura principal. */
+  .stepper {
+    min-width: 0;
+  }
+
+  .stepperLabel {
+    display: none;
+  }
+
+  .stepperCaption {
+    display: block;
+  }
+}
+
+.cancelledBanner {
+  padding: var(--cs-space-4) var(--cs-space-5);
+  margin-bottom: var(--cs-space-6);
+  background: var(--cs-neutral-bg);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  color: var(--cs-ink-muted);
+  font-size: var(--cs-text-sm);
+  font-weight: 600;
+}
+
+/* ============================================================
+   Layout
+   ============================================================ */
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -51,18 +212,19 @@
 }
 
 .infoGrid dt {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--cs-text-muted);
+  font-family: var(--cs-font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--cs-ink-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 0.3rem;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.3125rem;
 }
 
 .infoGrid dd {
   margin: 0;
-  font-size: 0.9375rem;
-  color: var(--cs-text);
+  font-size: var(--cs-text-base);
+  color: var(--cs-ink);
 }
 
 .spanAll {
@@ -70,23 +232,133 @@
 }
 
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.875rem;
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-sm);
+}
+
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   Itens + totais
+   ============================================================ */
+.itemsHeaderPad {
+  padding: var(--cs-space-6) var(--cs-space-6) 0;
+}
+
+.itemsHeaderPad :global(h2) {
+  margin-bottom: var(--cs-space-4);
+}
+
+.totals {
+  padding: var(--cs-space-4) var(--cs-space-6) var(--cs-space-5);
+  border-top: 1px solid var(--cs-line);
+}
+
+.totalRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-muted);
+  padding-block: 0.25rem;
+}
+
+.totalRowFinal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 0.375rem;
+  padding-top: 0.625rem;
+  border-top: 1px dashed var(--cs-line-strong);
+  font-family: var(--cs-font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--cs-ink);
 }
 
 .reconcileForm {
   margin-top: var(--cs-space-5);
   padding-top: var(--cs-space-5);
-  border-top: 1px solid var(--cs-border);
+  border-top: 1px solid var(--cs-line);
 }
 
 .muted {
-  color: var(--cs-text-muted);
-  font-size: 0.875rem;
+  color: var(--cs-ink-muted);
+  font-size: var(--cs-text-sm);
 }
 
 .actionsRow {
   display: flex;
   gap: var(--cs-space-3);
   flex-wrap: wrap;
+}
+
+/* ============================================================
+   Timeline de eventos — mesmo motivo da régua de passos, na vertical
+   ============================================================ */
+.timeline {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timelineItem {
+  position: relative;
+  display: flex;
+  gap: 0.75rem;
+  padding-bottom: var(--cs-space-4);
+  padding-left: 0.125rem;
+}
+
+.timelineItem::before {
+  content: "";
+  position: absolute;
+  left: 0.28125rem;
+  top: 0.875rem;
+  bottom: -0.25rem;
+  width: 1.5px;
+  background: var(--cs-line);
+}
+
+.timelineItem:last-child {
+  padding-bottom: 0;
+}
+
+.timelineItem:last-child::before {
+  display: none;
+}
+
+.timelineDot {
+  flex-shrink: 0;
+  width: 0.625rem;
+  height: 0.625rem;
+  margin-top: 0.3125rem;
+  border-radius: 50%;
+  background: var(--cs-blue-500);
+  border: 2px solid var(--cs-blue-100);
+  z-index: 1;
+}
+
+.timelineBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.timelineAction {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-xs);
+  font-weight: 600;
+  color: var(--cs-ink);
+  word-break: break-word;
+}
+
+.timelineMeta {
+  font-size: 0.75rem;
+  color: var(--cs-ink-muted);
 }

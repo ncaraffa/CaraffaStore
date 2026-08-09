@@ -16,21 +16,22 @@
 .card {
   width: 100%;
   max-width: 26rem;
-  background: var(--cs-bg);
-  border: 1px solid var(--cs-border);
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
   border-radius: var(--cs-radius-xl);
-  box-shadow: var(--cs-shadow-md);
+  box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
   padding: var(--cs-space-8);
 }
 
 .title {
-  font-size: 1.25rem;
+  font-size: var(--cs-text-h3);
+  letter-spacing: var(--cs-tracking-tight);
   margin-bottom: var(--cs-space-2);
 }
 
 .subtitle {
-  font-size: 0.875rem;
-  color: var(--cs-text-secondary);
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-muted);
   margin-bottom: var(--cs-space-5);
 }
 
@@ -48,21 +49,25 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--cs-space-3);
+  min-height: 3.25rem;
   padding: var(--cs-space-4);
-  border: 1px solid var(--cs-border);
+  border: 1px solid var(--cs-line);
   border-radius: var(--cs-radius-md);
   text-decoration: none;
-  color: var(--cs-text);
+  color: var(--cs-ink);
+  transition:
+    border-color var(--cs-duration-fast) var(--cs-ease),
+    background-color var(--cs-duration-fast) var(--cs-ease);
 }
 
 .item:hover {
-  border-color: var(--cs-primary-200);
-  background: var(--cs-surface);
+  border-color: var(--cs-blue-300);
+  background: var(--cs-blue-50);
 }
 
 .itemName {
   font-weight: 600;
-  font-size: 0.9375rem;
+  font-size: var(--cs-text-sm);
 }
 
 .actions {

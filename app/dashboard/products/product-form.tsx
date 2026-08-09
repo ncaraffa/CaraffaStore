@@ -136,7 +136,7 @@ export function ProductForm({
           </Field>
         )}
 
-        <Button type="submit" loading={pending}>
+        <Button type="submit" size="lg" loading={pending}>
           {product ? "Salvar alterações" : "Criar produto"}
         </Button>
       </form>

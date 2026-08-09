@@ -15,6 +15,7 @@ export function AddToCartButton({
   slug,
   priceCents,
   stock,
+  imageUrl,
 }: {
   storeSlug: string;
   productId: string;
@@ -22,6 +23,7 @@ export function AddToCartButton({
   slug: string | null;
   priceCents: number;
   stock: number;
+  imageUrl?: string | null;
 }) {
   const { addItem } = useCart(storeSlug);
   const [quantity, setQuantity] = useState(1);
@@ -53,7 +55,7 @@ export function AddToCartButton({
         fullWidth
         icon={added ? <IconCheck /> : undefined}
         onClick={() => {
-          addItem({ productId, name, slug, priceCents, quantity });
+          addItem({ productId, name, slug, priceCents, quantity, imageUrl });
           setAdded(true);
           window.setTimeout(() => setAdded(false), 1500);
         }}

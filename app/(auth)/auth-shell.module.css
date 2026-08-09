@@ -1,49 +1,91 @@
+/* Split-screen: cena de marca à esquerda, formulário à direita. Abaixo de
+   960px a cena decorativa desaparece — o formulário vem primeiro no
+   celular, sem sobra de scroll por uma decoração que não cabe. */
 .shell {
+  display: grid;
+  /* Uma coluna até 960px — .visual fica display:none, então não reservar
+     uma segunda track vazia aqui evita depender de auto-placement. */
+  grid-template-columns: minmax(0, 1fr);
   min-height: 100dvh;
+}
+
+.visual {
+  display: none;
+}
+
+.formSide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: var(--cs-space-8) var(--cs-space-6);
+  background: var(--cs-surface);
+}
+
+.formSideInner {
+  width: 100%;
+  max-width: 26rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: var(--cs-space-6);
-  padding: var(--cs-space-6);
-  background: var(--cs-surface);
 }
 
 .logoLink {
   text-decoration: none;
+  align-self: flex-start;
 }
 
 .card {
   width: 100%;
-  max-width: 26rem;
   padding: var(--cs-space-8);
   border-radius: var(--cs-radius-xl);
-  background: var(--cs-bg);
-  border: 1px solid var(--cs-border);
-  box-shadow: var(--cs-shadow-md);
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
 }
 
 .card h1 {
-  font-size: 1.375rem;
+  font-size: var(--cs-text-h3);
+  letter-spacing: var(--cs-tracking-tight);
   margin-bottom: var(--cs-space-2);
 }
 
 .footer {
   display: flex;
   gap: 0.5rem;
-  font-size: 0.75rem;
-  color: var(--cs-text-muted);
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
 }
 
 .footer a {
-  color: var(--cs-text-muted);
+  color: var(--cs-ink-muted);
+  transition: color var(--cs-duration-fast) var(--cs-ease);
 }
 
 .footer a:hover {
-  color: var(--cs-primary-600);
+  color: var(--cs-blue-600);
+}
+
+@media (min-width: 960px) {
+  .shell {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  }
+
+  .visual {
+    display: block;
+  }
+
+  .logoLink {
+    align-self: center;
+  }
 }
 
 @media (max-width: 480px) {
+  .formSide {
+    padding: var(--cs-space-6) var(--cs-space-4);
+  }
+
   .card {
     padding: var(--cs-space-6);
   }

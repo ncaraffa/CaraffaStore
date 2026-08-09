@@ -28,6 +28,7 @@ export default async function OrderSuccessPage({
     <StatusPage
       icon={<IconCheck />}
       title="Pedido recebido!"
+      tone="success"
       actions={
         <Link href={`/loja/${storeSlug}`}>
           <Button variant="outline">Voltar para a loja</Button>

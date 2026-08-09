@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatPriceCents } from "@/lib/catalog/format";
 import { Card } from "@/components/ui/Card";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
-import { Textarea } from "@/components/ui/Textarea";
-import { IconCopy, IconCheck } from "@/components/ui/icons";
+import { IconCheck, IconClock, IconCopy, IconPix } from "@/components/ui/icons";
 import styles from "./payment.module.css";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -22,18 +20,49 @@ const STATUS_LABEL: Record<string, string> = {
   manual_review: "Em análise",
 };
 
-const STATUS_TONE: Record<string, BadgeTone> = {
-  creating: "warning",
-  pending: "warning",
-  approved: "success",
-  rejected: "danger",
-  cancelled: "neutral",
-  expired: "neutral",
-  error: "danger",
-  manual_review: "danger",
-};
+function formatCountdown(msRemaining: number): string {
+  const totalSeconds = Math.max(0, Math.floor(msRemaining / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+/** Contagem regressiva sobre o `expiresAt` real do pedido — não inventa
+ *  tempo, só reformata o mesmo timestamp já exibido, atualizando a cada
+ *  segundo em vez de ficar estático até a próxima atualização manual. */
+function ExpiryCountdown({ expiresAt }: { expiresAt: string }) {
+  const target = new Date(expiresAt).getTime();
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Sem chamada síncrona a setNow aqui (regra react-hooks/set-state-in-
+    // effect): o primeiro tick do relógio chega com o intervalo, até 1s
+    // depois da montagem — troca imperceptível vinda do fallback estático.
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  // Antes da hidratação, mostra só a hora — evita mismatch de SSR (o
+  // servidor não sabe "agora" do cliente).
+  if (now === null) {
+    return <span className={styles.expiresValue}>{new Date(expiresAt).toLocaleTimeString("pt-BR")}</span>;
+  }
+
+  const remaining = target - now;
+  if (remaining <= 0) {
+    return <span className={styles.expiresValue}>Expirando...</span>;
+  }
+
+  const urgent = remaining < 2 * 60 * 1000;
+  return (
+    <span className={styles.expiresValue} data-urgent={urgent || undefined}>
+      {formatCountdown(remaining)}
+    </span>
+  );
+}
 
 export function PaymentStatusClient({
+  publicCode,
   status,
   amountCents,
   qrCode,
@@ -41,6 +70,7 @@ export function PaymentStatusClient({
   ticketUrl,
   expiresAt,
 }: {
+  publicCode: string;
   status: string;
   amountCents: number;
   qrCode: string | null;
@@ -57,15 +87,18 @@ export function PaymentStatusClient({
   const isFailed = status === "rejected" || status === "cancelled" || status === "expired" || status === "error";
 
   return (
-    <Card>
-      <div className={styles.amountRow}>
-        <span className={styles.amountLabel}>Valor</span>
-        <span className={styles.amount}>{formatPriceCents(amountCents)}</span>
+    <Card className={styles.card}>
+      {/* Estado em destaque no topo — é a primeira coisa que precisa
+          ficar óbvia numa tela onde há dinheiro real envolvido. */}
+      <div className={styles.statusBanner} data-tone={isApproved ? "success" : isFailed ? "danger" : "pending"}>
+        <span className={styles.statusIcon}>{isApproved ? <IconCheck /> : isFailed ? null : <IconPix />}</span>
+        <span className={styles.statusText}>{STATUS_LABEL[status] ?? status}</span>
       </div>
 
-      <div className={styles.statusRow}>
-        <span className={styles.amountLabel}>Status</span>
-        <Badge tone={STATUS_TONE[status] ?? "neutral"}>{STATUS_LABEL[status] ?? status}</Badge>
+      <div className={styles.amountBlock}>
+        <span className={styles.amountLabel}>Valor do pedido</span>
+        <span className={styles.amount}>{formatPriceCents(amountCents)}</span>
+        <span className={styles.orderCode}>Pedido #{publicCode}</span>
       </div>
 
       {isApproved && (
@@ -84,9 +117,16 @@ export function PaymentStatusClient({
       )}
 
       {isPending && qrCodeBase64 && (
-        <div className={styles.qrWrap}>
+        <div className={styles.qrFrame}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`data:image/png;base64,${qrCodeBase64}`} alt="QR Code do Pix" width={240} height={240} className={styles.qrImage} />
+        </div>
+      )}
+
+      {isPending && expiresAt && (
+        <div className={styles.expiresRow}>
+          <IconClock />
+          Expira em <ExpiryCountdown expiresAt={expiresAt} />
         </div>
       )}
 
@@ -95,10 +135,12 @@ export function PaymentStatusClient({
           <label htmlFor="qrCodeCopyPaste" className={styles.copyLabel}>
             Pix Copia e Cola
           </label>
-          <Textarea id="qrCodeCopyPaste" readOnly value={qrCode} rows={3} onFocus={(e) => e.currentTarget.select()} />
+          <div className={styles.copyField}>
+            <input id="qrCodeCopyPaste" readOnly value={qrCode} onFocus={(e) => e.currentTarget.select()} className={styles.copyInput} />
+          </div>
           <Button
             type="button"
-            variant="outline"
+            size="lg"
             fullWidth
             icon={copied ? <IconCheck /> : <IconCopy />}
             onClick={async () => {
@@ -118,10 +160,6 @@ export function PaymentStatusClient({
             Abrir no app do banco
           </a>
         </p>
-      )}
-
-      {isPending && expiresAt && (
-        <p className={styles.expiresAt}>Expira em: {new Date(expiresAt).toLocaleString("pt-BR")}</p>
       )}
 
       {isPending && (

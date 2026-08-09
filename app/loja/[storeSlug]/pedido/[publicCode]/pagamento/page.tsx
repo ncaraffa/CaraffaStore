@@ -36,11 +36,12 @@ export default async function PaymentPage({
   return (
     <main className={styles.main}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Pedido {view.publicCode}</h1>
-        <p className={styles.subtitle}>Pague pelo Pix abaixo para confirmar seu pedido. O comerciante será avisado automaticamente.</p>
+        <h1 className={styles.title}>Pagamento via Pix</h1>
+        <p className={styles.subtitle}>Pague abaixo para confirmar seu pedido. O comerciante será avisado automaticamente.</p>
       </div>
 
       <PaymentStatusClient
+        publicCode={view.publicCode}
         status={view.status}
         amountCents={view.amountCents}
         qrCode={view.qrCode}

@@ -1,0 +1,247 @@
+.scene {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--cs-space-8);
+  padding: clamp(2.5rem, 2rem + 2vw, 4rem);
+  background: linear-gradient(158deg, #122a72 0%, var(--cs-blue-950) 62%, #08142a 100%);
+  color: #fff;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.glow {
+  position: absolute;
+  inset: -20% -30% auto auto;
+  width: 34rem;
+  height: 34rem;
+  background: radial-gradient(circle, rgba(92, 141, 255, 0.32), transparent 62%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* `overflow: hidden` no .scene já corta o excesso, então isto nunca
+   força scroll horizontal — mas em colunas estreitas (abaixo de ~30rem
+   de painel) o círculo de luz (.glow) fica visível por baixo dela. */
+.watermark {
+  position: absolute;
+  right: -3rem;
+  bottom: -4.5rem;
+  width: 16rem;
+  height: 16rem;
+  color: rgba(255, 255, 255, 0.06);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.top {
+  max-width: 24rem;
+}
+
+.eyebrow {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  color: var(--cs-blue-300);
+  margin-bottom: var(--cs-space-4);
+}
+
+.title {
+  font-size: clamp(1.625rem, 1.3rem + 1.2vw, 2.125rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: var(--cs-tracking-display);
+  color: #fff;
+}
+
+.lead {
+  margin-top: var(--cs-space-3);
+  font-size: var(--cs-text-base);
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.72);
+  max-width: 22rem;
+}
+
+/* ---- Composição de produto, em coluna estreita ---- */
+.panel {
+  width: 100%;
+  max-width: 22rem;
+  padding: var(--cs-space-5);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--cs-radius-xl);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 24px 48px -20px rgba(4, 12, 40, 0.6);
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: var(--cs-space-4);
+}
+
+.panelStore {
+  font-family: var(--cs-font-display);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.panelBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.125rem 0.4375rem;
+  border-radius: var(--cs-radius-sm);
+  background: rgba(14, 159, 110, 0.22);
+  border: 1px solid rgba(14, 159, 110, 0.4);
+  color: #6ee7b7;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.panelBadge::before {
+  content: "";
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.orderRow {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding-bottom: var(--cs-space-4);
+  margin-bottom: var(--cs-space-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.orderIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--cs-radius-md);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.orderIcon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.orderText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.orderText strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.orderText span {
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.orderValue {
+  margin-left: auto;
+  font-family: var(--cs-font-display);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.pixRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: var(--cs-space-4);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #6ee7b7;
+}
+
+.pixIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--cs-radius-sm);
+  background: rgba(14, 159, 110, 0.18);
+  flex-shrink: 0;
+}
+
+.pixIcon svg {
+  width: 0.8125rem;
+  height: 0.8125rem;
+}
+
+.stockRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4375rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.stockLevel {
+  display: block;
+  height: 0.3125rem;
+  border-radius: var(--cs-radius-full);
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.stockFill {
+  display: block;
+  width: 62%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cs-blue-400), var(--cs-blue-300));
+}
+
+/* ---- Fatos ---- */
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.facts li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--cs-text-sm);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.facts svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--cs-blue-300);
+  flex-shrink: 0;
+}

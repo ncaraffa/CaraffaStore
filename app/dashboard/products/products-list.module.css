@@ -1,0 +1,270 @@
+/* align-items: flex-start (não center) de propósito: o nav de pills
+   traz sua própria margin-bottom (filter-pills.module.css, compartilhado
+   com pedidos/categorias) — centralizar verticalmente desalinharia o
+   topo dos dois elementos por causa dessa margem assimétrica. */
+.toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--cs-space-4);
+  flex-wrap: wrap;
+}
+
+.searchForm {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  width: 15rem;
+  max-width: 100%;
+}
+
+.searchButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  border-radius: var(--cs-radius-md);
+  border: 1.5px solid var(--cs-line-strong);
+  background: var(--cs-white);
+  color: var(--cs-ink-muted);
+  cursor: pointer;
+  transition:
+    border-color var(--cs-duration-fast) var(--cs-ease),
+    color var(--cs-duration-fast) var(--cs-ease);
+}
+
+.searchButton svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.searchButton:hover {
+  border-color: var(--cs-blue-300);
+  color: var(--cs-blue-700);
+}
+
+/* ============================================================
+   Desktop — tabela com miniatura
+   ============================================================ */
+.tableWrap {
+  overflow-x: auto;
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-sm), var(--cs-sheen);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--cs-text-sm);
+  min-width: 34rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 0.75rem 1.125rem;
+  background: var(--cs-surface);
+  color: var(--cs-ink-muted);
+  font-family: var(--cs-font-mono);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--cs-line);
+}
+
+.table td {
+  padding: 0.625rem 1.125rem;
+  border-bottom: 1px solid var(--cs-line);
+  color: var(--cs-ink);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover td {
+  background: var(--cs-surface);
+}
+
+.thProduct {
+  width: 40%;
+}
+
+.thActions {
+  text-align: right;
+  width: 1%;
+}
+
+.productCell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--cs-radius-sm);
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-line);
+  overflow: hidden;
+  flex-shrink: 0;
+  color: var(--cs-ink-faint);
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb[data-empty] svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.productName {
+  font-weight: 600;
+  color: var(--cs-ink);
+}
+
+.priceCell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.stockCell {
+  font-variant-numeric: tabular-nums;
+  color: var(--cs-ink-body);
+}
+
+.stockCell[data-zero] {
+  color: var(--cs-danger-text);
+  font-weight: 600;
+}
+
+/* ============================================================
+   Mobile — catálogo de gestão em cards, não tabela espremida
+   ============================================================ */
+.cardList {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .tableWrap {
+    display: none;
+  }
+
+  .cardList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .productCard {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--cs-white);
+    border: 1px solid var(--cs-line);
+    border-radius: var(--cs-radius-lg);
+    box-shadow: var(--cs-shadow-xs);
+    text-decoration: none;
+    color: inherit;
+    min-height: 3.5rem;
+  }
+
+  .cardThumb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: var(--cs-radius-md);
+    background: var(--cs-surface);
+    border: 1px solid var(--cs-line);
+    overflow: hidden;
+    flex-shrink: 0;
+    color: var(--cs-ink-faint);
+  }
+
+  .cardThumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .cardThumb[data-empty] svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .cardBody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1875rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cardName {
+    font-weight: 700;
+    font-size: var(--cs-text-sm);
+    color: var(--cs-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cardMeta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--cs-ink-muted);
+  }
+
+  .cardPrice {
+    font-weight: 600;
+    color: var(--cs-ink-body);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cardStock[data-zero] {
+    color: var(--cs-danger-text);
+    font-weight: 600;
+  }
+}
+
+@media (max-width: 480px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .searchForm {
+    width: 100%;
+  }
+
+  .searchInput {
+    width: 100%;
+    flex: 1;
+  }
+}

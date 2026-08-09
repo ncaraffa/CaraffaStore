@@ -6,7 +6,7 @@ import { formatPriceCents } from "@/lib/catalog/format";
 import { StorefrontHeader } from "@/components/storefront/StorefrontHeader";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { IconShoppingCart } from "@/components/ui/icons";
+import { IconArrowRight, IconBox, IconShoppingCart } from "@/components/ui/icons";
 import styles from "./cart.module.css";
 
 export function CartPageClient({ storeSlug, storeName }: { storeSlug: string; storeName: string }) {
@@ -34,10 +34,20 @@ export function CartPageClient({ storeSlug, storeName }: { storeSlug: string; st
             <ul className={styles.list}>
               {cart.items.map((item) => (
                 <li key={item.productId} className={styles.item}>
+                  <span className={styles.itemThumb} data-empty={!item.imageUrl || undefined}>
+                    {item.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- URL do Supabase Storage
+                      <img src={item.imageUrl} alt="" loading="lazy" />
+                    ) : (
+                      <IconBox />
+                    )}
+                  </span>
+
                   <div className={styles.itemInfo}>
                     <strong>{item.name}</strong>
-                    <span className={styles.itemPrice}>{formatPriceCents(item.priceCents)}</span>
+                    <span className={styles.itemPrice}>{formatPriceCents(item.priceCents)} / un.</span>
                   </div>
+
                   <div className={styles.qty}>
                     <button
                       type="button"
@@ -59,25 +69,36 @@ export function CartPageClient({ storeSlug, storeName }: { storeSlug: string; st
                       +
                     </button>
                   </div>
+
                   <span className={styles.itemTotal}>{formatPriceCents(item.priceCents * item.quantity)}</span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => removeItem(item.productId)}>
+
+                  <button
+                    type="button"
+                    className={styles.removeButton}
+                    onClick={() => removeItem(item.productId)}
+                    aria-label={`Remover ${item.name} do carrinho`}
+                  >
                     Remover
-                  </Button>
+                  </button>
                 </li>
               ))}
             </ul>
 
-            <div className={styles.summary}>
-              <span className={styles.subtotalLabel}>Subtotal</span>
-              <span className={styles.subtotal}>{formatPriceCents(subtotalCents)}</span>
-            </div>
+            <button type="button" className={styles.clearLink} onClick={clear}>
+              Limpar carrinho
+            </button>
 
-            <div className={styles.actions}>
-              <Button type="button" variant="ghost" onClick={clear}>
-                Limpar carrinho
-              </Button>
+            {/* Barra fixa no celular: resumo e CTA sempre ao alcance do
+                polegar, sem precisar rolar até o fim da lista. */}
+            <div className={styles.checkoutBar}>
+              <div className={styles.summary}>
+                <span className={styles.subtotalLabel}>Subtotal</span>
+                <span className={styles.subtotal}>{formatPriceCents(subtotalCents)}</span>
+              </div>
               <Link href={`/loja/${storeSlug}/checkout`} className={styles.checkoutLink}>
-                <Button fullWidth>Finalizar pedido</Button>
+                <Button size="lg" fullWidth icon={<IconArrowRight />} iconPosition="end">
+                  Finalizar pedido
+                </Button>
               </Link>
             </div>
           </>

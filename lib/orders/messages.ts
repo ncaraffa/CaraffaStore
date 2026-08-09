@@ -1,3 +1,31 @@
+import type { OrderStatus } from "@/lib/supabase/types";
+import type { BadgeTone } from "@/components/ui/Badge";
+
+/**
+ * Rótulo e tom visual de cada status da state machine de pedidos
+ * (pending→confirmed→preparing→ready→completed, ou cancelled) —
+ * compartilhado entre a lista de pedidos, o detalhe do pedido e o
+ * resumo do dashboard, para nunca divergir a linguagem de status entre
+ * essas três telas.
+ */
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  pending: "Pendente",
+  confirmed: "Confirmado",
+  preparing: "Em preparo",
+  ready: "Pronto",
+  completed: "Concluído",
+  cancelled: "Cancelado",
+};
+
+export const ORDER_STATUS_TONE: Record<OrderStatus, BadgeTone> = {
+  pending: "warning",
+  confirmed: "info",
+  preparing: "info",
+  ready: "info",
+  completed: "success",
+  cancelled: "neutral",
+};
+
 export const MESSAGES: Record<string, string> = {
   store_not_found: "Loja não encontrada.",
   store_not_active: "Esta loja não está disponível no momento.",

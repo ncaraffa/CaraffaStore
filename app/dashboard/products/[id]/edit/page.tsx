@@ -53,8 +53,8 @@ export default async function EditProductPage({
         { label: product.name },
       ]}
     >
-      <h1 className={styles.title}>Editar produto</h1>
-      <p className={styles.subtitle}>{store.name}</p>
+      <h1 className={styles.title}>{product.name}</h1>
+      <p className={styles.subtitle}>{store.name} · Editando produto</p>
 
       {!canManage && (
         <div className={styles.alertGap}>
@@ -72,11 +72,8 @@ export default async function EditProductPage({
               <StatusButtons storeSlug={store.slug} productId={product.id} status={product.status} />
             </Card>
 
-            <Card>
-              <CardHeader title="Estoque" />
-              <StockForm storeSlug={store.slug} productId={product.id} currentStock={product.stock} />
-            </Card>
-
+            {/* Imagens antes de estoque: produto com foto vende mais, e é
+                a próxima decisão mais importante depois de publicar. */}
             <Card>
               <CardHeader title="Imagens" description={`Até ${MAX_PRODUCT_IMAGES} imagens por produto.`} />
               <ImageManager
@@ -86,6 +83,11 @@ export default async function EditProductPage({
                 publicBaseUrl={publicBaseUrl}
                 maxImages={MAX_PRODUCT_IMAGES}
               />
+            </Card>
+
+            <Card>
+              <CardHeader title="Estoque" />
+              <StockForm storeSlug={store.slug} productId={product.id} currentStock={product.stock} />
             </Card>
           </div>
         )}

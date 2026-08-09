@@ -15,11 +15,11 @@ import { savePaymentSettingsAction, setPaymentEnabledAction, testPaymentConnecti
 import type { PaymentSettingsFormState } from "./actions";
 import styles from "./payment-settings-form.module.css";
 
-function stateLabel(settings: PaymentSettingsView): { label: string; tone: BadgeTone } {
-  if (!settings.isConfigured) return { label: "Não configurado", tone: "neutral" };
-  if (settings.lastErrorCode) return { label: "Erro", tone: "danger" };
-  if (settings.credentialsVerifiedAt) return { label: "Validado", tone: "success" };
-  return { label: "Configurado", tone: "warning" };
+function stateLabel(settings: PaymentSettingsView): { label: string; tone: BadgeTone; ready: boolean } {
+  if (!settings.isConfigured) return { label: "Não configurado", tone: "neutral", ready: false };
+  if (settings.lastErrorCode) return { label: "Erro na conexão", tone: "danger", ready: false };
+  if (!settings.isEnabled) return { label: "Pix desativado", tone: "warning", ready: false };
+  return { label: "Pronto para receber", tone: "success", ready: true };
 }
 
 export function PaymentSettingsForm({
@@ -45,8 +45,53 @@ export function PaymentSettingsForm({
           <h1 className={styles.title}>Pagamentos</h1>
           <p className={styles.subtitle}>Configure o Pix da sua loja via Mercado Pago.</p>
         </div>
-        <Badge tone={status.tone}>{status.label}</Badge>
       </div>
+
+      {/* Status em destaque: a primeira coisa que o lojista precisa saber
+          ao abrir esta tela é "está pronto para receber ou não". */}
+      <div className={styles.statusHero} data-ready={status.ready || undefined}>
+        <span className={styles.statusIcon}>{status.ready ? <IconCheck /> : <IconPix />}</span>
+        <div className={styles.statusBody}>
+          <span className={styles.statusLabel}>{status.label}</span>
+          <span className={styles.statusCaption}>
+            {!settings.isConfigured && "Cadastre suas credenciais do Mercado Pago para começar a receber."}
+            {settings.isConfigured && settings.lastErrorCode && "A última verificação encontrou um problema — teste a conexão novamente."}
+            {settings.isConfigured && !settings.lastErrorCode && !settings.isEnabled && "As credenciais estão salvas, mas o Pix ainda não está ativado nesta loja."}
+            {status.ready && "Seus clientes já podem pagar por Pix nos pedidos desta loja."}
+          </span>
+        </div>
+        {settings.isConfigured && (
+          <form action={setPaymentEnabledAction} className={styles.statusToggle}>
+            <input type="hidden" name="storeSlug" value={storeSlug} />
+            <input type="hidden" name="isEnabled" value={(!settings.isEnabled).toString()} />
+            <Button type="submit" variant={settings.isEnabled ? "outline" : "primary"} size="sm">
+              {settings.isEnabled ? "Desativar Pix" : "Ativar Pix"}
+            </Button>
+          </form>
+        )}
+      </div>
+
+      {/* Primeiros passos: só aparece antes de configurar — é exatamente
+          o "o que fazer primeiro" que faltava. */}
+      {!settings.isConfigured && (
+        <Card className={styles.stepsCard}>
+          <CardHeader title="Como configurar" />
+          <ol className={styles.steps}>
+            <li>
+              <span>1</span>
+              Acesse sua conta do Mercado Pago e gere um Access Token (produção ou teste).
+            </li>
+            <li>
+              <span>2</span>
+              Cole o Access Token e defina um Webhook Secret abaixo — os dois ficam criptografados.
+            </li>
+            <li>
+              <span>3</span>
+              Cadastre a URL de webhook desta loja no painel do Mercado Pago para receber confirmações automáticas.
+            </li>
+          </ol>
+        </Card>
+      )}
 
       {settings.isConfigured && (
         <Card>
@@ -61,14 +106,6 @@ export function PaymentSettingsForm({
               <dd>
                 <Badge tone={settings.environment === "production" ? "info" : "neutral"}>
                   {settings.environment === "production" ? "Produção" : "Teste"}
-                </Badge>
-              </dd>
-            </div>
-            <div>
-              <dt>Pix</dt>
-              <dd>
-                <Badge tone={settings.isEnabled ? "success" : "neutral"}>
-                  {settings.isEnabled ? "Ativado" : "Desativado"}
                 </Badge>
               </dd>
             </div>
@@ -106,13 +143,6 @@ export function PaymentSettingsForm({
                 Testar conexão
               </Button>
             </form>
-            <form action={setPaymentEnabledAction}>
-              <input type="hidden" name="storeSlug" value={storeSlug} />
-              <input type="hidden" name="isEnabled" value={(!settings.isEnabled).toString()} />
-              <Button type="submit" variant={settings.isEnabled ? "outline" : "primary"} icon={<IconPix />}>
-                {settings.isEnabled ? "Desativar Pix" : "Ativar Pix"}
-              </Button>
-            </form>
           </div>
         </Card>
       )}
@@ -124,7 +154,7 @@ export function PaymentSettingsForm({
             description="Cadastre esta URL no painel do Mercado Pago para receber notificações de pagamento."
           />
           <div className={styles.webhookRow}>
-            <Input readOnly value={webhookUrl} onFocus={(event) => event.currentTarget.select()} />
+            <Input readOnly value={webhookUrl} onFocus={(event) => event.currentTarget.select()} className={styles.webhookInput} />
             <Button
               type="button"
               variant="outline"
@@ -175,7 +205,7 @@ export function PaymentSettingsForm({
             <Input id="webhookSecret" name="webhookSecret" type="password" autoComplete="off" required minLength={10} />
           </Field>
 
-          <Button type="submit" loading={pending} icon={<IconShield />}>
+          <Button type="submit" size="lg" loading={pending} icon={<IconShield />}>
             {pending ? "Salvando..." : "Salvar credenciais"}
           </Button>
         </form>

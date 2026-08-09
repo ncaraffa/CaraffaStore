@@ -110,7 +110,7 @@ export async function setCategoryActive(
 export async function listProducts(
   supabase: Client,
   storeId: string,
-  opts: { status?: ProductStatus } = {},
+  opts: { status?: ProductStatus; search?: string } = {},
 ): Promise<ProductRow[]> {
   let query = supabase
     .from("products")
@@ -122,6 +122,14 @@ export async function listProducts(
 
   if (opts.status) {
     query = query.eq("status", opts.status);
+  }
+
+  // `%`/`_` são curingas do ILIKE — escapados para que o usuário buscando
+  // por esses caracteres literais não vire um padrão surpresa.
+  const term = opts.search?.trim();
+  if (term) {
+    const escaped = term.replace(/[%_]/g, (match) => `\\${match}`);
+    query = query.ilike("name", `%${escaped}%`);
   }
 
   const { data, error } = await query;

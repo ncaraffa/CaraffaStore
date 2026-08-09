@@ -26,7 +26,12 @@ export default async function PendingPaymentPage({
   const { store } = await requireStoreStatus(supabase, "pending_payment", storeSlug);
 
   return (
-    <StatusPage icon={<IconCreditCard />} title="Cadastro concluído — pagamento pendente" actions={<LogoutButton />}>
+    <StatusPage
+      icon={<IconCreditCard />}
+      title="Cadastro concluído — pagamento pendente"
+      tone="warning"
+      actions={<LogoutButton />}
+    >
       <p>
         A loja &quot;{store.name}&quot; está com o cadastro concluído. O painel operacional será liberado após a
         ativação da cobrança, em uma etapa futura. Nenhuma cobrança foi gerada nesta etapa.

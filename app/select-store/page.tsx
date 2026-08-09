@@ -59,7 +59,7 @@ export default async function SelectStorePage() {
   return (
     <div className={styles.shell}>
       <Link href="/" className={styles.logoLink}>
-        <Logo size="md" />
+        <Logo size="md" compact />
       </Link>
       <div className={styles.card}>
         <h1 className={styles.title}>Escolha uma loja</h1>

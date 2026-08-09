@@ -7,10 +7,11 @@
 
 .item {
   margin: 0;
-  border: 1px solid var(--cs-border);
+  border: 1px solid var(--cs-line);
   border-radius: var(--cs-radius-lg);
   padding: var(--cs-space-3);
-  background: var(--cs-bg);
+  background: var(--cs-white);
+  box-shadow: var(--cs-shadow-xs);
 }
 
 .imageWrap {
@@ -23,6 +24,7 @@
   object-fit: cover;
   border-radius: var(--cs-radius-md);
   background: var(--cs-surface);
+  border: 1px solid var(--cs-line);
 }
 
 .coverBadge {
@@ -44,8 +46,9 @@
 
 .fileInput {
   width: 100%;
-  font-size: 0.875rem;
+  font-size: var(--cs-text-sm);
   padding: 0.5rem 0;
+  color: var(--cs-ink-body);
 }
 
 .alertGap {
@@ -53,6 +56,6 @@
 }
 
 .limitHint {
-  font-size: 0.8125rem;
-  color: var(--cs-text-muted);
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
 }

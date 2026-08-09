@@ -77,13 +77,14 @@ export default async function StorefrontPage({
           <div className={styles.grid}>
             {products.map((product) => {
               const cover = covers.get(product.id);
+              const coverUrl = cover ? catalog.publicImageUrl(NEXT_PUBLIC_SUPABASE_URL, cover.storage_path) : null;
               return (
                 <div key={product.id} className={styles.card}>
                   <a className={styles.cardLink} href={`/loja/${storeSlug}/produto/${product.slug}`}>
                     <div className={styles.cardImage}>
-                      {cover ? (
+                      {coverUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={catalog.publicImageUrl(NEXT_PUBLIC_SUPABASE_URL, cover.storage_path)} alt="" loading="lazy" />
+                        <img src={coverUrl} alt="" loading="lazy" />
                       ) : (
                         <span className={styles.cardImagePlaceholder} aria-hidden="true" />
                       )}
@@ -103,6 +104,7 @@ export default async function StorefrontPage({
                     slug={product.slug}
                     priceCents={product.price_cents}
                     stock={product.stock}
+                    imageUrl={coverUrl}
                   />
                 </div>
               );

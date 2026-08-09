@@ -44,7 +44,7 @@ export default function ForgotPasswordPage() {
 
           <input type="hidden" name="captchaToken" value="" />
 
-          <Button type="submit" fullWidth loading={pending}>
+          <Button type="submit" size="lg" fullWidth loading={pending}>
             Enviar instruções
           </Button>
         </form>

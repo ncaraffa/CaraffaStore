@@ -1,8 +1,8 @@
 .links {
   margin-top: var(--cs-space-6);
   padding-top: var(--cs-space-5);
-  border-top: 1px solid var(--cs-border);
-  font-size: 0.875rem;
+  border-top: 1px solid var(--cs-line);
+  font-size: var(--cs-text-sm);
   display: flex;
   justify-content: space-between;
   gap: var(--cs-space-4);
@@ -10,13 +10,16 @@
 }
 
 .links a {
-  color: var(--cs-primary-600);
+  color: var(--cs-blue-600);
   text-decoration: none;
   font-weight: 600;
+  transition: color var(--cs-duration-fast) var(--cs-ease);
 }
 
 .links a:hover {
+  color: var(--cs-blue-700);
   text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 .alertGap {
@@ -24,7 +27,8 @@
 }
 
 .subtitle {
-  color: var(--cs-text-secondary);
-  font-size: 0.9375rem;
+  color: var(--cs-ink-muted);
+  font-size: var(--cs-text-sm);
+  line-height: 1.5;
   margin-bottom: var(--cs-space-6);
 }

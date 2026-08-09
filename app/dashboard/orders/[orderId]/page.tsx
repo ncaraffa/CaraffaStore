@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
+import type { CSSProperties } from "react";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireStoreStatus } from "@/lib/tenant/access-control";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import * as orders from "@/lib/orders/service";
 import { getOrderPayment, listPaymentEvents } from "@/lib/payments/order-payments-service";
+import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/orders/messages";
 import { formatPriceCents } from "@/lib/catalog/format";
 import { advanceOrderStatusAction, reconcileOrderPaymentAction } from "../actions";
 import { CancelOrderForm } from "./cancel-order-form";
@@ -13,27 +15,15 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Table } from "@/components/ui/Table";
+import { IconCheck } from "@/components/ui/icons";
 import styles from "./order-detail.module.css";
 
 export const dynamic = "force-dynamic";
 
-const STATUS_LABEL: Record<OrderStatus, string> = {
-  pending: "Pendente",
-  confirmed: "Confirmado",
-  preparing: "Em preparo",
-  ready: "Pronto",
-  completed: "Concluído",
-  cancelled: "Cancelado",
-};
-
-const STATUS_TONE: Record<OrderStatus, BadgeTone> = {
-  pending: "warning",
-  confirmed: "info",
-  preparing: "info",
-  ready: "info",
-  completed: "success",
-  cancelled: "neutral",
-};
+/** Sequência real da state machine (supabase/migrations/0006_orders.sql):
+ *  linear, sem pular etapa. `cancelled` é um ramo à parte, nunca aparece
+ *  nesta régua — um pedido cancelado não "passou" por essas etapas. */
+const STATUS_SEQUENCE: OrderStatus[] = ["pending", "confirmed", "preparing", "ready", "completed"];
 
 const PAYMENT_STATUS_LABEL: Record<string, string> = {
   creating: "Gerando cobrança",
@@ -67,6 +57,41 @@ const NEXT_STATUS: Partial<Record<OrderStatus, { status: OrderStatus; label: str
 function maskProviderPaymentId(id: string | null): string {
   if (!id) return "—";
   return id.length <= 4 ? "••••" : `••••${id.slice(-4)}`;
+}
+
+/** Régua de status — o mesmo gesto de "linha de nível" da marca aplicado
+ * à progressão real do pedido. Cancelado é tratado à parte, fora da régua
+ * (renderizado pelo chamador antes de montar este componente). */
+function OrderStepper({ status }: { status: OrderStatus }) {
+  const currentIndex = STATUS_SEQUENCE.indexOf(status);
+  const lastIndex = STATUS_SEQUENCE.length - 1;
+
+  return (
+    <div>
+      <ol
+        className={styles.stepper}
+        style={{ "--current": currentIndex, "--last": lastIndex } as CSSProperties}
+      >
+        {STATUS_SEQUENCE.map((step, index) => {
+          const done = index < currentIndex;
+          const active = index === currentIndex;
+          return (
+            <li key={step} className={styles.stepperItem} data-done={done || undefined} data-active={active || undefined}>
+              <span className={styles.stepperDot}>{done ? <IconCheck /> : index + 1}</span>
+              <span className={styles.stepperLabel}>{ORDER_STATUS_LABEL[step]}</span>
+            </li>
+          );
+        })}
+      </ol>
+      {/* Abaixo de 480px a régua de pontos vira leitura difícil — o
+          resumo textual é a informação principal nesse tamanho, a régua
+          continua disponível por scroll horizontal para quem quiser o
+          detalhe completo. */}
+      <p className={styles.stepperCaption}>
+        Etapa {currentIndex + 1} de {STATUS_SEQUENCE.length} · {ORDER_STATUS_LABEL[status]}
+      </p>
+    </div>
+  );
 }
 
 export default async function OrderDetailPage({
@@ -108,14 +133,24 @@ export default async function OrderDetailPage({
     >
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>Pedido {order.public_code}</h1>
+          <h1 className={styles.title}>
+            Pedido <span className={styles.code}>#{order.public_code}</span>
+          </h1>
           <p className={styles.subtitle}>{new Date(order.created_at).toLocaleString("pt-BR")}</p>
         </div>
         <div className={styles.headerBadges}>
-          <Badge tone={STATUS_TONE[order.status]}>{STATUS_LABEL[order.status]}</Badge>
+          <Badge tone={ORDER_STATUS_TONE[order.status]}>{ORDER_STATUS_LABEL[order.status]}</Badge>
           <Badge tone={isPix ? "info" : "neutral"}>{isPix ? "Pix" : "Manual"}</Badge>
         </div>
       </div>
+
+      {order.status === "cancelled" ? (
+        <div className={styles.cancelledBanner}>Este pedido foi cancelado.</div>
+      ) : (
+        <div className={styles.stepperCard}>
+          <OrderStepper status={order.status} />
+        </div>
+      )}
 
       <div className={styles.layout}>
         <div className={styles.mainCol}>
@@ -149,8 +184,10 @@ export default async function OrderDetailPage({
             </dl>
           </Card>
 
-          <Card>
-            <CardHeader title="Itens do pedido" />
+          <Card padded={false}>
+            <div className={styles.itemsHeaderPad}>
+              <CardHeader title="Itens do pedido" />
+            </div>
             <Table>
               <thead>
                 <tr>
@@ -164,27 +201,23 @@ export default async function OrderDetailPage({
                 {items.map((item) => (
                   <tr key={item.id}>
                     <td>{item.product_name_snapshot}</td>
-                    <td>{formatPriceCents(item.unit_price_cents)}</td>
-                    <td>{item.quantity}</td>
-                    <td>{formatPriceCents(item.line_total_cents)}</td>
+                    <td className={styles.numeric}>{formatPriceCents(item.unit_price_cents)}</td>
+                    <td className={styles.numeric}>{item.quantity}</td>
+                    <td className={styles.numeric}>{formatPriceCents(item.line_total_cents)}</td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={3}>Subtotal</td>
-                  <td>{formatPriceCents(order.subtotal_cents)}</td>
-                </tr>
-                <tr>
-                  <td colSpan={3}>
-                    <strong>Total</strong>
-                  </td>
-                  <td>
-                    <strong>{formatPriceCents(order.total_cents)}</strong>
-                  </td>
-                </tr>
-              </tfoot>
             </Table>
+            <div className={styles.totals}>
+              <div className={styles.totalRow}>
+                <span>Subtotal</span>
+                <span className={styles.numeric}>{formatPriceCents(order.subtotal_cents)}</span>
+              </div>
+              <div className={styles.totalRowFinal}>
+                <span>Total</span>
+                <span className={styles.numeric}>{formatPriceCents(order.total_cents)}</span>
+              </div>
+            </div>
           </Card>
 
           <div className={styles.actionsRow}>
@@ -193,7 +226,9 @@ export default async function OrderDetailPage({
                 <input type="hidden" name="storeSlug" value={store.slug} />
                 <input type="hidden" name="orderId" value={order.id} />
                 <input type="hidden" name="newStatus" value={next.status} />
-                <Button type="submit">{next.label}</Button>
+                <Button type="submit" size="lg">
+                  {next.label}
+                </Button>
               </form>
             )}
             {canCancel && <CancelOrderForm storeSlug={store.slug} orderId={order.id} isPix={isPix} />}
@@ -224,7 +259,7 @@ export default async function OrderDetailPage({
                     </div>
                     <div>
                       <dt>Valor</dt>
-                      <dd>{formatPriceCents(payment.amount_cents)}</dd>
+                      <dd className={styles.numeric}>{formatPriceCents(payment.amount_cents)}</dd>
                     </div>
                     <div>
                       <dt>Criado em</dt>
@@ -268,24 +303,19 @@ export default async function OrderDetailPage({
             {events.length > 0 && (
               <Card>
                 <CardHeader title="Histórico de eventos" />
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>Evento</th>
-                      <th>Status</th>
-                      <th>Recebido em</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {events.map((event, index) => (
-                      <tr key={`${event.action}-${event.receivedAt}-${index}`}>
-                        <td>{event.action}</td>
-                        <td>{event.processingStatus}</td>
-                        <td>{new Date(event.receivedAt).toLocaleString("pt-BR")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
+                <ol className={styles.timeline}>
+                  {events.map((event, index) => (
+                    <li key={`${event.action}-${event.receivedAt}-${index}`} className={styles.timelineItem}>
+                      <span className={styles.timelineDot} aria-hidden="true" />
+                      <span className={styles.timelineBody}>
+                        <span className={styles.timelineAction}>{event.action}</span>
+                        <span className={styles.timelineMeta}>
+                          {event.processingStatus} · {new Date(event.receivedAt).toLocaleString("pt-BR")}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
               </Card>
             )}
           </div>

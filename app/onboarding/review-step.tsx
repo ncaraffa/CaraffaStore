@@ -7,6 +7,8 @@ import { IDLE_ACTION_STATE } from "@/lib/auth/action-state";
 import type { Database } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { CaraffaMark } from "@/components/ui/Logo";
+import { IconLink } from "@/components/ui/icons";
 import styles from "./review-step.module.css";
 
 type OnboardingRow = Database["public"]["Tables"]["onboarding_progress"]["Row"];
@@ -28,14 +30,31 @@ export function ReviewStep({ progress }: { progress: OnboardingRow }) {
   const rows = [
     { label: "Seu nome", value: progress.merchant_name, step: "profile" },
     { label: "WhatsApp", value: progress.whatsapp, step: "profile" },
-    { label: "Nome da loja", value: progress.store_name, step: "store_name" },
-    { label: "Endereço", value: progress.slug, step: "slug" },
     { label: "Plano", value: progress.plan_code ? PLAN_LABEL[progress.plan_code] : "—", step: "plan" },
   ];
 
   return (
     <div>
       <h2>Revisão</h2>
+
+      {/* A loja como ela vai existir — não é mais "dados de um form", é
+          a coisa que está prestes a ser criada. */}
+      <div className={styles.storeCard}>
+        <span className={styles.storeMark}>
+          <CaraffaMark />
+        </span>
+        <div className={styles.storeInfo}>
+          <span className={styles.storeName}>{progress.store_name || "Sua loja"}</span>
+          <span className={styles.storeSlug}>
+            <IconLink />
+            /loja/{progress.slug}
+          </span>
+        </div>
+        <Link href="/onboarding?step=slug" className={styles.storeEdit}>
+          Editar
+        </Link>
+      </div>
+
       {state.status === "error" && state.message && (
         <div style={{ marginBottom: "1.25rem" }}>
           <Alert tone="danger">{state.message}</Alert>
@@ -63,7 +82,7 @@ export function ReviewStep({ progress }: { progress: OnboardingRow }) {
       </div>
 
       <form action={formAction}>
-        <Button type="submit" loading={pending}>
+        <Button type="submit" size="lg" fullWidth loading={pending}>
           Concluir cadastro da loja
         </Button>
       </form>

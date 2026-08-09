@@ -89,7 +89,7 @@ export function CategoryForm({
           />
         </Field>
 
-        <Button type="submit" loading={pending}>
+        <Button type="submit" size="lg" loading={pending}>
           {category ? "Salvar alterações" : "Criar categoria"}
         </Button>
       </form>

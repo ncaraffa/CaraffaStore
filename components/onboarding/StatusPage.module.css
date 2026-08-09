@@ -16,10 +16,10 @@
 .card {
   width: 100%;
   max-width: 28rem;
-  background: var(--cs-bg);
-  border: 1px solid var(--cs-border);
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
   border-radius: var(--cs-radius-xl);
-  box-shadow: var(--cs-shadow-md);
+  box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
   padding: var(--cs-space-8);
   text-align: center;
 }
@@ -28,22 +28,47 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 3.25rem;
-  height: 3.25rem;
+  width: 3.5rem;
+  height: 3.5rem;
   border-radius: 50%;
-  background: var(--cs-primary-50);
-  color: var(--cs-primary-600);
+  background: var(--cs-blue-50);
+  border: 1px solid var(--cs-blue-100);
+  color: var(--cs-blue-600);
   margin-bottom: var(--cs-space-5);
 }
 
+.icon svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.icon[data-tone="success"] {
+  background: var(--cs-success-bg);
+  border-color: var(--cs-success-border);
+  color: var(--cs-success-text);
+}
+
+.icon[data-tone="warning"] {
+  background: var(--cs-warning-bg);
+  border-color: var(--cs-warning-border);
+  color: var(--cs-warning-text);
+}
+
+.icon[data-tone="danger"] {
+  background: var(--cs-danger-bg);
+  border-color: var(--cs-danger-border);
+  color: var(--cs-danger-text);
+}
+
 .title {
-  font-size: 1.25rem;
+  font-size: var(--cs-text-h3);
+  letter-spacing: var(--cs-tracking-tight);
   margin-bottom: var(--cs-space-3);
 }
 
 .body {
-  font-size: 0.9375rem;
-  color: var(--cs-text-secondary);
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-muted);
   line-height: 1.6;
 }
 

@@ -25,7 +25,7 @@ export default async function SuspendedPage({
   const { store } = await requireStoreStatus(supabase, "suspended", storeSlug);
 
   return (
-    <StatusPage icon={<IconAlertTriangle />} title="Loja suspensa" actions={<LogoutButton />}>
+    <StatusPage icon={<IconAlertTriangle />} title="Loja suspensa" tone="danger" actions={<LogoutButton />}>
       <p>
         A loja &quot;{store.name}&quot; está suspensa. Nenhuma operação comercial está disponível enquanto este
         estado persistir.

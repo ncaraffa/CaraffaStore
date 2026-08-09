@@ -38,7 +38,7 @@ export function ResetPasswordForm() {
             aria-invalid={Boolean(state.fieldErrors?.password)}
           />
         </Field>
-        <Button type="submit" fullWidth loading={pending}>
+        <Button type="submit" size="lg" fullWidth loading={pending}>
           Definir nova senha
         </Button>
       </form>

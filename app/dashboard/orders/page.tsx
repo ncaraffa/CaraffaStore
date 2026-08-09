@@ -4,8 +4,9 @@ import { requireStoreStatus } from "@/lib/tenant/access-control";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import * as orders from "@/lib/orders/service";
 import { listOrderPaymentsForStore } from "@/lib/payments/order-payments-service";
+import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/orders/messages";
 import { formatPriceCents } from "@/lib/catalog/format";
-import type { Database, OrderStatus } from "@/lib/supabase/types";
+import type { Database } from "@/lib/supabase/types";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Table } from "@/components/ui/Table";
@@ -18,24 +19,6 @@ export const dynamic = "force-dynamic";
 
 type OrderPaymentRow = Database["public"]["Tables"]["order_payments"]["Row"];
 type PaymentFilter = "awaiting" | "paid" | "error" | "expired_cancelled";
-
-const STATUS_LABEL: Record<OrderStatus, string> = {
-  pending: "Pendente",
-  confirmed: "Confirmado",
-  preparing: "Em preparo",
-  ready: "Pronto",
-  completed: "Concluído",
-  cancelled: "Cancelado",
-};
-
-const STATUS_TONE: Record<OrderStatus, BadgeTone> = {
-  pending: "warning",
-  confirmed: "info",
-  preparing: "info",
-  ready: "info",
-  completed: "success",
-  cancelled: "neutral",
-};
 
 const PAYMENT_BADGE: Record<string, { label: string; tone: BadgeTone }> = {
   creating: { label: "Gerando cobrança", tone: "warning" },
@@ -151,7 +134,7 @@ export default async function OrdersPage({
                   <td>{order.fulfillment_method === "pickup" ? "Retirada" : "Entrega"}</td>
                   <td>{formatPriceCents(order.total_cents)}</td>
                   <td>
-                    <Badge tone={STATUS_TONE[order.status]}>{STATUS_LABEL[order.status]}</Badge>
+                    <Badge tone={ORDER_STATUS_TONE[order.status]}>{ORDER_STATUS_LABEL[order.status]}</Badge>
                   </td>
                   <td>{badge ? <Badge tone={badge.tone}>{badge.label}</Badge> : "—"}</td>
                   <td>

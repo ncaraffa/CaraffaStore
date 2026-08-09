@@ -46,7 +46,7 @@ export function ProfileStep({ progress }: { progress: OnboardingRow }) {
         />
       </Field>
 
-      <Button type="submit" loading={pending}>
+      <Button type="submit" size="lg" fullWidth loading={pending}>
         Continuar
       </Button>
     </form>

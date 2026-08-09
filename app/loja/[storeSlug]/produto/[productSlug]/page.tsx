@@ -5,6 +5,7 @@ import * as catalog from "@/lib/catalog/service";
 import { formatPriceCents } from "@/lib/catalog/format";
 import { AddToCartButton } from "../../add-to-cart-button";
 import { StorefrontHeader } from "@/components/storefront/StorefrontHeader";
+import { ProductGallery } from "./product-gallery";
 import { Badge } from "@/components/ui/Badge";
 import styles from "./product-detail.module.css";
 
@@ -31,28 +32,22 @@ export default async function ProductPage({
   const images = await catalog.listPublicProductImages(supabase, product.id);
   const { NEXT_PUBLIC_SUPABASE_URL } = getPublicSupabaseEnv();
   const sortedImages = [...images].sort((a, b) => (a.is_cover === b.is_cover ? 0 : a.is_cover ? -1 : 1));
+  const coverUrl = sortedImages[0]
+    ? catalog.publicImageUrl(NEXT_PUBLIC_SUPABASE_URL, sortedImages[0].storage_path)
+    : null;
 
   return (
     <>
       <StorefrontHeader storeSlug={storeSlug} storeName={store.name} backHref={`/loja/${storeSlug}`} />
       <main className={styles.main}>
         <article className={styles.layout}>
-          <div className={styles.gallery}>
-            {sortedImages.length === 0 ? (
-              <div className={styles.placeholder} aria-hidden="true" />
-            ) : (
-              sortedImages.map((image) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={image.id}
-                  src={catalog.publicImageUrl(NEXT_PUBLIC_SUPABASE_URL, image.storage_path)}
-                  alt=""
-                  loading="lazy"
-                  className={styles.image}
-                />
-              ))
-            )}
-          </div>
+          <ProductGallery
+            images={sortedImages.map((image) => ({
+              id: image.id,
+              url: catalog.publicImageUrl(NEXT_PUBLIC_SUPABASE_URL, image.storage_path),
+            }))}
+            alt={product.name}
+          />
 
           <div className={styles.info}>
             <h1 className={styles.title}>{product.name}</h1>
@@ -70,6 +65,7 @@ export default async function ProductPage({
                 slug={product.slug}
                 priceCents={product.price_cents}
                 stock={product.stock}
+                imageUrl={coverUrl}
               />
             </div>
           </div>
