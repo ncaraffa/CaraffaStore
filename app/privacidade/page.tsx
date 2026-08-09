@@ -17,11 +17,9 @@ export default function PrivacidadePage() {
 
       <h2>1. Operador e controlador dos dados</h2>
       <p>
-        Operador: [RAZÃO SOCIAL / NOME DO OPERADOR — A DEFINIR POR CARAFFA]
+        Operador: Caraffa
         <br />
-        CNPJ: [CNPJ — A DEFINIR]
-        <br />
-        Endereço: [ENDEREÇO — A DEFINIR]
+        CPF: 078.661.751-95
         <br />
         Contato: caraffastore@gmail.com
       </p>

@@ -11,7 +11,16 @@ import styles from "./review-step.module.css";
 
 type OnboardingRow = Database["public"]["Tables"]["onboarding_progress"]["Row"];
 
-const PLAN_LABEL: Record<number, string> = { 30: "R$ 30/mês", 50: "R$ 50/mês", 80: "R$ 80/mês" };
+/**
+ * `plan_code` (30|50|80) é o identificador técnico travado por CHECK
+ * constraint — o texto exibido aqui é comercial e independente dele. Ver
+ * o comentário em plan-step.tsx e docs/PLANS-SPEC.md.
+ */
+const PLAN_LABEL: Record<number, string> = {
+  30: "Essencial — R$ 30/mês",
+  50: "Crescimento — R$ 50/mês",
+  80: "Profissional — R$ 70/mês",
+};
 
 export function ReviewStep({ progress }: { progress: OnboardingRow }) {
   const [state, formAction, pending] = useActionState(completeOnboardingAction, IDLE_ACTION_STATE);

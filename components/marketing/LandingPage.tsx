@@ -29,32 +29,44 @@ import styles from "./LandingPage.module.css";
    humano → planos → dúvidas → fechamento.
    ============================================================ */
 
-/** Cada plano tem `features: []` enquanto não existe diferenciação real no
- *  código. Quando ela existir, basta preencher — o card já renderiza a lista
- *  acima do CTA e o bloco "todos os planos incluem" continua valendo para o
- *  que for comum. */
+/**
+ * Especificação oficial em docs/PLANS-SPEC.md. `code` é o `plan_code`
+ * técnico (travado por CHECK constraint em 30|50|80 — nunca renomeie sem
+ * migration); `price` é o valor comercial exibido, hoje desacoplado do
+ * código para o Profissional (código 80, preço R$ 70).
+ *
+ * `features: []` continua vazio de propósito: quase toda a diferenciação
+ * real entre planos (logo, cores, banner, cupons, dashboard completo,
+ * relatórios, domínio próprio, multiloja) ainda não está implementada —
+ * ver a auditoria na seção 7 do spec. Anunciá-la aqui seria publicidade
+ * enganosa. Assim que um item virar realidade no código, ele entra nesta
+ * lista — a arquitetura visual já está pronta para isso.
+ */
 const PLANS = [
   {
     code: 30,
     name: "Essencial",
+    price: 30,
     tier: 1,
-    fit: "Para quem está montando a primeira loja online.",
+    fit: "Tudo que você precisa para começar a vender online.",
     features: [] as string[],
     featured: false,
   },
   {
     code: 50,
-    name: "Profissional",
+    name: "Crescimento",
+    price: 50,
     tier: 2,
-    fit: "Para quem já vende e quer a operação organizada em um lugar só.",
+    fit: "Para quem quer crescer com a própria marca.",
     features: [] as string[],
     featured: true,
   },
   {
     code: 80,
-    name: "Avançado",
+    name: "Profissional",
+    price: 70,
     tier: 3,
-    fit: "Para quem vende em volume e quer folga para crescer.",
+    fit: "Para operações que precisam ir além.",
     features: [] as string[],
     featured: false,
   },
@@ -453,7 +465,7 @@ export function LandingPage() {
                 <h3 className={styles.planName}>{plan.name}</h3>
                 <p className={styles.planPrice}>
                   <span className={styles.planCurrency}>R$</span>
-                  {plan.code}
+                  {plan.price}
                   <span className={styles.planPeriod}>/mês</span>
                 </p>
                 <p className={styles.planFit}>{plan.fit}</p>

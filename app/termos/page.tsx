@@ -25,11 +25,9 @@ export default function TermosPage() {
 
       <h2>2. Operador da plataforma</h2>
       <p>
-        Operador: [RAZÃO SOCIAL / NOME DO OPERADOR — A DEFINIR POR CARAFFA]
+        Operador: Caraffa
         <br />
-        CNPJ: [CNPJ — A DEFINIR]
-        <br />
-        Endereço: [ENDEREÇO — A DEFINIR]
+        CPF: 078.661.751-95
         <br />
         Contato: caraffastore@gmail.com
       </p>
@@ -44,7 +42,7 @@ export default function TermosPage() {
 
       <h2>4. Planos e cobrança</h2>
       <p>
-        A plataforma oferece planos mensais de R$ 30, R$ 50 ou R$ 80, escolhidos no onboarding. A
+        A plataforma oferece planos mensais de R$ 30, R$ 50 ou R$ 70, escolhidos no onboarding. A
         cobrança recorrente automatizada desses planos ainda não está implementada nesta fase
         piloto — a ativação/renovação de loja é feita manualmente pelo operador, mediante acordo
         direto com o lojista. Isso será revisado antes de qualquer operação em maior escala.

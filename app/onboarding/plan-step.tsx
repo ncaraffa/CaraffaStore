@@ -10,10 +10,18 @@ import styles from "./plan-step.module.css";
 
 type OnboardingRow = Database["public"]["Tables"]["onboarding_progress"]["Row"];
 
+/**
+ * `code` é o identificador técnico gravado em `plan_code`, travado por
+ * CHECK constraint em `in (30, 50, 80)` (supabase/migrations/0002_auth_
+ * onboarding.sql) — nunca renomeie nem troque esses três números sem uma
+ * migration. `price` é só o texto comercial exibido: o Profissional
+ * (código 80) foi reprecificado para R$ 70 sem alterar o código interno,
+ * exatamente para não exigir migration nesta rodada. Ver docs/PLANS-SPEC.md.
+ */
 const PLANS = [
-  { code: 30, label: "Essencial" },
-  { code: 50, label: "Profissional" },
-  { code: 80, label: "Avançado" },
+  { code: 30, label: "Essencial", price: 30 },
+  { code: 50, label: "Crescimento", price: 50 },
+  { code: 80, label: "Profissional", price: 70 },
 ] as const;
 
 export function PlanStep({ progress }: { progress: OnboardingRow }) {
@@ -39,7 +47,7 @@ export function PlanStep({ progress }: { progress: OnboardingRow }) {
             <label key={plan.code} className={styles.option}>
               <input type="radio" name="planCode" value={plan.code} defaultChecked={progress.plan_code === plan.code} required />
               <span className={styles.optionName}>{plan.label}</span>
-              <span className={styles.optionPrice}>R$ {plan.code}/mês</span>
+              <span className={styles.optionPrice}>R$ {plan.price}/mês</span>
             </label>
           ))}
         </div>
