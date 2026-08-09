@@ -1,52 +1,65 @@
 /* ============================================================
-   CaraffaStore — Design tokens e base global.
-   Componentes de UI vivem em components/ui/*.module.css — este
-   arquivo só define tokens, reset e elementos realmente globais
-   (nunca estilos específicos de uma página).
+   CaraffaStore — Linguagem visual 2.0
+   Tokens, reset e primitivas globais. Componentes de UI vivem em
+   components/ui/*.module.css — este arquivo nunca define estilo
+   específico de página.
+
+   Princípios:
+   - Branco domina; azul conduz o olhar; navy carrega o texto.
+   - Um único matiz de azul (~224°) em rampa fechada de 50→950.
+     Não existe "outro azul" no produto.
+   - Profundidade vem de camadas de luz e sombra azulada, nunca de
+     bordas grossas ou sombras cinzas pesadas.
    ============================================================ */
 
 :root {
-  /* Superfícies */
-  --cs-bg: #ffffff;
-  --cs-surface: #f8fafc;
-  --cs-surface-alt: #f1f5f9;
-  --cs-surface-hover: #eef2f7;
+  /* ---------- Rampa de azul da marca (matiz único ~224°) -------- */
+  --cs-blue-50: #f0f5ff;
+  --cs-blue-100: #dee9ff;
+  --cs-blue-200: #c2d6ff;
+  --cs-blue-300: #94b6ff;
+  --cs-blue-400: #5c8dff;
+  --cs-blue-500: #2e6bff;
+  --cs-blue-600: #1b4dff; /* azul de ação da CaraffaStore */
+  --cs-blue-700: #143bd1;
+  --cs-blue-800: #122fa0;
+  --cs-blue-900: #142a72;
+  --cs-blue-950: #0c1b33; /* navy — texto de título */
 
-  /* Bordas */
-  --cs-border: #e2e8f0;
-  --cs-border-strong: #cbd5e1;
+  /* ---------- Tinta (cinzas frios, mesma família do azul) ------- */
+  --cs-ink: #0c1b33; /* 15.9:1 — títulos */
+  --cs-ink-body: #33425c; /* 10.1:1 — corpo */
+  --cs-ink-muted: #64728e; /* 4.9:1 — secundário, legenda, placeholder */
+  /* `faint` NÃO passa em 4.5:1 e por isso é reservado a decoração:
+     divisor, traço de ícone, borda. Nunca use em texto legível. */
+  --cs-ink-faint: #8a97b2;
+  --cs-ink-inverse: #ffffff;
 
-  /* Texto */
-  --cs-text: #0f172a;
-  --cs-text-secondary: #475569;
-  --cs-text-muted: #94a3b8;
-  --cs-text-inverse: #ffffff;
+  /* ---------- Superfícies --------------------------------------- */
+  --cs-white: #ffffff;
+  --cs-surface: #f7f9fd; /* off-white frio */
+  --cs-surface-sunken: #eff3fa; /* fundo rebaixado / trilhos */
+  --cs-surface-blue: #f4f7ff; /* faixa atmosférica azul */
+  --cs-line: #e4eaf4;
+  --cs-line-strong: #cfd9ea;
 
-  /* Marca / azul */
-  --cs-primary-50: #eff6ff;
-  --cs-primary-100: #dbeafe;
-  --cs-primary-200: #bfdbfe;
-  --cs-primary-500: #3b82f6;
-  --cs-primary-600: #2563eb;
-  --cs-primary-700: #1d4ed8;
-  --cs-primary-900: #1e3a8a;
-
-  /* Estados semânticos */
-  --cs-success-bg: #f0fdf4;
-  --cs-success-text: #166534;
-  --cs-success-border: #bbf7d0;
+  /* ---------- Semânticos ---------------------------------------- */
+  --cs-success: #0e9f6e;
+  --cs-success-bg: #ecfdf5;
+  --cs-success-text: #06603f;
+  --cs-success-border: #a7f3d0;
+  --cs-warning: #d97706;
   --cs-warning-bg: #fffbeb;
   --cs-warning-text: #92400e;
   --cs-warning-border: #fde68a;
+  --cs-danger: #dc2626;
   --cs-danger-bg: #fef2f2;
-  --cs-danger-text: #b91c1c;
+  --cs-danger-text: #b3181d;
   --cs-danger-border: #fecaca;
-  --cs-danger-600: #dc2626;
-  --cs-danger-700: #b91c1c;
-  --cs-neutral-bg: #f4f4f5;
-  --cs-neutral-text: #52525b;
+  --cs-neutral-bg: #eff3fa;
+  --cs-neutral-text: #4a5a78;
 
-  /* Espaçamento */
+  /* ---------- Espaçamento (escala 4pt com saltos deliberados) ---- */
   --cs-space-1: 0.25rem;
   --cs-space-2: 0.5rem;
   --cs-space-3: 0.75rem;
@@ -57,22 +70,106 @@
   --cs-space-10: 2.5rem;
   --cs-space-12: 3rem;
   --cs-space-16: 4rem;
+  --cs-space-20: 5rem;
+  --cs-space-24: 6rem;
+  /* Respiro vertical entre seções de página pública — fluido. */
+  --cs-section-y: clamp(4.5rem, 3rem + 6vw, 8rem);
 
-  /* Raio */
+  /* ---------- Raio (5 degraus, nunca improvisado) ---------------- */
+  --cs-radius-xs: 0.25rem;
   --cs-radius-sm: 0.375rem;
-  --cs-radius-md: 0.5rem;
-  --cs-radius-lg: 0.75rem;
-  --cs-radius-xl: 1rem;
+  --cs-radius-md: 0.625rem;
+  --cs-radius-lg: 0.875rem;
+  --cs-radius-xl: 1.25rem;
+  --cs-radius-2xl: 1.75rem;
   --cs-radius-full: 999px;
 
-  /* Sombra */
-  --cs-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --cs-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
-  --cs-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
-  --cs-shadow-focus: 0 0 0 3px rgba(37, 99, 235, 0.25);
+  /* ---------- Profundidade -------------------------------------- *
+   * Sombra azulada (12,27,51), nunca preta. Cada degrau combina um
+   * contato curto com uma difusão longa — é isso que faz uma página
+   * branca ter camadas em vez de ficar chapada.                    */
+  --cs-shadow-xs: 0 1px 2px rgba(12, 27, 51, 0.05);
+  --cs-shadow-sm: 0 1px 2px rgba(12, 27, 51, 0.06), 0 2px 6px -1px rgba(12, 27, 51, 0.05);
+  --cs-shadow-md: 0 2px 4px -1px rgba(12, 27, 51, 0.05), 0 8px 20px -6px rgba(12, 27, 51, 0.1);
+  --cs-shadow-lg: 0 4px 8px -2px rgba(12, 27, 51, 0.06), 0 20px 44px -12px rgba(12, 27, 51, 0.16);
+  --cs-shadow-xl: 0 8px 16px -4px rgba(12, 27, 51, 0.07), 0 36px 80px -20px rgba(12, 27, 51, 0.22);
+  /* Realce superior de 1px: separa a superfície branca do fundo. */
+  --cs-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  --cs-glow-blue: 0 10px 28px -10px rgba(27, 77, 255, 0.45);
+  --cs-glow-blue-strong: 0 18px 48px -14px rgba(27, 77, 255, 0.55);
+  --cs-ring: 0 0 0 3px rgba(27, 77, 255, 0.2);
+  --cs-ring-danger: 0 0 0 3px rgba(220, 38, 38, 0.18);
 
-  /* Tipografia */
+  /* ---------- Tipografia ---------------------------------------- *
+   * Três papéis, nunca misturados: display carrega personalidade,
+   * Inter carrega legibilidade de UI, mono carrega dado literal
+   * (código de pedido, chave Pix, credencial).                     */
+  --cs-font-display: var(--font-display), "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --cs-font-sans: var(--font-inter, "Inter"), -apple-system, "Segoe UI", Roboto, sans-serif;
+  --cs-font-mono: var(--font-mono), "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --cs-text-display: clamp(2.5rem, 1.4rem + 3.6vw, 4.5rem);
+  --cs-text-h1: clamp(2rem, 1.45rem + 2.2vw, 3rem);
+  --cs-text-h2: clamp(1.625rem, 1.3rem + 1.3vw, 2.25rem);
+  --cs-text-h3: 1.25rem;
+  --cs-text-lg: 1.0625rem;
+  --cs-text-base: 1rem;
+  --cs-text-sm: 0.875rem;
+  --cs-text-xs: 0.8125rem;
+  --cs-text-label: 0.6875rem;
+
+  --cs-tracking-display: -0.03em;
+  --cs-tracking-tight: -0.02em;
+  --cs-tracking-label: 0.12em;
+
+  --cs-leading-display: 1.02;
+  --cs-leading-heading: 1.15;
+  --cs-leading-body: 1.6;
+
+  /* ---------- Movimento ----------------------------------------- */
+  --cs-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --cs-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --cs-duration-fast: 120ms;
+  --cs-duration: 180ms;
+  --cs-duration-slow: 320ms;
+
+  /* ---------- Contêineres --------------------------------------- */
+  --cs-container: 1200px;
+  --cs-container-narrow: 760px;
+  --cs-container-wide: 1360px;
+
+  /* ---------- Camadas ------------------------------------------- */
+  --cs-z-base: 1;
+  --cs-z-sticky: 20;
+  --cs-z-drawer: 40;
+  --cs-z-backdrop: 50;
+  --cs-z-modal: 60;
+  --cs-z-toast: 70;
+
+  /* ============================================================
+     Aliases legados — as rotas ainda não migradas continuam
+     funcionando e já herdam a paleta nova. Removidos conforme
+     cada página é refeita.
+     ============================================================ */
+  --cs-bg: var(--cs-white);
+  --cs-surface-alt: var(--cs-surface-sunken);
+  --cs-surface-hover: var(--cs-blue-50);
+  --cs-border: var(--cs-line);
+  --cs-border-strong: var(--cs-line-strong);
+  --cs-text: var(--cs-ink);
+  --cs-text-secondary: var(--cs-ink-body);
+  --cs-text-muted: var(--cs-ink-muted);
+  --cs-text-inverse: var(--cs-ink-inverse);
+  --cs-primary-50: var(--cs-blue-50);
+  --cs-primary-100: var(--cs-blue-100);
+  --cs-primary-200: var(--cs-blue-200);
+  --cs-primary-500: var(--cs-blue-500);
+  --cs-primary-600: var(--cs-blue-600);
+  --cs-primary-700: var(--cs-blue-700);
+  --cs-primary-900: var(--cs-blue-900);
+  --cs-danger-600: var(--cs-danger);
+  --cs-danger-700: var(--cs-danger-text);
+  --cs-shadow-focus: var(--cs-ring);
 
   color-scheme: light;
 }
@@ -85,38 +182,50 @@
 
 html {
   color-scheme: light;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
   font-family: var(--cs-font-sans);
-  line-height: 1.5;
-  color: var(--cs-text);
-  background: var(--cs-bg);
+  font-size: var(--cs-text-base);
+  line-height: var(--cs-leading-body);
+  color: var(--cs-ink-body);
+  background: var(--cs-white);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 h1,
 h2,
 h3,
-h4 {
-  font-family: var(--cs-font-sans);
+h4,
+h5 {
+  font-family: var(--cs-font-display);
   font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--cs-text);
+  line-height: var(--cs-leading-heading);
+  letter-spacing: var(--cs-tracking-tight);
+  color: var(--cs-ink);
   margin: 0;
+  text-wrap: balance;
 }
 
 p {
   margin: 0;
+  text-wrap: pretty;
 }
 
 a {
-  color: var(--cs-primary-600);
+  color: var(--cs-blue-600);
+  text-underline-offset: 0.2em;
+}
+
+img,
+svg {
+  max-width: 100%;
 }
 
 img {
-  max-width: 100%;
   display: block;
 }
 
@@ -125,20 +234,54 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid var(--cs-primary-600);
+  outline: 2px solid var(--cs-blue-600);
   outline-offset: 2px;
   border-radius: var(--cs-radius-sm);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
+/* ============================================================
+   Primitivas globais
+   ============================================================ */
+
+.cs-container {
+  width: 100%;
+  max-width: var(--cs-container);
+  margin: 0 auto;
+  padding: 0 var(--cs-space-6);
+}
+
+.cs-container-wide {
+  width: 100%;
+  max-width: var(--cs-container-wide);
+  margin: 0 auto;
+  padding: 0 var(--cs-space-6);
+}
+
+@media (max-width: 640px) {
+  .cs-container,
+  .cs-container-wide {
+    padding: 0 var(--cs-space-5);
   }
+}
+
+/* Rótulo utilitário em mono — usado em eyebrows, códigos e dados. */
+.cs-label {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+}
+
+.cs-mono {
+  font-family: var(--cs-font-mono);
+  font-variant-ligatures: none;
+}
+
+/* Números tabulares: colunas de preço e quantidade nunca dançam. */
+.cs-numeric {
+  font-variant-numeric: tabular-nums;
 }
 
 .visually-hidden {
@@ -153,15 +296,13 @@ button {
   border: 0;
 }
 
-.cs-container {
-  width: 100%;
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 0 var(--cs-space-6);
-}
-
-@media (max-width: 640px) {
-  .cs-container {
-    padding: 0 var(--cs-space-4);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }

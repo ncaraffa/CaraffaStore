@@ -4,98 +4,136 @@
   justify-content: center;
   gap: 0.5rem;
   border-radius: var(--cs-radius-md);
+  font-family: var(--cs-font-sans);
   font-weight: 600;
+  letter-spacing: -0.005em;
   cursor: pointer;
   border: 1px solid transparent;
   white-space: nowrap;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease,
-    opacity 120ms ease;
-  line-height: 1.2;
+  line-height: 1;
+  transition:
+    background-color var(--cs-duration-fast) var(--cs-ease),
+    border-color var(--cs-duration-fast) var(--cs-ease),
+    color var(--cs-duration-fast) var(--cs-ease),
+    box-shadow var(--cs-duration) var(--cs-ease),
+    transform var(--cs-duration-fast) var(--cs-ease);
+}
+
+/* O botão afunda 1px ao ser pressionado — resposta física, sem delay. */
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.5;
+  box-shadow: none;
 }
 
+.btn svg {
+  width: 1.125em;
+  height: 1.125em;
+  flex-shrink: 0;
+}
+
+/* ---- Tamanhos: alturas fixas para nada dançar numa mesma linha ---- */
 .sm {
-  font-size: 0.8125rem;
-  padding: 0.4rem 0.75rem;
+  height: 2.125rem;
+  font-size: var(--cs-text-xs);
+  padding: 0 0.75rem;
 }
 
 .md {
-  font-size: 0.9375rem;
-  padding: 0.6rem 1.1rem;
+  height: 2.5rem;
+  font-size: var(--cs-text-sm);
+  padding: 0 1rem;
 }
 
 .lg {
-  font-size: 1rem;
-  padding: 0.8rem 1.5rem;
+  height: 3rem;
+  font-size: var(--cs-text-base);
+  padding: 0 1.5rem;
 }
 
 .fullWidth {
   width: 100%;
 }
 
+/* ---- Variantes ---- */
 .primary {
-  background: var(--cs-primary-600);
-  color: var(--cs-text-inverse);
-  box-shadow: var(--cs-shadow-sm);
+  background: linear-gradient(180deg, var(--cs-blue-500), var(--cs-blue-600));
+  color: #fff;
+  box-shadow:
+    var(--cs-glow-blue),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .primary:hover:not(:disabled) {
-  background: var(--cs-primary-700);
+  background: linear-gradient(180deg, var(--cs-blue-600), var(--cs-blue-700));
+  box-shadow:
+    var(--cs-glow-blue-strong),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .secondary {
-  background: var(--cs-primary-50);
-  color: var(--cs-primary-700);
+  background: var(--cs-blue-50);
+  color: var(--cs-blue-700);
+  border-color: var(--cs-blue-100);
 }
 
 .secondary:hover:not(:disabled) {
-  background: var(--cs-primary-100);
+  background: var(--cs-blue-100);
+  border-color: var(--cs-blue-200);
 }
 
 .outline {
-  background: var(--cs-bg);
-  color: var(--cs-text);
-  border-color: var(--cs-border-strong);
+  background: var(--cs-white);
+  color: var(--cs-ink);
+  border-color: var(--cs-line-strong);
+  box-shadow: var(--cs-shadow-xs);
 }
 
 .outline:hover:not(:disabled) {
-  background: var(--cs-surface);
-  border-color: var(--cs-text-muted);
+  border-color: var(--cs-blue-300);
+  color: var(--cs-blue-700);
+  box-shadow: var(--cs-shadow-sm);
 }
 
 .ghost {
   background: transparent;
-  color: var(--cs-text-secondary);
+  color: var(--cs-ink-body);
 }
 
 .ghost:hover:not(:disabled) {
-  background: var(--cs-surface);
-  color: var(--cs-text);
+  background: var(--cs-surface-sunken);
+  color: var(--cs-ink);
 }
 
 .destructive {
-  background: var(--cs-bg);
-  color: var(--cs-danger-600);
+  background: var(--cs-white);
+  color: var(--cs-danger);
   border-color: var(--cs-danger-border);
 }
 
 .destructive:hover:not(:disabled) {
   background: var(--cs-danger-bg);
-  border-color: var(--cs-danger-600);
+  border-color: var(--cs-danger);
 }
 
+.destructive:focus-visible {
+  outline-color: var(--cs-danger);
+}
+
+/* ---- Carregando ---- */
 .spinner {
-  width: 0.9em;
-  height: 0.9em;
+  width: 0.95em;
+  height: 0.95em;
   border-radius: 50%;
   border: 2px solid currentColor;
   border-top-color: transparent;
   animation: cs-spin 650ms linear infinite;
   flex-shrink: 0;
+  opacity: 0.9;
 }
 
 @keyframes cs-spin {

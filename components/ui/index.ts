@@ -18,4 +18,5 @@ export { Breadcrumbs } from "./Breadcrumbs";
 export type { Crumb } from "./Breadcrumbs";
 export { Modal } from "./Modal";
 export { ConfirmSubmitButton } from "./ConfirmSubmitButton";
-export { Logo } from "./Logo";
+export { Logo, CaraffaMark } from "./Logo";
+export type { LogoSize } from "./Logo";

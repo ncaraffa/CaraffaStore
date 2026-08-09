@@ -13,7 +13,7 @@ function Icon(props: SVGProps<SVGSVGElement>) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2}
+      strokeWidth={1.75}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -162,5 +162,42 @@ export const IconShield = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
     <path d="m9 12 2 2 4-4" />
+  </Icon>
+);
+
+export const IconArrowRight = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M5 12h14" />
+    <path d="m12 5 7 7-7 7" />
+  </Icon>
+);
+
+export const IconClock = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3.5 2" />
+  </Icon>
+);
+
+export const IconTruck = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M3 6h11v10H3z" />
+    <path d="M14 9h4l3 3.5V16h-7" />
+    <circle cx="7" cy="18" r="2" />
+    <circle cx="17" cy="18" r="2" />
+  </Icon>
+);
+
+export const IconLink = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M10 13a5 5 0 0 0 7.1.1l2.9-2.9a5 5 0 0 0-7.07-7.07l-1.7 1.7" />
+    <path d="M14 11a5 5 0 0 0-7.1-.1L4 13.8a5 5 0 0 0 7.07 7.07l1.7-1.7" />
+  </Icon>
+);
+
+export const IconLayers = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+    <path d="m3 13 9 5 9-5" />
   </Icon>
 );

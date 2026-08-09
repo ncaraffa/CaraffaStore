@@ -1,73 +1,177 @@
 import Link from "next/link";
-import { Logo } from "@/components/ui/Logo";
+import { Logo, CaraffaMark } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/Button";
+import { HeroScene } from "./HeroScene";
 import {
+  IconArrowRight,
   IconBox,
-  IconTag,
-  IconReceipt,
-  IconCreditCard,
-  IconShield,
-  IconPix,
   IconCheck,
-  IconStore,
+  IconLink,
+  IconPix,
+  IconReceipt,
+  IconSearch,
+  IconShield,
+  IconTag,
 } from "@/components/ui/icons";
 import styles from "./LandingPage.module.css";
 
-const FEATURES = [
+/* ============================================================
+   Conteúdo
+   Regra desta página: só afirma o que o produto faz hoje. Sem
+   prova social, sem número de clientes, sem depoimento, sem
+   "usado por" — nada disso existe ainda e nada disso é inventado.
+   ============================================================ */
+
+/** Cada plano tem `features: []` enquanto não existe diferenciação real no
+ *  código. Quando ela existir, basta preencher — o card já renderiza a lista
+ *  acima do CTA e o bloco "todos os planos incluem" continua valendo para o
+ *  que for comum. */
+const PLANS = [
   {
-    icon: <IconStore />,
-    title: "Catálogo público",
-    description: "Sua loja com URL própria, busca e categorias — pronta para compartilhar com clientes.",
+    code: 30,
+    name: "Essencial",
+    tier: 1,
+    fit: "Para quem está montando a primeira loja online.",
+    features: [] as string[],
+    featured: false,
   },
   {
-    icon: <IconBox />,
-    title: "Produtos e estoque",
-    description: "Cadastre produtos com fotos, preço e estoque. Publique quando estiver pronto.",
+    code: 50,
+    name: "Profissional",
+    tier: 2,
+    fit: "Para quem já vende e quer a operação organizada em um lugar só.",
+    features: [] as string[],
+    featured: true,
   },
   {
-    icon: <IconTag />,
-    title: "Categorias",
-    description: "Organize o catálogo para o cliente encontrar o que procura mais rápido.",
-  },
-  {
-    icon: <IconReceipt />,
-    title: "Carrinho e pedidos",
-    description: "Checkout simples, sem exigir cadastro do cliente, com painel completo de pedidos.",
-  },
-  {
-    icon: <IconPix />,
-    title: "Pagamento via Pix",
-    description: "Receba direto na sua conta Mercado Pago — QR Code e copia e cola automáticos por pedido.",
-  },
-  {
-    icon: <IconShield />,
-    title: "Dados isolados e seguros",
-    description: "Cada loja é isolada das demais; credenciais de pagamento são sempre criptografadas.",
+    code: 80,
+    name: "Avançado",
+    tier: 3,
+    fit: "Para quem vende em volume e quer folga para crescer.",
+    features: [] as string[],
+    featured: false,
   },
 ];
 
-const PLANS = [
-  { price: 30, name: "Essencial", highlight: false },
-  { price: 50, name: "Profissional", highlight: true },
-  { price: 80, name: "Avançado", highlight: false },
+/** Recursos reais, hoje comuns a todos os planos. */
+const INCLUDED = [
+  "Catálogo público com link próprio",
+  "Produtos com fotos, preço e estoque",
+  "Categorias para organizar a vitrine",
+  "Carrinho e checkout sem cadastro do cliente",
+  "Cobrança por Pix em cada pedido",
+  "Painel de pedidos e baixa de estoque",
+];
+
+const STEPS = [
+  {
+    title: "Crie sua conta",
+    body: "E-mail e senha, com confirmação por e-mail. Leva um minuto.",
+  },
+  {
+    title: "Configure a loja",
+    body: "Nome, endereço do link e o plano. A loja fica pronta para receber produtos.",
+  },
+  {
+    title: "Monte o catálogo",
+    body: "Categorias, fotos, preço e estoque. Você publica cada produto quando quiser.",
+  },
+  {
+    title: "Conecte o Pix e venda",
+    body: "Suas credenciais do Mercado Pago no painel, e cada pedido já nasce com QR Code.",
+  },
+];
+
+const NOT_DOING = [
+  {
+    title: "Não fica com uma fatia da sua venda",
+    body: "Você paga a mensalidade do plano e pronto. O valor do pedido é seu.",
+  },
+  {
+    title: "Não obriga seu cliente a criar conta",
+    body: "Ele escolhe, informa nome e telefone, e paga. Sem cadastro, sem senha, sem atrito.",
+  },
+  {
+    title: "Não exige conhecimento técnico",
+    body: "Nenhum código, nenhum servidor, nenhum plugin para instalar ou atualizar.",
+  },
+  {
+    title: "Não mistura sua loja com outra",
+    body: "O isolamento entre lojas é imposto no banco de dados, não só na tela.",
+  },
 ];
 
 const FAQS = [
   {
-    q: "Preciso saber programar para usar?",
-    a: "Não. Você cria sua loja em poucos passos: nome, endereço, produtos e já pode compartilhar o link com seus clientes.",
+    q: "Como eu recebo o dinheiro das vendas?",
+    a: "Por Pix, direto na sua conta do Mercado Pago. Você conecta suas próprias credenciais no painel e cada pedido gera um QR Code e um código copia e cola. A CaraffaStore nunca fica com o dinheiro no meio do caminho.",
   },
   {
-    q: "Como eu recebo os pagamentos?",
-    a: "Via Pix, direto na sua própria conta Mercado Pago. Você conecta suas credenciais no painel — a CaraffaStore nunca retém o dinheiro das vendas.",
+    q: "A CaraffaStore cobra comissão sobre as vendas?",
+    a: "Não. A cobrança é só a mensalidade do plano. As tarifas do Mercado Pago sobre cada Pix são do Mercado Pago e seguem as condições da sua conta lá.",
   },
   {
-    q: "Posso mudar de plano depois?",
-    a: "O plano escolhido no cadastro pode ser revisto com o suporte a qualquer momento.",
+    q: "Preciso saber programar ou contratar alguém?",
+    a: "Não. Você cria a conta, define o nome e o endereço da loja, cadastra os produtos e compartilha o link. Tudo pelo painel.",
   },
   {
-    q: "Meus dados ficam misturados com os de outras lojas?",
-    a: "Não. O isolamento entre lojas é reforçado no banco de dados, não só na interface — uma loja nunca acessa dados de outra.",
+    q: "Como o cliente compra na minha loja?",
+    a: "Ele abre o link da loja, busca ou navega pelas categorias, adiciona ao carrinho e finaliza informando nome e telefone. Depois paga o Pix. Não precisa criar conta.",
+  },
+  {
+    q: "O pagamento é confirmado sozinho?",
+    a: "Sim. Quando o Pix é pago, a CaraffaStore recebe a confirmação do Mercado Pago e atualiza o pedido no seu painel. Há também uma reconciliação periódica para o caso de uma notificação se perder.",
+  },
+  {
+    q: "E se eu precisar cancelar um pedido?",
+    a: "Você cancela pelo painel, na tela do pedido. O estoque reservado volta para o catálogo.",
+  },
+  {
+    q: "Meus dados e os do meu cliente estão seguros?",
+    a: "Cada loja é isolada das demais por regras no próprio banco de dados, e suas credenciais de pagamento ficam criptografadas. O acesso à loja é sempre por conta autenticada.",
+  },
+  {
+    q: "Posso trocar de plano depois?",
+    a: "Pode. Hoje a troca é feita com o suporte; os três planos dão acesso aos mesmos recursos da plataforma.",
+  },
+];
+
+const BENTO = [
+  {
+    key: "catalogo",
+    icon: <IconLink />,
+    title: "Um link, sua loja inteira",
+    body: "Cada loja ganha um endereço próprio para mandar no WhatsApp, colocar na bio ou imprimir no cartão.",
+  },
+  {
+    key: "pix",
+    icon: <IconPix />,
+    title: "Pix por pedido, na sua conta",
+    body: "QR Code e copia e cola gerados automaticamente, com confirmação de pagamento sem você conferir extrato.",
+  },
+  {
+    key: "produtos",
+    icon: <IconBox />,
+    title: "Produtos e estoque",
+    body: "Fotos, preço, estoque e status de publicação. O estoque baixa sozinho a cada pedido pago.",
+  },
+  {
+    key: "pedidos",
+    icon: <IconReceipt />,
+    title: "Pedidos em um lugar só",
+    body: "Quem comprou, o que comprou, quanto pagou e em que ponto está.",
+  },
+  {
+    key: "categorias",
+    icon: <IconTag />,
+    title: "Categorias",
+    body: "Organize a vitrine do jeito que seu cliente procura.",
+  },
+  {
+    key: "busca",
+    icon: <IconSearch />,
+    title: "Busca no catálogo",
+    body: "Seu cliente digita o que quer e encontra, mesmo com o catálogo grande.",
   },
 ];
 
@@ -76,17 +180,20 @@ export function LandingPage() {
     <div className={styles.page}>
       <header className={styles.header}>
         <div className={styles.headerInner}>
-          <Logo size="md" />
-          <nav className={styles.headerNav}>
+          <Link href="/" className={styles.headerLogo} aria-label="CaraffaStore, página inicial">
+            <Logo size="md" compact />
+          </Link>
+          <nav className={styles.headerNav} aria-label="Seções desta página">
             <a href="#recursos">Recursos</a>
+            <a href="#como-funciona">Como funciona</a>
             <a href="#planos">Planos</a>
-            <a href="#faq">Perguntas frequentes</a>
+            <a href="#faq">Dúvidas</a>
           </nav>
           <div className={styles.headerActions}>
             <Link href="/login" className={styles.headerLogin}>
               Entrar
             </Link>
-            <Link href="/signup">
+            <Link href="/signup" className={styles.headerCta}>
               <Button size="sm">Criar minha loja</Button>
             </Link>
           </div>
@@ -94,203 +201,262 @@ export function LandingPage() {
       </header>
 
       <main>
+        {/* ---------------- Hero ---------------- */}
         <section className={styles.hero}>
-          <div className={styles.heroText}>
-            <span className={styles.eyebrow}>Plataforma para pequenos comerciantes</span>
-            <h1 className={styles.heroTitle}>
-              Crie e administre sua loja virtual com a <span className={styles.heroBrand}>CaraffaStore</span>
-            </h1>
-            <p className={styles.heroSubtitle}>
-              Catálogo, carrinho, pedidos e pagamentos via Pix — tudo em um painel simples, para você vender online
-              sem complicação técnica.
-            </p>
-            <div className={styles.heroActions}>
-              <Link href="/signup">
-                <Button size="lg">Criar minha loja grátis</Button>
-              </Link>
-              <a href="#recursos">
-                <Button size="lg" variant="outline">
-                  Ver como funciona
-                </Button>
-              </a>
-            </div>
-          </div>
+          <div className={styles.heroGrid}>
+            <div className={styles.heroText}>
+              <p className={styles.eyebrow}>Loja virtual para pequenos comerciantes</p>
+              <h1 className={styles.heroTitle}>
+                Do catálogo ao <span className={styles.heroAccent}>Pix na sua conta</span>.
+              </h1>
+              <p className={styles.heroSubtitle}>
+                Monte o catálogo, compartilhe o link da loja e receba por Pix direto na sua conta do Mercado Pago —
+                sem comissão da CaraffaStore sobre o que você vende.
+              </p>
+              <div className={styles.heroActions}>
+                <Link href="/signup">
+                  <Button size="lg" icon={<IconArrowRight />}>
+                    Criar minha loja
+                  </Button>
+                </Link>
+                <a href="#como-funciona">
+                  <Button size="lg" variant="outline">
+                    Ver como funciona
+                  </Button>
+                </a>
+              </div>
 
-          <div className={styles.heroMock} aria-hidden="true">
-            <div className={styles.mockWindow}>
-              <div className={styles.mockTopbar}>
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className={styles.mockBody}>
-                <div className={styles.mockSidebar}>
-                  <div className={styles.mockLogo} />
-                  <div className={styles.mockNavItem} data-active="true" />
-                  <div className={styles.mockNavItem} />
-                  <div className={styles.mockNavItem} />
-                  <div className={styles.mockNavItem} />
-                </div>
-                <div className={styles.mockContent}>
-                  <div className={styles.mockCardRow}>
-                    <div className={styles.mockCard} />
-                    <div className={styles.mockCard} />
-                  </div>
-                  <div className={styles.mockTableRow} />
-                  <div className={styles.mockTableRow} />
-                  <div className={styles.mockTableRow} />
-                </div>
-              </div>
+              {/* No lugar de prova social inventada: três fatos verificáveis. */}
+              <ul className={styles.heroFacts}>
+                <li>
+                  <span className={styles.factKey}>Pix</span>
+                  direto na sua conta
+                </li>
+                <li>
+                  <span className={styles.factKey}>0%</span>
+                  de comissão por venda
+                </li>
+                <li>
+                  <span className={styles.factKey}>R$ 30</span>
+                  por mês para começar
+                </li>
+              </ul>
+            </div>
+
+            <div className={styles.heroScene}>
+              <HeroScene />
             </div>
           </div>
         </section>
 
+        {/* ---------------- Recursos (bento) ---------------- */}
         <section id="recursos" className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2>Tudo que você precisa para vender online</h2>
-            <p>Recursos já disponíveis na plataforma — sem surpresas.</p>
+          <div className={styles.sectionHead}>
+            <p className={styles.sectionLabel}>Recursos</p>
+            <h2 className={styles.sectionTitle}>Tudo que a loja precisa para funcionar sozinha</h2>
+            <p className={styles.sectionLead}>
+              O que está listado aqui já está no ar. Nada é promessa de versão futura.
+            </p>
           </div>
-          <div className={styles.featureGrid}>
-            {FEATURES.map((feature) => (
-              <div key={feature.title} className={styles.featureCard}>
-                <span className={styles.featureIcon}>{feature.icon}</span>
-                <h3>{feature.title}</h3>
-                <p>{feature.description}</p>
-              </div>
+
+          <div className={styles.bento}>
+            {BENTO.map((cell) => (
+              <article key={cell.key} className={styles.bentoCell} data-cell={cell.key}>
+                <span className={styles.bentoIcon}>{cell.icon}</span>
+                <h3>{cell.title}</h3>
+                <p>{cell.body}</p>
+
+                {cell.key === "catalogo" && (
+                  <div className={styles.urlChip} aria-hidden="true">
+                    <IconLink />
+                    <span>/loja/casa-do-cafe</span>
+                  </div>
+                )}
+
+                {cell.key === "pix" && (
+                  <div className={styles.pixProof} aria-hidden="true">
+                    <span className={styles.pixProofDot} />
+                    Pagamento confirmado · <span className={styles.mono}>#8F42A1</span>
+                  </div>
+                )}
+              </article>
             ))}
           </div>
         </section>
 
-        <section className={styles.sectionAlt}>
-          <div className={styles.sectionHeader}>
-            <h2>Como funciona</h2>
-            <p>Do cadastro à primeira venda em minutos.</p>
+        {/* ---------------- O que não fazemos ---------------- */}
+        <section className={styles.bandSection}>
+          <div className={styles.band}>
+            <div className={styles.bandHead}>
+              <p className={styles.sectionLabel}>Sem letra miúda</p>
+              <h2 className={styles.sectionTitle}>O que a CaraffaStore não faz</h2>
+              <p className={styles.sectionLead}>
+                Quem vende pouco não pode ser surpreendido. Estas quatro coisas não acontecem aqui.
+              </p>
+            </div>
+            <ul className={styles.bandList}>
+              {NOT_DOING.map((item) => (
+                <li key={item.title}>
+                  <h3>{item.title}</h3>
+                  <p>{item.body}</p>
+                </li>
+              ))}
+            </ul>
           </div>
+        </section>
+
+        {/* ---------------- Como funciona ---------------- */}
+        <section id="como-funciona" className={styles.section}>
+          <div className={styles.sectionHead}>
+            <p className={styles.sectionLabel}>Como funciona</p>
+            <h2 className={styles.sectionTitle}>Quatro passos até a primeira venda</h2>
+          </div>
+
           <ol className={styles.steps}>
-            <li>
-              <span className={styles.stepNumber}>1</span>
-              <div>
-                <h3>Crie sua conta</h3>
-                <p>Cadastro com e-mail e senha, confirmação rápida por e-mail.</p>
-              </div>
-            </li>
-            <li>
-              <span className={styles.stepNumber}>2</span>
-              <div>
-                <h3>Configure sua loja</h3>
-                <p>Nome, endereço da loja e escolha do plano.</p>
-              </div>
-            </li>
-            <li>
-              <span className={styles.stepNumber}>3</span>
-              <div>
-                <h3>Cadastre produtos</h3>
-                <p>Categorias, fotos, preço e estoque — publique quando quiser.</p>
-              </div>
-            </li>
-            <li>
-              <span className={styles.stepNumber}>4</span>
-              <div>
-                <h3>Venda com Pix</h3>
-                <p>Conecte o Mercado Pago e receba pedidos com pagamento automático.</p>
-              </div>
-            </li>
+            {STEPS.map((step, index) => (
+              <li key={step.title} className={styles.step}>
+                <span className={styles.stepIndex}>{String(index + 1).padStart(2, "0")}</span>
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+              </li>
+            ))}
           </ol>
         </section>
 
-        <section id="planos" className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2>Planos simples e diretos</h2>
-            <p>Escolha um plano ao criar sua loja. Sem taxa sobre suas vendas.</p>
+        {/* ---------------- Planos ---------------- */}
+        <section id="planos" className={styles.sectionAlt}>
+          <div className={styles.sectionHead}>
+            <p className={styles.sectionLabel}>Planos</p>
+            <h2 className={styles.sectionTitle}>Escolha o tamanho da sua operação</h2>
+            <p className={styles.sectionLead}>
+              Mensalidade fixa, sem comissão sobre vendas. Você escolhe o plano ao criar a loja.
+            </p>
           </div>
-          <div className={styles.plansGrid}>
+
+          <div className={styles.plans}>
             {PLANS.map((plan) => (
-              <div key={plan.price} className={styles.planCard} data-highlight={plan.highlight || undefined}>
-                {plan.highlight && <span className={styles.planBadge}>Mais escolhido</span>}
-                <h3>{plan.name}</h3>
+              <article key={plan.code} className={styles.plan} data-featured={plan.featured || undefined}>
+                {plan.featured && <span className={styles.planBadge}>Recomendado</span>}
+                {/* Nível — o mesmo motivo do símbolo da marca. Ordena os planos
+                    sem afirmar nenhum recurso que ainda não exista. */}
+                <span className={styles.planLevel} aria-hidden="true">
+                  <span data-on={plan.tier >= 1 || undefined} />
+                  <span data-on={plan.tier >= 2 || undefined} />
+                  <span data-on={plan.tier >= 3 || undefined} />
+                </span>
+                <h3 className={styles.planName}>{plan.name}</h3>
                 <p className={styles.planPrice}>
-                  R$ {plan.price}
-                  <span>/mês</span>
+                  <span className={styles.planCurrency}>R$</span>
+                  {plan.code}
+                  <span className={styles.planPeriod}>/mês</span>
                 </p>
-                <ul className={styles.planList}>
-                  <li>
-                    <IconCheck /> Catálogo e produtos ilimitados
-                  </li>
-                  <li>
-                    <IconCheck /> Carrinho e checkout com Pix
-                  </li>
-                  <li>
-                    <IconCheck /> Painel de pedidos completo
-                  </li>
-                </ul>
-                <Link href="/signup">
-                  <Button fullWidth variant={plan.highlight ? "primary" : "outline"}>
-                    Começar
+                <p className={styles.planFit}>{plan.fit}</p>
+
+                {plan.features.length > 0 && (
+                  <ul className={styles.planFeatures}>
+                    {plan.features.map((feature) => (
+                      <li key={feature}>
+                        <IconCheck />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <Link href="/signup" className={styles.planCta}>
+                  <Button fullWidth size="lg" variant={plan.featured ? "primary" : "outline"}>
+                    Começar com {plan.name}
                   </Button>
                 </Link>
-              </div>
+              </article>
             ))}
           </div>
-        </section>
 
-        <section className={styles.sectionAlt}>
-          <div className={styles.securityGrid}>
-            <div>
-              <span className={styles.featureIcon}>
-                <IconShield />
-              </span>
-              <h2>Segurança em primeiro lugar</h2>
-              <p>
-                Isolamento total entre lojas reforçado no banco de dados, credenciais de pagamento sempre
-                criptografadas e comunicação via HTTPS. Sua loja e seus clientes protegidos desde o primeiro dia.
-              </p>
-            </div>
-            <div>
-              <span className={styles.featureIcon}>
-                <IconCreditCard />
-              </span>
-              <h2>Pix direto na sua conta</h2>
-              <p>
-                A CaraffaStore nunca retém o dinheiro das suas vendas — o Pix cai direto na sua própria conta Mercado
-                Pago, com confirmação automática de pagamento.
-              </p>
-            </div>
+          <div className={styles.included}>
+            <p className={styles.includedTitle}>Todos os planos incluem</p>
+            <ul className={styles.includedList}>
+              {INCLUDED.map((item) => (
+                <li key={item}>
+                  <IconCheck />
+                  {item}
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
 
+        {/* ---------------- FAQ ---------------- */}
         <section id="faq" className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2>Perguntas frequentes</h2>
+          <div className={styles.sectionHead}>
+            <p className={styles.sectionLabel}>Dúvidas</p>
+            <h2 className={styles.sectionTitle}>Perguntas que todo lojista faz antes</h2>
           </div>
-          <div className={styles.faqList}>
+
+          <div className={styles.faq}>
             {FAQS.map((item) => (
-              <details key={item.q} className={styles.faqItem}>
-                <summary>{item.q}</summary>
-                <p>{item.a}</p>
+              <details key={item.q} className={styles.faqItem} name="cs-faq">
+                <summary>
+                  <span>{item.q}</span>
+                  <span className={styles.faqSign} aria-hidden="true" />
+                </summary>
+                <div className={styles.faqAnswer}>
+                  <p>{item.a}</p>
+                </div>
               </details>
             ))}
           </div>
         </section>
 
-        <section className={styles.ctaSection}>
-          <h2>Pronto para vender online?</h2>
-          <p>Crie sua loja agora — leva menos de 5 minutos.</p>
-          <Link href="/signup">
-            <Button size="lg">Criar minha loja grátis</Button>
-          </Link>
+        {/* ---------------- CTA final ---------------- */}
+        <section className={styles.finalCta}>
+          <CaraffaMark className={styles.finalMark} />
+          <div className={styles.finalInner}>
+            <h2 className={styles.finalTitle}>Sua loja pode estar no ar hoje.</h2>
+            <p className={styles.finalLead}>
+              Crie a conta, cadastre os primeiros produtos e mande o link para os seus clientes.
+            </p>
+            <Link href="/signup">
+              <Button size="lg" variant="outline" icon={<IconArrowRight />}>
+                Criar minha loja
+              </Button>
+            </Link>
+          </div>
         </section>
       </main>
 
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
-          <Logo size="sm" />
-          <nav className={styles.footerLinks}>
-            <Link href="/termos">Termos de Uso</Link>
-            <Link href="/privacidade">Política de Privacidade</Link>
-            <Link href="/login">Entrar</Link>
-            <Link href="/signup">Criar conta</Link>
+          <div className={styles.footerBrand}>
+            <Logo size="md" />
+            <p>Catálogo, pedidos e Pix para quem vende no bairro, no direct e no grupo da família.</p>
+          </div>
+
+          <nav className={styles.footerNav} aria-label="Rodapé">
+            <div>
+              <p className={styles.footerHeading}>Produto</p>
+              <a href="#recursos">Recursos</a>
+              <a href="#como-funciona">Como funciona</a>
+              <a href="#planos">Planos</a>
+            </div>
+            <div>
+              <p className={styles.footerHeading}>Conta</p>
+              <Link href="/login">Entrar</Link>
+              <Link href="/signup">Criar conta</Link>
+            </div>
+            <div>
+              <p className={styles.footerHeading}>Legal</p>
+              <Link href="/termos">Termos de Uso</Link>
+              <Link href="/privacidade">Privacidade</Link>
+            </div>
           </nav>
-          <p className={styles.footerCopy}>© {new Date().getFullYear()} CaraffaStore. Todos os direitos reservados.</p>
+        </div>
+
+        <div className={styles.footerBase}>
+          <p>© {new Date().getFullYear()} CaraffaStore</p>
+          <p className={styles.footerNote}>
+            <IconShield />
+            Pagamentos processados pelo Mercado Pago
+          </p>
         </div>
       </footer>
     </div>
