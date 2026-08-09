@@ -5,6 +5,13 @@ export const metadata: Metadata = {
 };
 
 export default function PrivacidadePage() {
+  // Server Component: process.env.LEGAL_OPERATOR_CPF é lido só aqui, no
+  // servidor, e nunca chega ao bundle do navegador — sem prefixo
+  // NEXT_PUBLIC_, o Next não o expõe ao client. Sem a variável definida
+  // (ambiente local, por exemplo), a linha de CPF simplesmente não
+  // renderiza — nada de placeholder.
+  const operatorCpf = process.env.LEGAL_OPERATOR_CPF?.trim() || null;
+
   return (
     <main style={{ maxWidth: 720, margin: "0 auto", padding: "2rem 1rem", lineHeight: 1.6 }}>
       <h1>Política de Privacidade</h1>
@@ -15,12 +22,16 @@ export default function PrivacidadePage() {
         </strong>
       </p>
 
-      <h2>1. Operador e controlador dos dados</h2>
+      <h2>1. Responsável pela CaraffaStore e controlador dos dados</h2>
       <p>
-        Operador: Caraffa
+        Responsável pela CaraffaStore: NICOLAS CARAFFA
         <br />
-        CPF: 078.661.751-95
-        <br />
+        {operatorCpf && (
+          <>
+            CPF: {operatorCpf}
+            <br />
+          </>
+        )}
         Contato: caraffastore@gmail.com
       </p>
 
@@ -64,7 +75,7 @@ export default function PrivacidadePage() {
         Os dados são mantidos enquanto a conta/loja estiver ativa e pelo prazo mínimo exigido por
         obrigações legais (fiscais, de defesa em disputas) após o encerramento. Não há hoje um
         prazo de retenção automatizado configurado nesta fase piloto — exclusões são tratadas
-        manualmente mediante solicitação ao contato do operador.
+        manualmente mediante solicitação ao contato do responsável.
       </p>
 
       <h2>7. Segurança</h2>
