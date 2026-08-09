@@ -319,6 +319,48 @@
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--cs-blue-500), var(--cs-blue-600));
+  transform-origin: left center;
+}
+
+/* O nível se enche quando a cena entra — o gesto da marca acontecendo, não
+   ilustrado. `scaleX` em vez de `width`: transform não dispara layout. */
+:global([data-revealed]) .stockFill {
+  animation: cs-fill 820ms var(--cs-ease-out) 320ms both;
+}
+
+@keyframes cs-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* O pedido que ainda não foi pago respira devagar. É o único elemento
+   pulsando na página, e é o único que representa algo em espera. */
+.rowStatus[data-tone="pending"]::before {
+  animation: cs-pending 2.6s var(--cs-ease) infinite;
+}
+
+@keyframes cs-pending {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global([data-revealed]) .stockFill {
+    animation: none;
+  }
+
+  .rowStatus[data-tone="pending"]::before {
+    animation: none;
+  }
 }
 
 .stockCount {
@@ -341,9 +383,16 @@
 /* ============================================================
    Responsivo — a cena reorganiza, não só encolhe
    ============================================================ */
-@media (max-width: 1100px) {
+/* O avanço lateral do card de estoque só cabe quando existe calha para ele.
+   Abaixo de 1340 a viewport não tem essa folga e ele voltaria cortado. */
+@media (max-width: 1340px) {
   .stockCard {
     right: 0;
+  }
+}
+
+@media (max-width: 1100px) {
+  .stockCard {
     top: 8%;
     width: 9.5rem;
   }

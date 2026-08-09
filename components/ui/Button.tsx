@@ -10,6 +10,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
   fullWidth?: boolean;
   icon?: ReactNode;
+  /** `end` põe o ícone depois do texto e o faz deslizar no hover — para setas de avanço. */
+  iconPosition?: "start" | "end";
 }
 
 export function Button({
@@ -18,6 +20,7 @@ export function Button({
   loading = false,
   fullWidth = false,
   icon,
+  iconPosition = "start",
   disabled,
   className,
   children,
@@ -27,10 +30,20 @@ export function Button({
     .filter(Boolean)
     .join(" ");
 
+  const spinner = <span className={styles.spinner} aria-hidden="true" />;
+  const trailing = iconPosition === "end" && !loading;
+
   return (
-    <button className={classes} disabled={disabled || loading} aria-busy={loading || undefined} {...rest}>
-      {loading ? <span className={styles.spinner} aria-hidden="true" /> : icon}
+    <button
+      className={classes}
+      data-icon-end={trailing || undefined}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...rest}
+    >
+      {loading ? spinner : trailing ? null : icon}
       <span>{children}</span>
+      {trailing && <span className={styles.trailingIcon}>{icon}</span>}
     </button>
   );
 }

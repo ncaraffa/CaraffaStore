@@ -2,6 +2,9 @@ import Link from "next/link";
 import { Logo, CaraffaMark } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/Button";
 import { HeroScene } from "./HeroScene";
+import { StoreScene } from "./StoreScene";
+import { ConversationScene } from "./ConversationScene";
+import { RevealRoot } from "./RevealRoot";
 import {
   IconArrowRight,
   IconBox,
@@ -20,6 +23,10 @@ import styles from "./LandingPage.module.css";
    Regra desta página: só afirma o que o produto faz hoje. Sem
    prova social, sem número de clientes, sem depoimento, sem
    "usado por" — nada disso existe ainda e nada disso é inventado.
+
+   Ritmo da página, deliberadamente cinematográfico:
+   impacto → produto → benefício → QUEBRA AZUL → aprofundamento
+   humano → planos → dúvidas → fechamento.
    ============================================================ */
 
 /** Cada plano tem `features: []` enquanto não existe diferenciação real no
@@ -77,7 +84,7 @@ const STEPS = [
     body: "Categorias, fotos, preço e estoque. Você publica cada produto quando quiser.",
   },
   {
-    title: "Conecte o Pix e venda",
+    title: "Mande o link e venda",
     body: "Suas credenciais do Mercado Pago no painel, e cada pedido já nasce com QR Code.",
   },
 ];
@@ -178,6 +185,8 @@ const BENTO = [
 export function LandingPage() {
   return (
     <div className={styles.page}>
+      <RevealRoot />
+
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <Link href="/" className={styles.headerLogo} aria-label="CaraffaStore, página inicial">
@@ -201,21 +210,31 @@ export function LandingPage() {
       </header>
 
       <main>
-        {/* ---------------- Hero ---------------- */}
+        {/* ===================== 1. IMPACTO ===================== */}
         <section className={styles.hero}>
           <div className={styles.heroGrid}>
             <div className={styles.heroText}>
-              <p className={styles.eyebrow}>Loja virtual para pequenos comerciantes</p>
-              <h1 className={styles.heroTitle}>
+              <p className={styles.eyebrow} data-reveal style={{ "--reveal-delay": "0ms" } as React.CSSProperties}>
+                Loja virtual para pequenos comerciantes
+              </p>
+              <h1 className={styles.heroTitle} data-reveal style={{ "--reveal-delay": "70ms" } as React.CSSProperties}>
                 Do catálogo ao <span className={styles.heroAccent}>Pix na sua conta</span>.
               </h1>
-              <p className={styles.heroSubtitle}>
-                Monte o catálogo, compartilhe o link da loja e receba por Pix direto na sua conta do Mercado Pago —
-                sem comissão da CaraffaStore sobre o que você vende.
+              <p
+                className={styles.heroSubtitle}
+                data-reveal
+                style={{ "--reveal-delay": "150ms" } as React.CSSProperties}
+              >
+                Monte o catálogo, mande o link para os seus clientes e receba por Pix direto na sua conta do Mercado
+                Pago — sem comissão da CaraffaStore sobre o que você vende.
               </p>
-              <div className={styles.heroActions}>
+              <div
+                className={styles.heroActions}
+                data-reveal
+                style={{ "--reveal-delay": "220ms" } as React.CSSProperties}
+              >
                 <Link href="/signup">
-                  <Button size="lg" icon={<IconArrowRight />}>
+                  <Button size="lg" icon={<IconArrowRight />} iconPosition="end">
                     Criar minha loja
                   </Button>
                 </Link>
@@ -227,7 +246,7 @@ export function LandingPage() {
               </div>
 
               {/* No lugar de prova social inventada: três fatos verificáveis. */}
-              <ul className={styles.heroFacts}>
+              <ul className={styles.heroFacts} data-reveal style={{ "--reveal-delay": "290ms" } as React.CSSProperties}>
                 <li>
                   <span className={styles.factKey}>Pix</span>
                   direto na sua conta
@@ -243,15 +262,15 @@ export function LandingPage() {
               </ul>
             </div>
 
-            <div className={styles.heroScene}>
+            <div className={styles.heroScene} data-reveal="lift" style={{ "--reveal-delay": "180ms" } as React.CSSProperties}>
               <HeroScene />
             </div>
           </div>
         </section>
 
-        {/* ---------------- Recursos (bento) ---------------- */}
+        {/* ===================== 2. PRODUTO ===================== */}
         <section id="recursos" className={styles.section}>
-          <div className={styles.sectionHead}>
+          <div className={styles.sectionHead} data-reveal>
             <p className={styles.sectionLabel}>Recursos</p>
             <h2 className={styles.sectionTitle}>Tudo que a loja precisa para funcionar sozinha</h2>
             <p className={styles.sectionLead}>
@@ -260,8 +279,14 @@ export function LandingPage() {
           </div>
 
           <div className={styles.bento}>
-            {BENTO.map((cell) => (
-              <article key={cell.key} className={styles.bentoCell} data-cell={cell.key}>
+            {BENTO.map((cell, index) => (
+              <article
+                key={cell.key}
+                className={styles.bentoCell}
+                data-cell={cell.key}
+                data-reveal
+                style={{ "--reveal-delay": `${index * 55}ms` } as React.CSSProperties}
+              >
                 <span className={styles.bentoIcon}>{cell.icon}</span>
                 <h3>{cell.title}</h3>
                 <p>{cell.body}</p>
@@ -284,10 +309,10 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* ---------------- O que não fazemos ---------------- */}
+        {/* ===================== 3. BENEFÍCIO ===================== */}
         <section className={styles.bandSection}>
           <div className={styles.band}>
-            <div className={styles.bandHead}>
+            <div className={styles.bandHead} data-reveal="left">
               <p className={styles.sectionLabel}>Sem letra miúda</p>
               <h2 className={styles.sectionTitle}>O que a CaraffaStore não faz</h2>
               <p className={styles.sectionLead}>
@@ -295,8 +320,8 @@ export function LandingPage() {
               </p>
             </div>
             <ul className={styles.bandList}>
-              {NOT_DOING.map((item) => (
-                <li key={item.title}>
+              {NOT_DOING.map((item, index) => (
+                <li key={item.title} data-reveal style={{ "--reveal-delay": `${index * 70}ms` } as React.CSSProperties}>
                   <h3>{item.title}</h3>
                   <p>{item.body}</p>
                 </li>
@@ -305,27 +330,102 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* ---------------- Como funciona ---------------- */}
-        <section id="como-funciona" className={styles.section}>
-          <div className={styles.sectionHead}>
-            <p className={styles.sectionLabel}>Como funciona</p>
-            <h2 className={styles.sectionTitle}>Quatro passos até a primeira venda</h2>
-          </div>
+        {/* ============ 4. A QUEBRA — o momento da página ============ */}
+        <section className={styles.blueMoment}>
+          <div className={styles.blueGrid}>
+            <div className={styles.blueText}>
+              <p className={styles.blueLabel} data-reveal="left">
+                Comece hoje
+              </p>
+              <h2
+                className={styles.blueTitle}
+                data-reveal="left"
+                style={{ "--reveal-delay": "70ms" } as React.CSSProperties}
+              >
+                Sua loja pode estar no ar <span className={styles.blueAccent}>hoje</span>.
+              </h2>
+              <p
+                className={styles.blueLead}
+                data-reveal="left"
+                style={{ "--reveal-delay": "140ms" } as React.CSSProperties}
+              >
+                Crie a conta, cadastre os primeiros produtos e mande o link. Do outro lado, seu cliente escolhe, paga
+                no Pix e o pedido aparece no seu painel.
+              </p>
 
-          <ol className={styles.steps}>
-            {STEPS.map((step, index) => (
-              <li key={step.title} className={styles.step}>
-                <span className={styles.stepIndex}>{String(index + 1).padStart(2, "0")}</span>
-                <h3>{step.title}</h3>
-                <p>{step.body}</p>
-              </li>
-            ))}
-          </ol>
+              <ul
+                className={styles.blueChecks}
+                data-reveal="left"
+                style={{ "--reveal-delay": "210ms" } as React.CSSProperties}
+              >
+                <li>
+                  <IconCheck /> Sem instalar nada
+                </li>
+                <li>
+                  <IconCheck /> Sem cartão para testar o painel
+                </li>
+                <li>
+                  <IconCheck /> Sem comissão por venda
+                </li>
+              </ul>
+
+              <div
+                className={styles.blueActions}
+                data-reveal="left"
+                style={{ "--reveal-delay": "280ms" } as React.CSSProperties}
+              >
+                <Link href="/signup">
+                  <Button size="lg" icon={<IconArrowRight />} iconPosition="end">
+                    Criar minha loja
+                  </Button>
+                </Link>
+                <a href="#planos" className={styles.blueLink}>
+                  Ver planos
+                </a>
+              </div>
+            </div>
+
+            <div className={styles.blueScene} data-reveal="lift" style={{ "--reveal-delay": "120ms" } as React.CSSProperties}>
+              <StoreScene />
+            </div>
+          </div>
         </section>
 
-        {/* ---------------- Planos ---------------- */}
+        {/* ============ 5. APROFUNDAMENTO + HUMANIDADE ============ */}
+        <section id="como-funciona" className={styles.section}>
+          <div className={styles.sectionHead} data-reveal>
+            <p className={styles.sectionLabel}>Como funciona</p>
+            <h2 className={styles.sectionTitle}>Da conta criada ao primeiro pedido pago</h2>
+            <p className={styles.sectionLead}>
+              Quatro passos no painel — e a venda acontecendo onde ela já acontece hoje: na conversa com o cliente.
+            </p>
+          </div>
+
+          <div className={styles.flowGrid}>
+            <ol className={styles.steps}>
+              {STEPS.map((step, index) => (
+                <li
+                  key={step.title}
+                  className={styles.step}
+                  data-reveal="left"
+                  style={{ "--reveal-delay": `${index * 80}ms` } as React.CSSProperties}
+                >
+                  <span className={styles.stepIndex}>{String(index + 1).padStart(2, "0")}</span>
+                  <h3>{step.title}</h3>
+                  <p>{step.body}</p>
+                </li>
+              ))}
+            </ol>
+
+            <div className={styles.flowHuman} data-reveal="right" style={{ "--reveal-delay": "120ms" } as React.CSSProperties}>
+              <ConversationScene />
+            </div>
+          </div>
+        </section>
+
+        {/* ===================== 6. PLANOS ===================== */}
         <section id="planos" className={styles.sectionAlt}>
-          <div className={styles.sectionHead}>
+          <div className={styles.sectionHead} data-reveal>
             <p className={styles.sectionLabel}>Planos</p>
             <h2 className={styles.sectionTitle}>Escolha o tamanho da sua operação</h2>
             <p className={styles.sectionLead}>
@@ -334,8 +434,14 @@ export function LandingPage() {
           </div>
 
           <div className={styles.plans}>
-            {PLANS.map((plan) => (
-              <article key={plan.code} className={styles.plan} data-featured={plan.featured || undefined}>
+            {PLANS.map((plan, index) => (
+              <article
+                key={plan.code}
+                className={styles.plan}
+                data-featured={plan.featured || undefined}
+                data-reveal="lift"
+                style={{ "--reveal-delay": `${index * 90}ms` } as React.CSSProperties}
+              >
                 {plan.featured && <span className={styles.planBadge}>Recomendado</span>}
                 {/* Nível — o mesmo motivo do símbolo da marca. Ordena os planos
                     sem afirmar nenhum recurso que ainda não exista. */}
@@ -372,7 +478,7 @@ export function LandingPage() {
             ))}
           </div>
 
-          <div className={styles.included}>
+          <div className={styles.included} data-reveal>
             <p className={styles.includedTitle}>Todos os planos incluem</p>
             <ul className={styles.includedList}>
               {INCLUDED.map((item) => (
@@ -385,16 +491,22 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* ---------------- FAQ ---------------- */}
+        {/* ===================== 7. DÚVIDAS ===================== */}
         <section id="faq" className={styles.section}>
-          <div className={styles.sectionHead}>
+          <div className={styles.sectionHead} data-reveal>
             <p className={styles.sectionLabel}>Dúvidas</p>
             <h2 className={styles.sectionTitle}>Perguntas que todo lojista faz antes</h2>
           </div>
 
           <div className={styles.faq}>
-            {FAQS.map((item) => (
-              <details key={item.q} className={styles.faqItem} name="cs-faq">
+            {FAQS.map((item, index) => (
+              <details
+                key={item.q}
+                className={styles.faqItem}
+                name="cs-faq"
+                data-reveal
+                style={{ "--reveal-delay": `${Math.min(index, 4) * 45}ms` } as React.CSSProperties}
+              >
                 <summary>
                   <span>{item.q}</span>
                   <span className={styles.faqSign} aria-hidden="true" />
@@ -406,25 +518,23 @@ export function LandingPage() {
             ))}
           </div>
         </section>
-
-        {/* ---------------- CTA final ---------------- */}
-        <section className={styles.finalCta}>
-          <CaraffaMark className={styles.finalMark} />
-          <div className={styles.finalInner}>
-            <h2 className={styles.finalTitle}>Sua loja pode estar no ar hoje.</h2>
-            <p className={styles.finalLead}>
-              Crie a conta, cadastre os primeiros produtos e mande o link para os seus clientes.
-            </p>
-            <Link href="/signup">
-              <Button size="lg" variant="outline" icon={<IconArrowRight />}>
-                Criar minha loja
-              </Button>
-            </Link>
-          </div>
-        </section>
       </main>
 
+      {/* ===================== 8. FECHAMENTO ===================== */}
       <footer className={styles.footer}>
+        <div className={styles.closer} data-reveal>
+          <CaraffaMark className={styles.closerMark} />
+          <div className={styles.closerText}>
+            <h2>Pronto para receber o primeiro pedido?</h2>
+            <p>Leva menos tempo do que montar uma vitrine.</p>
+          </div>
+          <Link href="/signup" className={styles.closerCta}>
+            <Button size="lg" icon={<IconArrowRight />} iconPosition="end">
+              Criar minha loja
+            </Button>
+          </Link>
+        </div>
+
         <div className={styles.footerInner}>
           <div className={styles.footerBrand}>
             <Logo size="md" />

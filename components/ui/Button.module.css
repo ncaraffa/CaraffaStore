@@ -36,6 +36,17 @@
   flex-shrink: 0;
 }
 
+/* A seta de avanço desliza no hover — a resposta física que diz
+   "isto leva você adiante", sem atrasar o clique em nada. */
+.trailingIcon {
+  display: inline-flex;
+  transition: transform var(--cs-duration) var(--cs-ease-out);
+}
+
+.btn:hover:not(:disabled) .trailingIcon {
+  transform: translateX(3px);
+}
+
 /* ---- Tamanhos: alturas fixas para nada dançar numa mesma linha ---- */
 .sm {
   height: 2.125rem;

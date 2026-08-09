@@ -1,0 +1,181 @@
+.scene {
+  position: relative;
+  width: 100%;
+  max-width: 34rem;
+  margin-inline: auto;
+  isolation: isolate;
+}
+
+/* Luz por trás da loja — sobre o azul escuro, é o que dá volume. */
+.halo {
+  position: absolute;
+  inset: -14% -18% -22% -18%;
+  background: radial-gradient(52% 46% at 50% 52%, rgba(148, 182, 255, 0.42), transparent 70%);
+  filter: blur(6px);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.store {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 28px 46px rgba(4, 12, 40, 0.42));
+}
+
+/* ============================================================
+   Cards de comércio flutuando ao redor da fachada
+   ============================================================ */
+.card {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.8125rem;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: 0 16px 34px -14px rgba(4, 12, 40, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  white-space: nowrap;
+  /* Respiro lentíssimo e dessincronizado: a cena nunca fica congelada,
+     mas nada aqui compete com a leitura do texto ao lado. */
+  animation: cs-float 7s var(--cs-ease) infinite;
+}
+
+/* Escapes em rem, não em %: percentual da largura da cena cresce junto com
+   ela e o card acaba cortado pela borda da viewport em telas médias. */
+.card[data-card="order"] {
+  top: 8%;
+  left: -1.75rem;
+  animation-delay: -0.4s;
+}
+
+.card[data-card="pix"] {
+  top: 44%;
+  right: -1.75rem;
+  animation-delay: -2.8s;
+}
+
+.card[data-card="stock"] {
+  bottom: 4%;
+  left: -1rem;
+  animation-delay: -5.1s;
+}
+
+@keyframes cs-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -7px, 0);
+  }
+}
+
+.cardIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: var(--cs-radius-md);
+  flex-shrink: 0;
+}
+
+.cardIcon svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+.cardIcon[data-tone="blue"] {
+  background: var(--cs-blue-50);
+  border: 1px solid var(--cs-blue-100);
+  color: var(--cs-blue-600);
+}
+
+.cardIcon[data-tone="green"] {
+  background: var(--cs-success-bg);
+  border: 1px solid var(--cs-success-border);
+  color: var(--cs-success-text);
+}
+
+.cardText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.cardText strong {
+  font-size: 0.78125rem;
+  font-weight: 600;
+  color: var(--cs-ink);
+}
+
+.cardText > span {
+  font-size: 0.6875rem;
+  color: var(--cs-ink-muted);
+}
+
+.cardValue {
+  font-family: var(--cs-font-display);
+  font-size: 0.875rem !important;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--cs-success-text) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   Celular: a cena é a peça central da seção, não um enfeite.
+   A loja cresce, e os cards saem de cima da fachada para não
+   cobrir a vitrine numa largura de 390px.
+   ============================================================ */
+@media (max-width: 720px) {
+  .scene {
+    max-width: 24rem;
+  }
+
+  .card {
+    padding: 0.5rem 0.6875rem;
+    gap: 0.5rem;
+  }
+
+  .card[data-card="order"] {
+    top: 2%;
+    left: -0.5rem;
+  }
+
+  .card[data-card="pix"] {
+    top: 40%;
+    right: -0.5rem;
+  }
+
+  /* Três cards sobre uma fachada estreita viram ruído — o terceiro sai. */
+  .card[data-card="stock"] {
+    display: none;
+  }
+
+  .cardIcon {
+    width: 1.625rem;
+    height: 1.625rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .scene {
+    max-width: 20rem;
+  }
+
+  .cardText strong {
+    font-size: 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+  }
+}

@@ -136,7 +136,9 @@
   /* ---------- Contêineres --------------------------------------- */
   --cs-container: 1200px;
   --cs-container-narrow: 760px;
-  --cs-container-wide: 1360px;
+  /* Trilha larga: usada por hero, bento, quebra azul e rodapé. 1320 deixa
+     ~52px de calha em 1425 — a página ocupa a tela sem encostar nela. */
+  --cs-container-wide: 1320px;
 
   /* ---------- Camadas ------------------------------------------- */
   --cs-z-base: 1;
@@ -294,6 +296,50 @@ button {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* ============================================================
+   Scroll reveal
+   Um único IntersectionObserver na página inteira marca
+   `data-revealed` (components/marketing/RevealRoot). Nada de
+   listener de scroll, nada de JS por elemento — só transform e
+   opacity, que a GPU resolve sem repaint.
+   ============================================================ */
+[data-reveal] {
+  opacity: 0;
+  transform: translate3d(var(--reveal-x, 0), var(--reveal-y, 18px), 0) scale(var(--reveal-scale, 1));
+  transition:
+    opacity 640ms var(--cs-ease-out),
+    transform 640ms var(--cs-ease-out);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+[data-reveal="left"] {
+  --reveal-x: -22px;
+  --reveal-y: 0;
+}
+
+[data-reveal="right"] {
+  --reveal-x: 22px;
+  --reveal-y: 0;
+}
+
+/* Para superfícies grandes (mockups, painéis): entram ganhando corpo. */
+[data-reveal="lift"] {
+  --reveal-y: 26px;
+  --reveal-scale: 0.985;
+}
+
+[data-reveal][data-revealed] {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

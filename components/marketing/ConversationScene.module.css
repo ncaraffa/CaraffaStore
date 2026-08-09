@@ -1,0 +1,195 @@
+.scene {
+  position: relative;
+  width: 100%;
+}
+
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-3);
+  padding: var(--cs-space-6);
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-xl);
+  box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
+}
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--cs-space-2);
+}
+
+.row[data-from="customer"] {
+  justify-content: flex-end;
+}
+
+/* ---- Avatares: formas abstratas, nunca foto de pessoa real ---- */
+.avatar,
+.avatarSpacer {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cs-radius-full);
+  overflow: hidden;
+}
+
+.avatar svg {
+  width: 100%;
+  height: 100%;
+  transform: translateY(2px) scale(1.05);
+}
+
+.avatar[data-tone="merchant"] {
+  background: var(--cs-blue-100);
+  color: var(--cs-blue-700);
+}
+
+.avatar[data-tone="customer"] {
+  background: var(--cs-surface-sunken);
+  color: var(--cs-ink-muted);
+}
+
+/* ---- Balões ---- */
+.bubble {
+  max-width: 19rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--cs-radius-lg);
+  font-size: var(--cs-text-sm);
+  line-height: 1.5;
+}
+
+.bubble[data-from="merchant"] {
+  background: var(--cs-blue-600);
+  color: #fff;
+  border-bottom-left-radius: var(--cs-radius-xs);
+}
+
+.bubble[data-from="customer"] {
+  background: var(--cs-surface-sunken);
+  color: var(--cs-ink);
+  border-bottom-right-radius: var(--cs-radius-xs);
+}
+
+/* ---- Prévia do link da loja ---- */
+.linkCard {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-sm);
+  max-width: 19rem;
+  transition:
+    transform var(--cs-duration) var(--cs-ease),
+    box-shadow var(--cs-duration) var(--cs-ease);
+}
+
+.thread:hover .linkCard {
+  transform: translateY(-2px);
+  box-shadow: var(--cs-shadow-md);
+}
+
+.linkMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0.25rem;
+  border-radius: var(--cs-radius-md);
+  background: linear-gradient(150deg, var(--cs-blue-500), var(--cs-blue-700));
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.linkMark svg {
+  width: 100%;
+  height: 100%;
+}
+
+.linkText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.linkText strong {
+  font-size: var(--cs-text-sm);
+  font-weight: 600;
+  color: var(--cs-ink);
+}
+
+.linkText > span {
+  font-family: var(--cs-font-mono);
+  font-size: 0.6875rem;
+  color: var(--cs-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Fecho do sistema ---- */
+.systemLine {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  margin-top: var(--cs-space-2);
+  padding-top: var(--cs-space-4);
+  border-top: 1px dashed var(--cs-line-strong);
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
+}
+
+.systemIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-success-bg);
+  border: 1px solid var(--cs-success-border);
+  color: var(--cs-success-text);
+  flex-shrink: 0;
+}
+
+.systemIcon svg {
+  width: 0.6875rem;
+  height: 0.6875rem;
+}
+
+.systemCode {
+  font-family: var(--cs-font-mono);
+  color: var(--cs-ink);
+}
+
+.caption {
+  margin-top: var(--cs-space-3);
+  font-family: var(--cs-font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  .thread {
+    padding: var(--cs-space-5);
+    gap: var(--cs-space-2);
+  }
+
+  .bubble,
+  .linkCard {
+    max-width: 100%;
+  }
+}

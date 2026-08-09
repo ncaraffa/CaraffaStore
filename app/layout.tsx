@@ -40,7 +40,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR" className={[display.variable, inter.variable, mono.variable].join(" ")}>
-      <body>{children}</body>
+      <body>
+        {/* Sem JS o scroll reveal nunca dispara — o conteúdo não pode ficar invisível. */}
+        <noscript>
+          <style>{`[data-reveal]{opacity:1!important;transform:none!important}`}</style>
+        </noscript>
+        {children}
+      </body>
     </html>
   );
 }
