@@ -1,3 +1,181 @@
+/* ============================================================
+   CaraffaStore — Linguagem visual 2.0
+   Tokens, reset e primitivas globais. Componentes de UI vivem em
+   components/ui/*.module.css — este arquivo nunca define estilo
+   específico de página.
+
+   Princípios:
+   - Branco domina; azul conduz o olhar; navy carrega o texto.
+   - Um único matiz de azul (~224°) em rampa fechada de 50→950.
+     Não existe "outro azul" no produto.
+   - Profundidade vem de camadas de luz e sombra azulada, nunca de
+     bordas grossas ou sombras cinzas pesadas.
+   ============================================================ */
+
+:root {
+  /* ---------- Rampa de azul da marca (matiz único ~224°) -------- */
+  --cs-blue-50: #f0f5ff;
+  --cs-blue-100: #dee9ff;
+  --cs-blue-200: #c2d6ff;
+  --cs-blue-300: #94b6ff;
+  --cs-blue-400: #5c8dff;
+  --cs-blue-500: #2e6bff;
+  --cs-blue-600: #1b4dff; /* azul de ação da CaraffaStore */
+  --cs-blue-700: #143bd1;
+  --cs-blue-800: #122fa0;
+  --cs-blue-900: #142a72;
+  --cs-blue-950: #0c1b33; /* navy — texto de título */
+
+  /* ---------- Tinta (cinzas frios, mesma família do azul) ------- */
+  --cs-ink: #0c1b33; /* 15.9:1 — títulos */
+  --cs-ink-body: #33425c; /* 10.1:1 — corpo */
+  --cs-ink-muted: #64728e; /* 4.9:1 — secundário, legenda, placeholder */
+  /* `faint` NÃO passa em 4.5:1 e por isso é reservado a decoração:
+     divisor, traço de ícone, borda. Nunca use em texto legível. */
+  --cs-ink-faint: #8a97b2;
+  --cs-ink-inverse: #ffffff;
+
+  /* ---------- Superfícies --------------------------------------- */
+  --cs-white: #ffffff;
+  --cs-surface: #f7f9fd; /* off-white frio */
+  --cs-surface-sunken: #eff3fa; /* fundo rebaixado / trilhos */
+  --cs-surface-blue: #f4f7ff; /* faixa atmosférica azul */
+  --cs-line: #e4eaf4;
+  --cs-line-strong: #cfd9ea;
+
+  /* ---------- Semânticos ---------------------------------------- */
+  --cs-success: #0e9f6e;
+  --cs-success-bg: #ecfdf5;
+  --cs-success-text: #06603f;
+  --cs-success-border: #a7f3d0;
+  --cs-warning: #d97706;
+  --cs-warning-bg: #fffbeb;
+  --cs-warning-text: #92400e;
+  --cs-warning-border: #fde68a;
+  --cs-danger: #dc2626;
+  --cs-danger-bg: #fef2f2;
+  --cs-danger-text: #b3181d;
+  --cs-danger-border: #fecaca;
+  --cs-neutral-bg: #eff3fa;
+  --cs-neutral-text: #4a5a78;
+
+  /* ---------- Espaçamento (escala 4pt com saltos deliberados) ---- */
+  --cs-space-1: 0.25rem;
+  --cs-space-2: 0.5rem;
+  --cs-space-3: 0.75rem;
+  --cs-space-4: 1rem;
+  --cs-space-5: 1.25rem;
+  --cs-space-6: 1.5rem;
+  --cs-space-8: 2rem;
+  --cs-space-10: 2.5rem;
+  --cs-space-12: 3rem;
+  --cs-space-16: 4rem;
+  --cs-space-20: 5rem;
+  --cs-space-24: 6rem;
+  /* Respiro vertical entre seções de página pública — fluido. */
+  --cs-section-y: clamp(4.5rem, 3rem + 6vw, 8rem);
+
+  /* ---------- Raio (5 degraus, nunca improvisado) ---------------- */
+  --cs-radius-xs: 0.25rem;
+  --cs-radius-sm: 0.375rem;
+  --cs-radius-md: 0.625rem;
+  --cs-radius-lg: 0.875rem;
+  --cs-radius-xl: 1.25rem;
+  --cs-radius-2xl: 1.75rem;
+  --cs-radius-full: 999px;
+
+  /* ---------- Profundidade -------------------------------------- *
+   * Sombra azulada (12,27,51), nunca preta. Cada degrau combina um
+   * contato curto com uma difusão longa — é isso que faz uma página
+   * branca ter camadas em vez de ficar chapada.                    */
+  --cs-shadow-xs: 0 1px 2px rgba(12, 27, 51, 0.05);
+  --cs-shadow-sm: 0 1px 2px rgba(12, 27, 51, 0.06), 0 2px 6px -1px rgba(12, 27, 51, 0.05);
+  --cs-shadow-md: 0 2px 4px -1px rgba(12, 27, 51, 0.05), 0 8px 20px -6px rgba(12, 27, 51, 0.1);
+  --cs-shadow-lg: 0 4px 8px -2px rgba(12, 27, 51, 0.06), 0 20px 44px -12px rgba(12, 27, 51, 0.16);
+  --cs-shadow-xl: 0 8px 16px -4px rgba(12, 27, 51, 0.07), 0 36px 80px -20px rgba(12, 27, 51, 0.22);
+  /* Realce superior de 1px: separa a superfície branca do fundo. */
+  --cs-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  --cs-glow-blue: 0 10px 28px -10px rgba(27, 77, 255, 0.45);
+  --cs-glow-blue-strong: 0 18px 48px -14px rgba(27, 77, 255, 0.55);
+  --cs-ring: 0 0 0 3px rgba(27, 77, 255, 0.2);
+  --cs-ring-danger: 0 0 0 3px rgba(220, 38, 38, 0.18);
+
+  /* ---------- Tipografia ---------------------------------------- *
+   * Três papéis, nunca misturados: display carrega personalidade,
+   * Inter carrega legibilidade de UI, mono carrega dado literal
+   * (código de pedido, chave Pix, credencial).                     */
+  --cs-font-display: var(--font-display), "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --cs-font-sans: var(--font-inter, "Inter"), -apple-system, "Segoe UI", Roboto, sans-serif;
+  --cs-font-mono: var(--font-mono), "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --cs-text-display: clamp(2.5rem, 1.4rem + 3.6vw, 4.5rem);
+  --cs-text-h1: clamp(2rem, 1.45rem + 2.2vw, 3rem);
+  --cs-text-h2: clamp(1.625rem, 1.3rem + 1.3vw, 2.25rem);
+  --cs-text-h3: 1.25rem;
+  --cs-text-lg: 1.0625rem;
+  --cs-text-base: 1rem;
+  --cs-text-sm: 0.875rem;
+  --cs-text-xs: 0.8125rem;
+  --cs-text-label: 0.6875rem;
+
+  --cs-tracking-display: -0.03em;
+  --cs-tracking-tight: -0.02em;
+  --cs-tracking-label: 0.12em;
+
+  --cs-leading-display: 1.02;
+  --cs-leading-heading: 1.15;
+  --cs-leading-body: 1.6;
+
+  /* ---------- Movimento ----------------------------------------- */
+  --cs-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --cs-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --cs-duration-fast: 120ms;
+  --cs-duration: 180ms;
+  --cs-duration-slow: 320ms;
+
+  /* ---------- Contêineres --------------------------------------- */
+  --cs-container: 1200px;
+  --cs-container-narrow: 760px;
+  /* Trilha larga: usada por hero, bento, quebra azul e rodapé. 1320 deixa
+     ~52px de calha em 1425 — a página ocupa a tela sem encostar nela. */
+  --cs-container-wide: 1320px;
+
+  /* ---------- Camadas ------------------------------------------- */
+  --cs-z-base: 1;
+  --cs-z-sticky: 20;
+  --cs-z-drawer: 40;
+  --cs-z-backdrop: 50;
+  --cs-z-modal: 60;
+  --cs-z-toast: 70;
+
+  /* ============================================================
+     Aliases legados — as rotas ainda não migradas continuam
+     funcionando e já herdam a paleta nova. Removidos conforme
+     cada página é refeita.
+     ============================================================ */
+  --cs-bg: var(--cs-white);
+  --cs-surface-alt: var(--cs-surface-sunken);
+  --cs-surface-hover: var(--cs-blue-50);
+  --cs-border: var(--cs-line);
+  --cs-border-strong: var(--cs-line-strong);
+  --cs-text: var(--cs-ink);
+  --cs-text-secondary: var(--cs-ink-body);
+  --cs-text-muted: var(--cs-ink-muted);
+  --cs-text-inverse: var(--cs-ink-inverse);
+  --cs-primary-50: var(--cs-blue-50);
+  --cs-primary-100: var(--cs-blue-100);
+  --cs-primary-200: var(--cs-blue-200);
+  --cs-primary-500: var(--cs-blue-500);
+  --cs-primary-600: var(--cs-blue-600);
+  --cs-primary-700: var(--cs-blue-700);
+  --cs-primary-900: var(--cs-blue-900);
+  --cs-danger-600: var(--cs-danger);
+  --cs-danger-700: var(--cs-danger-text);
+  --cs-shadow-focus: var(--cs-ring);
+
+  color-scheme: light;
+}
+
 *,
 *::before,
 *::after {
@@ -5,628 +183,172 @@
 }
 
 html {
-  color-scheme: light dark;
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  line-height: 1.5;
-  color: #1a1a1a;
-  background: #f7f7f8;
+  font-family: var(--cs-font-sans);
+  font-size: var(--cs-text-base);
+  line-height: var(--cs-leading-body);
+  color: var(--cs-ink-body);
+  background: var(--cs-white);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #f2f2f2;
-    background: #17181c;
-  }
+h1,
+h2,
+h3,
+h4,
+h5 {
+  font-family: var(--cs-font-display);
+  font-weight: 700;
+  line-height: var(--cs-leading-heading);
+  letter-spacing: var(--cs-tracking-tight);
+  color: var(--cs-ink);
+  margin: 0;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
 }
 
 a {
-  color: inherit;
+  color: var(--cs-blue-600);
+  text-underline-offset: 0.2em;
 }
 
-main {
-  padding: 1.5rem;
-  max-width: 960px;
-  margin: 0 auto;
+img,
+svg {
+  max-width: 100%;
 }
 
-.auth-shell {
-  min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
+img {
+  display: block;
 }
 
-.auth-card {
-  width: 100%;
-  max-width: 26rem;
-  padding: 2rem;
-  border-radius: 0.75rem;
-  background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+button {
+  font-family: inherit;
 }
 
-@media (prefers-color-scheme: dark) {
-  .auth-card {
-    background: #22232a;
-    box-shadow: none;
-    border: 1px solid #34353d;
-  }
-}
-
-.auth-card h1 {
-  font-size: 1.25rem;
-  margin: 0 0 1.25rem;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin-bottom: 1rem;
-}
-
-.form-field label {
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.form-field input,
-.form-field select {
-  padding: 0.6rem 0.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid #c7c7cc;
-  font-size: 1rem;
-  background: inherit;
-  color: inherit;
-  width: 100%;
-}
-
-.form-field input:focus-visible,
-.form-field select:focus-visible,
-button:focus-visible,
-a:focus-visible {
-  outline: 2px solid #2563eb;
+:focus-visible {
+  outline: 2px solid var(--cs-blue-600);
   outline-offset: 2px;
+  border-radius: var(--cs-radius-sm);
 }
 
-.form-field small {
-  font-size: 0.8rem;
-  opacity: 0.75;
-}
+/* ============================================================
+   Primitivas globais
+   ============================================================ */
 
-.form-hint {
-  font-size: 0.8rem;
-  opacity: 0.75;
-  margin-top: -0.5rem;
-  margin-bottom: 1rem;
-}
-
-button[type="submit"] {
+.cs-container {
   width: 100%;
-  padding: 0.7rem 1rem;
-  border-radius: 0.5rem;
-  border: none;
-  background: #2563eb;
-  color: white;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
+  max-width: var(--cs-container);
+  margin: 0 auto;
+  padding: 0 var(--cs-space-6);
 }
 
-button[type="submit"]:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.form-status {
-  margin: 0 0 1rem;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  font-size: 0.9rem;
-}
-
-.form-status[data-tone="error"] {
-  background: #fef2f2;
-  color: #991b1b;
-}
-
-.form-status[data-tone="success"] {
-  background: #f0fdf4;
-  color: #166534;
-}
-
-@media (prefers-color-scheme: dark) {
-  .form-status[data-tone="error"] {
-    background: #3a1414;
-    color: #fca5a5;
-  }
-  .form-status[data-tone="success"] {
-    background: #142a18;
-    color: #86efac;
-  }
-}
-
-.auth-links {
-  margin-top: 1.25rem;
-  font-size: 0.875rem;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.step-list {
-  padding-left: 1.1rem;
-  font-size: 0.9rem;
-}
-
-.step-list li[data-done="true"] {
-  opacity: 0.6;
-}
-
-/* ===== TASK-003 — painel de catálogo e loja pública ===== */
-
-main {
-  max-width: 1080px;
-}
-
-.dashboard-nav {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin: 1rem 0 1.5rem;
-  font-size: 0.9rem;
-}
-
-.dashboard-nav a[aria-current="true"] {
-  font-weight: 700;
-  text-decoration: underline;
-}
-
-.table-wrap {
-  overflow-x: auto;
-  margin-top: 1rem;
-}
-
-.data-table {
+.cs-container-wide {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
+  max-width: var(--cs-container-wide);
+  margin: 0 auto;
+  padding: 0 var(--cs-space-6);
 }
 
-.data-table th,
-.data-table td {
-  text-align: left;
-  padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #e5e5ea;
-  white-space: nowrap;
-}
-
-@media (prefers-color-scheme: dark) {
-  .data-table th,
-  .data-table td {
-    border-bottom-color: #34353d;
+@media (max-width: 640px) {
+  .cs-container,
+  .cs-container-wide {
+    padding: 0 var(--cs-space-5);
   }
 }
 
-.table-actions {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+/* Rótulo utilitário em mono — usado em eyebrows, códigos e dados. */
+.cs-label {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
 }
 
-.btn-link {
-  background: none;
-  border: none;
+.cs-mono {
+  font-family: var(--cs-font-mono);
+  font-variant-ligatures: none;
+}
+
+/* Números tabulares: colunas de preço e quantidade nunca dançam. */
+.cs-numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   padding: 0;
-  color: #2563eb;
-  font-size: inherit;
-  cursor: pointer;
-  text-decoration: underline;
-  width: auto;
-}
-
-.btn-link[data-tone="danger"] {
-  color: #dc2626;
-}
-
-.btn-link:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  text-decoration: none;
-}
-
-.badge {
-  display: inline-block;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  margin-left: 0.4rem;
-}
-
-.badge[data-tone="success"] {
-  background: #f0fdf4;
-  color: #166534;
-}
-
-.badge[data-tone="warning"] {
-  background: #fffbeb;
-  color: #92400e;
-}
-
-.badge[data-tone="neutral"] {
-  background: #f4f4f5;
-  color: #52525b;
-}
-
-@media (prefers-color-scheme: dark) {
-  .badge[data-tone="success"] {
-    background: #142a18;
-    color: #86efac;
-  }
-  .badge[data-tone="warning"] {
-    background: #3a2a10;
-    color: #fcd34d;
-  }
-  .badge[data-tone="neutral"] {
-    background: #2a2b32;
-    color: #d4d4d8;
-  }
-}
-
-.image-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 1rem;
-  margin: 1rem 0;
-}
-
-.image-grid-item {
-  margin: 0;
-  border: 1px solid #e5e5ea;
-  border-radius: 0.5rem;
-  padding: 0.5rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  .image-grid-item {
-    border-color: #34353d;
-  }
-}
-
-.image-grid-item img {
-  width: 100%;
-  height: 120px;
-  object-fit: cover;
-  border-radius: 0.35rem;
-}
-
-.image-grid-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-top: 0.5rem;
-  font-size: 0.8rem;
-}
-
-.storefront-search {
-  display: flex;
-  gap: 0.5rem;
-  margin: 1rem 0;
-}
-
-.storefront-search input {
-  flex: 1;
-  padding: 0.6rem 0.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid #c7c7cc;
-  background: inherit;
-  color: inherit;
-}
-
-.storefront-search button {
-  width: auto;
-  padding: 0.6rem 1.25rem;
-  border-radius: 0.5rem;
-  border: none;
-  background: #2563eb;
-  color: white;
-  cursor: pointer;
-}
-
-.storefront-categories {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 1.5rem;
-  font-size: 0.9rem;
-}
-
-.storefront-categories a[aria-current="true"] {
-  font-weight: 700;
-  text-decoration: underline;
-}
-
-.catalog-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 1.25rem;
-}
-
-.catalog-card {
-  display: block;
-  border: 1px solid #e5e5ea;
-  border-radius: 0.75rem;
-  padding: 0.75rem;
-  text-decoration: none;
-  color: inherit;
-}
-
-@media (prefers-color-scheme: dark) {
-  .catalog-card {
-    border-color: #34353d;
-  }
-}
-
-.catalog-card-image,
-.catalog-card-image-placeholder {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: 0.5rem;
+  margin: -1px;
   overflow: hidden;
-  background: #f4f4f5;
-  margin-bottom: 0.5rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  .catalog-card-image,
-  .catalog-card-image-placeholder {
-    background: #2a2b32;
-  }
-}
-
-.catalog-card-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.catalog-card h2 {
-  font-size: 1rem;
-  margin: 0.25rem 0;
-}
-
-.catalog-card-price {
-  font-weight: 700;
-  margin: 0.25rem 0;
-}
-
-.product-detail {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1.5rem;
-  margin-top: 1.5rem;
-}
-
-.product-detail-gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 0.75rem;
-}
-
-.product-detail-gallery img,
-.product-detail-gallery .catalog-card-image-placeholder {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-  border-radius: 0.5rem;
-}
-
-@media (min-width: 720px) {
-  .product-detail {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-}
-
-/* ===== TASK-004 — carrinho, checkout e pedidos ===== */
-
-.storefront-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.cart-badge {
-  display: inline-block;
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  border: 1px solid #c7c7cc;
-  text-decoration: none;
-  font-size: 0.9rem;
-  font-weight: 600;
+  clip: rect(0, 0, 0, 0);
   white-space: nowrap;
+  border: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  .cart-badge {
-    border-color: #34353d;
+/* ============================================================
+   Scroll reveal
+   Um único IntersectionObserver na página inteira marca
+   `data-revealed` (components/marketing/RevealRoot). Nada de
+   listener de scroll, nada de JS por elemento — só transform e
+   opacity, que a GPU resolve sem repaint.
+   ============================================================ */
+[data-reveal] {
+  opacity: 0;
+  transform: translate3d(var(--reveal-x, 0), var(--reveal-y, 18px), 0) scale(var(--reveal-scale, 1));
+  transition:
+    opacity 640ms var(--cs-ease-out),
+    transform 640ms var(--cs-ease-out);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+[data-reveal="left"] {
+  --reveal-x: -22px;
+  --reveal-y: 0;
+}
+
+[data-reveal="right"] {
+  --reveal-x: 22px;
+  --reveal-y: 0;
+}
+
+/* Para superfícies grandes (mockups, painéis): entram ganhando corpo. */
+[data-reveal="lift"] {
+  --reveal-y: 26px;
+  --reveal-scale: 0.985;
+}
+
+[data-reveal][data-revealed] {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
   }
 }
 
-.catalog-card {
-  border: 1px solid #e5e5ea;
-  border-radius: 0.75rem;
-  padding: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  .catalog-card {
-    border-color: #34353d;
-  }
-}
-
-.catalog-card-link {
-  display: block;
-  text-decoration: none;
-  color: inherit;
-}
-
-.add-to-cart {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.add-to-cart input[type="number"] {
-  width: 4rem;
-  padding: 0.5rem;
-  border-radius: 0.5rem;
-  border: 1px solid #c7c7cc;
-  background: inherit;
-  color: inherit;
-}
-
-.add-to-cart button {
-  flex: 1;
-  padding: 0.6rem 0.75rem;
-  border-radius: 0.5rem;
-  border: none;
-  background: #2563eb;
-  color: white;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-@media (prefers-color-scheme: dark) {
-  .add-to-cart input[type="number"] {
-    border-color: #34353d;
-  }
-}
-
-.cart-list {
-  list-style: none;
-  padding: 0;
-  margin: 1rem 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.cart-item {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-  padding: 0.75rem;
-  border: 1px solid #e5e5ea;
-  border-radius: 0.5rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  .cart-item {
-    border-color: #34353d;
-  }
-}
-
-.cart-item-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  flex: 1;
-  min-width: 8rem;
-}
-
-.cart-item-qty {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.cart-item-qty button {
-  width: 1.8rem;
-  height: 1.8rem;
-  border-radius: 0.35rem;
-  border: 1px solid #c7c7cc;
-  background: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-@media (prefers-color-scheme: dark) {
-  .cart-item-qty button {
-    border-color: #34353d;
-  }
-}
-
-.cart-item-total {
-  font-weight: 700;
-  min-width: 5rem;
-  text-align: right;
-}
-
-.cart-subtotal {
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-
-.cart-actions {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: 1rem;
-}
-
-.btn-primary-link {
-  display: inline-block;
-  padding: 0.7rem 1.25rem;
-  border-radius: 0.5rem;
-  background: #2563eb;
-  color: white;
-  text-decoration: none;
-  font-weight: 600;
-  text-align: center;
-}
-
-.fulfillment-options {
-  display: flex;
-  gap: 1.5rem;
-  font-weight: 400;
-}
-
-.fulfillment-options label {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.95rem;
-}
-
-.order-detail-info {
-  margin: 1rem 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-@media (max-width: 480px) {
-  .cart-item {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .cart-item-total {
-    text-align: left;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }

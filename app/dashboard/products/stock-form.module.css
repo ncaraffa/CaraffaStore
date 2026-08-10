@@ -1,0 +1,17 @@
+.current {
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-muted);
+  margin-bottom: var(--cs-space-4);
+}
+
+.current strong {
+  color: var(--cs-ink);
+  font-family: var(--cs-font-display);
+  font-size: 1.1875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.alertGap {
+  margin-bottom: var(--cs-space-4);
+}

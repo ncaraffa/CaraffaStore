@@ -1,0 +1,444 @@
+.scene {
+  position: relative;
+  /* Espaço reservado para os cards que sangram para fora do painel. */
+  padding: 0 0 3.5rem 2.5rem;
+  isolation: isolate;
+}
+
+/* Luz azul atrás da cena — é o que impede a página branca de ficar chapada. */
+.glow {
+  position: absolute;
+  inset: -18% -12% 2% -6%;
+  background: radial-gradient(58% 52% at 62% 34%, rgba(27, 77, 255, 0.22), transparent 72%);
+  filter: blur(18px);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* ============================================================
+   Painel de pedidos (camada de fundo)
+   ============================================================ */
+.panel {
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-xl);
+  box-shadow: var(--cs-shadow-xl), var(--cs-sheen);
+  overflow: hidden;
+}
+
+.panelBar {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.875rem 1.125rem;
+  border-bottom: 1px solid var(--cs-line);
+  background: linear-gradient(180deg, var(--cs-white), var(--cs-surface));
+}
+
+.panelStore {
+  font-family: var(--cs-font-display);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  letter-spacing: -0.02em;
+  color: var(--cs-ink);
+}
+
+.panelBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.125rem 0.4375rem;
+  border-radius: var(--cs-radius-sm);
+  background: var(--cs-success-bg);
+  border: 1px solid var(--cs-success-border);
+  color: var(--cs-success-text);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.panelBadge::before {
+  content: "";
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.panelUrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  margin-left: auto;
+  font-family: var(--cs-font-mono);
+  font-size: 0.6875rem;
+  color: var(--cs-ink-muted);
+}
+
+.panelUrl svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.panelBody {
+  padding: 1.125rem;
+}
+
+/* ---- Faixa de métricas ---- */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.625rem;
+  margin-bottom: 1.25rem;
+}
+
+.metric {
+  padding: 0.6875rem 0.75rem;
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-line);
+}
+
+.metric[data-attention="true"] {
+  background: var(--cs-blue-50);
+  border-color: var(--cs-blue-100);
+}
+
+.metricLabel {
+  display: block;
+  font-family: var(--cs-font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+}
+
+.metricValue {
+  display: block;
+  margin-top: 0.1875rem;
+  font-family: var(--cs-font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--cs-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.metric[data-attention="true"] .metricValue {
+  color: var(--cs-blue-700);
+}
+
+/* ---- Tabela de pedidos ---- */
+.tableHead,
+.row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr 4.5rem 5.75rem;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.tableHead {
+  padding: 0 0.5rem 0.5rem;
+  font-family: var(--cs-font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+  border-bottom: 1px solid var(--cs-line);
+}
+
+.tableHead span:last-child {
+  text-align: right;
+}
+
+.row {
+  padding: 0.6875rem 0.5rem;
+  border-bottom: 1px solid var(--cs-line);
+  font-size: 0.75rem;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.rowCode {
+  font-family: var(--cs-font-mono);
+  font-size: 0.6875rem;
+  color: var(--cs-ink-muted);
+}
+
+.rowCustomer {
+  color: var(--cs-ink);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowTotal {
+  text-align: right;
+  font-weight: 600;
+  color: var(--cs-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.rowStatus {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.125rem 0.4375rem;
+  border-radius: var(--cs-radius-sm);
+  font-size: 0.625rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.rowStatus::before {
+  content: "";
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.rowStatus[data-tone="paid"] {
+  background: var(--cs-success-bg);
+  border-color: var(--cs-success-border);
+  color: var(--cs-success-text);
+}
+
+.rowStatus[data-tone="pending"] {
+  background: var(--cs-warning-bg);
+  border-color: var(--cs-warning-border);
+  color: var(--cs-warning-text);
+}
+
+/* ============================================================
+   Cards flutuantes
+   ============================================================ */
+.pixCard {
+  position: absolute;
+  left: 0;
+  bottom: 0.75rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.6875rem;
+  padding: 0.75rem 0.9375rem;
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
+}
+
+.pixIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-success-bg);
+  border: 1px solid var(--cs-success-border);
+  color: var(--cs-success-text);
+  flex-shrink: 0;
+}
+
+.pixIcon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.pixText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.pixText strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cs-ink);
+}
+
+.pixText > span {
+  font-size: 0.6875rem;
+  color: var(--cs-ink-muted);
+}
+
+.pixCode {
+  font-family: var(--cs-font-mono);
+}
+
+.pixValue {
+  margin-left: 0.5rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--cs-line);
+  font-family: var(--cs-font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--cs-success-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.stockCard {
+  position: absolute;
+  right: -1.25rem;
+  top: 22%;
+  z-index: 2;
+  width: 11rem;
+  padding: 0.75rem 0.875rem;
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
+}
+
+.stockName {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cs-ink);
+}
+
+/* O mesmo motivo de nível do símbolo da marca, aplicado a estoque. */
+.stockLevel {
+  display: block;
+  height: 0.3125rem;
+  margin: 0.5rem 0 0.375rem;
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-surface-sunken);
+  overflow: hidden;
+}
+
+.stockFill {
+  display: block;
+  width: 62%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cs-blue-500), var(--cs-blue-600));
+  transform-origin: left center;
+}
+
+/* O nível se enche quando a cena entra — o gesto da marca acontecendo, não
+   ilustrado. `scaleX` em vez de `width`: transform não dispara layout. */
+:global([data-revealed]) .stockFill {
+  animation: cs-fill 820ms var(--cs-ease-out) 320ms both;
+}
+
+@keyframes cs-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* O pedido que ainda não foi pago respira devagar. É o único elemento
+   pulsando na página, e é o único que representa algo em espera. */
+.rowStatus[data-tone="pending"]::before {
+  animation: cs-pending 2.6s var(--cs-ease) infinite;
+}
+
+@keyframes cs-pending {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global([data-revealed]) .stockFill {
+    animation: none;
+  }
+
+  .rowStatus[data-tone="pending"]::before {
+    animation: none;
+  }
+}
+
+.stockCount {
+  font-family: var(--cs-font-mono);
+  font-size: 0.625rem;
+  color: var(--cs-ink-muted);
+}
+
+.caption {
+  position: absolute;
+  right: 0.25rem;
+  bottom: 0;
+  font-family: var(--cs-font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+}
+
+/* ============================================================
+   Responsivo — a cena reorganiza, não só encolhe
+   ============================================================ */
+/* O avanço lateral do card de estoque só cabe quando existe calha para ele.
+   Abaixo de 1340 a viewport não tem essa folga e ele voltaria cortado. */
+@media (max-width: 1340px) {
+  .stockCard {
+    right: 0;
+  }
+}
+
+@media (max-width: 1100px) {
+  .stockCard {
+    top: 8%;
+    width: 9.5rem;
+  }
+}
+
+@media (max-width: 900px) {
+  .scene {
+    padding: 0 0 3rem;
+  }
+
+  .pixCard {
+    left: 0.75rem;
+  }
+}
+
+/* Abaixo de 640px os cards flutuantes viram ruído sobre um painel
+   estreito: o painel fica sozinho e os dois viram uma linha própria. */
+@media (max-width: 640px) {
+  .scene {
+    padding: 0;
+  }
+
+  .metrics {
+    gap: 0.5rem;
+  }
+
+  .tableHead,
+  .row {
+    grid-template-columns: 3.75rem 1fr 4.5rem;
+  }
+
+  .rowStatus {
+    display: none;
+  }
+
+  .stockCard {
+    display: none;
+  }
+
+  .pixCard {
+    position: static;
+    margin-top: 0.875rem;
+    box-shadow: var(--cs-shadow-md), var(--cs-sheen);
+  }
+
+  .caption {
+    display: none;
+  }
+}

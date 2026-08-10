@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { LogoutButton } from "@/app/logout/logout-button";
 import { ResendForm } from "./resend-form";
+import styles from "../auth-form.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +22,14 @@ export default async function VerifyPage() {
   return (
     <>
       <h1>Confirme seu e-mail</h1>
-      <p>
-        Enviamos um link de confirmação para <strong>{user.email}</strong>. Verifique sua caixa de
-        entrada (e o spam) antes de continuar.
+      <p className={styles.subtitle}>
+        Enviamos um link de confirmação para <strong>{user.email}</strong>. Verifique sua caixa de entrada (e o
+        spam) antes de continuar.
       </p>
       <ResendForm />
-      <LogoutButton />
+      <div style={{ marginTop: "1.25rem" }}>
+        <LogoutButton />
+      </div>
     </>
   );
 }

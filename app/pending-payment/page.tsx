@@ -1,6 +1,8 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireStoreStatus } from "@/lib/tenant/access-control";
 import { LogoutButton } from "@/app/logout/logout-button";
+import { StatusPage } from "@/components/onboarding/StatusPage";
+import { IconCreditCard } from "@/components/ui/icons";
 
 export const dynamic = "force-dynamic";
 
@@ -24,14 +26,16 @@ export default async function PendingPaymentPage({
   const { store } = await requireStoreStatus(supabase, "pending_payment", storeSlug);
 
   return (
-    <main>
-      <h1>Cadastro concluído — pagamento pendente</h1>
+    <StatusPage
+      icon={<IconCreditCard />}
+      title="Cadastro concluído — pagamento pendente"
+      tone="warning"
+      actions={<LogoutButton />}
+    >
       <p>
-        A loja &quot;{store.name}&quot; está com o cadastro concluído. O painel operacional será
-        liberado após a ativação da cobrança, em uma etapa futura. Nenhuma cobrança foi gerada nesta
-        etapa.
+        A loja &quot;{store.name}&quot; está com o cadastro concluído. O painel operacional será liberado após a
+        ativação da cobrança, em uma etapa futura. Nenhuma cobrança foi gerada nesta etapa.
       </p>
-      <LogoutButton />
-    </main>
+    </StatusPage>
   );
 }

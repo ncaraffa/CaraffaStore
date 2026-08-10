@@ -1,0 +1,41 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 1rem;
+  border-radius: var(--cs-radius-full);
+  border: 1px solid var(--cs-line-strong);
+  text-decoration: none;
+  font-size: var(--cs-text-sm);
+  font-weight: 600;
+  color: var(--cs-ink);
+  white-space: nowrap;
+  transition:
+    border-color var(--cs-duration-fast) var(--cs-ease),
+    color var(--cs-duration-fast) var(--cs-ease);
+}
+
+.badge svg {
+  width: 1.0625rem;
+  height: 1.0625rem;
+}
+
+.badge:hover {
+  border-color: var(--cs-blue-600);
+  color: var(--cs-blue-600);
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3125rem;
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-blue-600);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}

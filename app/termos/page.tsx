@@ -5,6 +5,13 @@ export const metadata: Metadata = {
 };
 
 export default function TermosPage() {
+  // Server Component: process.env.LEGAL_OPERATOR_CPF é lido só aqui, no
+  // servidor, e nunca chega ao bundle do navegador — sem prefixo
+  // NEXT_PUBLIC_, o Next não o expõe ao client. Sem a variável definida
+  // (ambiente local, por exemplo), a linha de CPF simplesmente não
+  // renderiza — nada de placeholder.
+  const operatorCpf = process.env.LEGAL_OPERATOR_CPF?.trim() || null;
+
   return (
     <main style={{ maxWidth: 720, margin: "0 auto", padding: "2rem 1rem", lineHeight: 1.6 }}>
       <h1>Termos de Uso</h1>
@@ -17,20 +24,22 @@ export default function TermosPage() {
 
       <h2>1. O que é a plataforma</h2>
       <p>
-        Esta plataforma (&quot;Commerce Platform&quot;) é um serviço SaaS multi-tenant que permite a
+        Esta plataforma (&quot;CaraffaStore&quot;) é um serviço SaaS multi-tenant que permite a
         pequenos comerciantes (&quot;lojistas&quot;) criar, administrar e operar lojas virtuais
         próprias, incluindo catálogo de produtos, carrinho, checkout e recebimento de pagamentos via
         Pix.
       </p>
 
-      <h2>2. Operador da plataforma</h2>
+      <h2>2. Responsável pela CaraffaStore</h2>
       <p>
-        Operador: [RAZÃO SOCIAL / NOME DO OPERADOR — A DEFINIR POR CARAFFA]
+        Responsável pela CaraffaStore: NICOLAS CARAFFA
         <br />
-        CNPJ: [CNPJ — A DEFINIR]
-        <br />
-        Endereço: [ENDEREÇO — A DEFINIR]
-        <br />
+        {operatorCpf && (
+          <>
+            CPF: {operatorCpf}
+            <br />
+          </>
+        )}
         Contato: caraffastore@gmail.com
       </p>
 
@@ -39,15 +48,16 @@ export default function TermosPage() {
         O lojista se cadastra com e-mail e senha, confirma o e-mail e conclui um onboarding que
         cria sua loja (nome, slug, WhatsApp) e registra a escolha de um plano mensal. A loja
         permanece em estado <code>pending_payment</code> até que a ativação (hoje um procedimento
-        manual documentado internamente — ver contato do operador) seja concluída.
+        manual documentado internamente — ver contato do responsável) seja concluída.
       </p>
 
       <h2>4. Planos e cobrança</h2>
       <p>
-        A plataforma oferece planos mensais de R$ 30, R$ 50 ou R$ 80, escolhidos no onboarding. A
+        A plataforma oferece planos mensais de R$ 30, R$ 50 ou R$ 70, escolhidos no onboarding. A
         cobrança recorrente automatizada desses planos ainda não está implementada nesta fase
-        piloto — a ativação/renovação de loja é feita manualmente pelo operador, mediante acordo
-        direto com o lojista. Isso será revisado antes de qualquer operação em maior escala.
+        piloto — a ativação/renovação de loja é feita manualmente pelo responsável pela
+        CaraffaStore, mediante acordo direto com o lojista. Isso será revisado antes de qualquer
+        operação em maior escala.
       </p>
 
       <h2>5. Pagamentos das vendas (Pix)</h2>

@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireStoreStatus } from "@/lib/tenant/access-control";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { CategoryForm } from "@/app/dashboard/categories/category-form";
 import { updateCategoryAction } from "@/app/dashboard/categories/actions";
 import * as catalog from "@/lib/catalog/service";
+import formStyles from "../../../dashboard-form.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +27,22 @@ export default async function EditCategoryPage({
   }
 
   return (
-    <main>
-      <h1>Editar categoria — {store.name}</h1>
-      <CategoryForm storeSlug={store.slug} action={updateCategoryAction} category={category} />
-    </main>
+    <DashboardShell
+      storeName={store.name}
+      storeSlug={store.slug}
+      storeStatus={store.status}
+      active="categorias"
+      breadcrumbs={[
+        { label: "Painel", href: `/dashboard?store=${store.slug}` },
+        { label: "Categorias", href: `/dashboard/categories?store=${store.slug}` },
+        { label: category.name },
+      ]}
+    >
+      <h1 className={formStyles.title}>Editar categoria</h1>
+      <p className={formStyles.subtitle}>{store.name}</p>
+      <div className={formStyles.formWrap}>
+        <CategoryForm storeSlug={store.slug} action={updateCategoryAction} category={category} />
+      </div>
+    </DashboardShell>
   );
 }

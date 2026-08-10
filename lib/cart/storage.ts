@@ -11,6 +11,10 @@ export interface CartItem {
   slug: string | null;
   priceCents: number;
   quantity: number;
+  /** Só para exibição no carrinho — nunca revalidada no checkout (que só
+   *  confia em productId/quantity). Ausente em carrinhos salvos antes
+   *  desta versão; `isValidItem` trata isso como válido (campo opcional). */
+  imageUrl?: string | null;
 }
 
 export interface Cart {
@@ -41,7 +45,8 @@ function isValidItem(value: unknown): value is CartItem {
     typeof item.quantity === "number" &&
     Number.isInteger(item.quantity) &&
     item.quantity > 0 &&
-    item.quantity <= 999
+    item.quantity <= 999 &&
+    (item.imageUrl === undefined || item.imageUrl === null || typeof item.imageUrl === "string")
   );
 }
 

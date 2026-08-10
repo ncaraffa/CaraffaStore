@@ -3,6 +3,13 @@
 import { useActionState, useState } from "react";
 import { IDLE_ACTION_STATE } from "@/lib/auth/action-state";
 import { slugify } from "@/lib/catalog/slugify";
+import { Card } from "@/components/ui/Card";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { Select } from "@/components/ui/Select";
+import { Button } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
 import type { ProductFormState } from "./actions";
 
 type Category = { id: string; name: string };
@@ -38,105 +45,101 @@ export function ProductForm({
   const [slugValue, setSlugValue] = useState(product?.slug ?? "");
 
   return (
-    <form action={formAction} noValidate>
-      <input type="hidden" name="storeSlug" value={storeSlug} />
-      {product && <input type="hidden" name="productId" value={product.id} />}
+    <Card>
+      <form action={formAction} noValidate>
+        <input type="hidden" name="storeSlug" value={storeSlug} />
+        {product && <input type="hidden" name="productId" value={product.id} />}
 
-      {state.status === "error" && state.message && (
-        <p className="form-status" data-tone="error" role="alert">
-          {state.message}
-        </p>
-      )}
+        {state.status === "error" && state.message && (
+          <div style={{ marginBottom: "1.25rem" }}>
+            <Alert tone="danger">{state.message}</Alert>
+          </div>
+        )}
 
-      <div className="form-field">
-        <label htmlFor="name">Nome</label>
-        <input
-          id="name"
-          name="name"
-          required
-          maxLength={200}
-          defaultValue={product?.name ?? ""}
-          onChange={(e) => {
-            if (!slugTouched) setSlugValue(slugify(e.target.value));
-          }}
-          aria-invalid={Boolean(state.fieldErrors?.name)}
-        />
-        {state.fieldErrors?.name && <small role="alert">{state.fieldErrors.name}</small>}
-      </div>
-
-      <div className="form-field">
-        <label htmlFor="slug">Endereço (slug)</label>
-        <input
-          id="slug"
-          name="slug"
-          required
-          maxLength={120}
-          value={slugValue}
-          onChange={(e) => {
-            setSlugTouched(true);
-            setSlugValue(e.target.value);
-          }}
-          aria-invalid={Boolean(state.fieldErrors?.slug)}
-        />
-        {state.fieldErrors?.slug && <small role="alert">{state.fieldErrors.slug}</small>}
-      </div>
-
-      <div className="form-field">
-        <label htmlFor="description">Descrição (opcional)</label>
-        <textarea id="description" name="description" maxLength={4000} defaultValue={product?.description ?? ""} />
-      </div>
-
-      <div className="form-field">
-        <label htmlFor="price">Preço (R$)</label>
-        <input
-          id="price"
-          name="price"
-          inputMode="decimal"
-          required
-          defaultValue={product ? centsToInputValue(product.price_cents) : ""}
-          placeholder="19,90"
-          aria-invalid={Boolean(state.fieldErrors?.priceCents)}
-        />
-        {state.fieldErrors?.priceCents && <small role="alert">{state.fieldErrors.priceCents}</small>}
-      </div>
-
-      <div className="form-field">
-        <label htmlFor="sku">SKU (opcional)</label>
-        <input id="sku" name="sku" maxLength={64} defaultValue={product?.sku ?? ""} />
-      </div>
-
-      <div className="form-field">
-        <label htmlFor="categoryId">Categoria (opcional)</label>
-        <select id="categoryId" name="categoryId" defaultValue={product?.category_id ?? ""}>
-          <option value="">Sem categoria</option>
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {!product && (
-        <div className="form-field">
-          <label htmlFor="stock">Estoque inicial</label>
-          <input
-            id="stock"
-            name="stock"
-            type="number"
-            min={0}
+        <Field label="Nome" htmlFor="name" required error={state.fieldErrors?.name}>
+          <Input
+            id="name"
+            name="name"
             required
-            defaultValue={0}
-            aria-invalid={Boolean(state.fieldErrors?.stock)}
+            maxLength={200}
+            defaultValue={product?.name ?? ""}
+            onChange={(e) => {
+              if (!slugTouched) setSlugValue(slugify(e.target.value));
+            }}
+            aria-invalid={Boolean(state.fieldErrors?.name)}
           />
-          {state.fieldErrors?.stock && <small role="alert">{state.fieldErrors.stock}</small>}
-          <small>Depois de criado, ajustes de estoque ficam numa seção própria (com motivo registrado).</small>
-        </div>
-      )}
+        </Field>
 
-      <button type="submit" disabled={pending}>
-        {pending ? "Salvando..." : product ? "Salvar alterações" : "Criar produto"}
-      </button>
-    </form>
+        <Field label="Endereço (slug)" htmlFor="slug" required error={state.fieldErrors?.slug}>
+          <Input
+            id="slug"
+            name="slug"
+            required
+            maxLength={120}
+            value={slugValue}
+            onChange={(e) => {
+              setSlugTouched(true);
+              setSlugValue(e.target.value);
+            }}
+            aria-invalid={Boolean(state.fieldErrors?.slug)}
+          />
+        </Field>
+
+        <Field label="Descrição (opcional)" htmlFor="description">
+          <Textarea id="description" name="description" maxLength={4000} defaultValue={product?.description ?? ""} />
+        </Field>
+
+        <Field label="Preço (R$)" htmlFor="price" required error={state.fieldErrors?.priceCents}>
+          <Input
+            id="price"
+            name="price"
+            inputMode="decimal"
+            required
+            defaultValue={product ? centsToInputValue(product.price_cents) : ""}
+            placeholder="19,90"
+            aria-invalid={Boolean(state.fieldErrors?.priceCents)}
+          />
+        </Field>
+
+        <Field label="SKU (opcional)" htmlFor="sku">
+          <Input id="sku" name="sku" maxLength={64} defaultValue={product?.sku ?? ""} />
+        </Field>
+
+        <Field label="Categoria (opcional)" htmlFor="categoryId">
+          <Select id="categoryId" name="categoryId" defaultValue={product?.category_id ?? ""}>
+            <option value="">Sem categoria</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        {!product && (
+          <Field
+            label="Estoque inicial"
+            htmlFor="stock"
+            required
+            error={state.fieldErrors?.stock}
+            hint="Depois de criado, ajustes de estoque ficam numa seção própria (com motivo registrado)."
+          >
+            <Input
+              id="stock"
+              name="stock"
+              type="number"
+              min={0}
+              required
+              defaultValue={0}
+              aria-invalid={Boolean(state.fieldErrors?.stock)}
+            />
+          </Field>
+        )}
+
+        <Button type="submit" size="lg" loading={pending}>
+          {product ? "Salvar alterações" : "Criar produto"}
+        </Button>
+      </form>
+    </Card>
   );
 }

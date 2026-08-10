@@ -1,0 +1,121 @@
+.main {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: var(--cs-space-6);
+  width: 100%;
+  flex: 1;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--cs-space-8);
+}
+
+@media (min-width: 720px) {
+  .layout {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+}
+
+/* ============================================================
+   Galeria — imagem principal grande + tira de miniaturas
+   ============================================================ */
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-3);
+}
+
+.mainImageWrap {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--cs-radius-xl);
+  overflow: hidden;
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-line);
+}
+
+.mainImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumbRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.75rem, 1fr));
+  gap: 0.5rem;
+}
+
+.thumb {
+  aspect-ratio: 1 / 1;
+  border-radius: var(--cs-radius-md);
+  overflow: hidden;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  background: var(--cs-surface);
+  opacity: 0.62;
+  transition:
+    opacity var(--cs-duration-fast) var(--cs-ease),
+    border-color var(--cs-duration-fast) var(--cs-ease);
+}
+
+.thumb:hover {
+  opacity: 1;
+}
+
+.thumb[data-active] {
+  border-color: var(--cs-ink);
+  opacity: 1;
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.placeholder {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--cs-radius-xl);
+  background: var(--cs-surface-sunken);
+}
+
+/* ============================================================
+   Informações
+   ============================================================ */
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-3);
+  align-items: flex-start;
+}
+
+.title {
+  font-size: var(--cs-text-h2);
+  letter-spacing: var(--cs-tracking-tight);
+}
+
+.price {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--cs-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.description {
+  color: var(--cs-ink-body);
+  font-size: var(--cs-text-base);
+  line-height: 1.65;
+}
+
+.actions {
+  width: 100%;
+  max-width: 22rem;
+  margin-top: var(--cs-space-3);
+  padding-top: var(--cs-space-5);
+  border-top: 1px solid var(--cs-line);
+}

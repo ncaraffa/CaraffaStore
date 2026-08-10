@@ -28,6 +28,11 @@ describe("resolveMiddlewareDecision", () => {
     }
   });
 
+  it("TASK-008: deixa a landing page (/) passar mesmo sem sessão, mas não para autenticado não verificado", () => {
+    expect(decide({ pathname: "/", user: null })).toEqual({ action: "next" });
+    expect(decide({ pathname: "/", user: unverifiedUser })).toEqual({ action: "redirect", location: "/verify" });
+  });
+
   it("TASK-003: deixa o catálogo público (/loja/*) passar mesmo sem sessão", () => {
     for (const path of ["/loja/store-a", "/loja/store-a/produto/algum-produto"]) {
       expect(decide({ pathname: path, user: null })).toEqual({ action: "next" });

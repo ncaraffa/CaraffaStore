@@ -1,0 +1,227 @@
+.main {
+  max-width: 30rem;
+  margin: 0 auto;
+  padding: var(--cs-space-8) var(--cs-space-6);
+  width: 100%;
+  flex: 1;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: var(--cs-space-6);
+}
+
+.title {
+  font-size: var(--cs-text-h2);
+  letter-spacing: var(--cs-tracking-tight);
+  margin-bottom: var(--cs-space-2);
+}
+
+.subtitle {
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-muted);
+}
+
+.card {
+  overflow: hidden;
+}
+
+/* ============================================================
+   Status — a primeira coisa que precisa ficar óbvia
+   ============================================================ */
+.statusBanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: calc(var(--cs-space-6) * -1) calc(var(--cs-space-6) * -1) var(--cs-space-6);
+  padding: var(--cs-space-4);
+  background: var(--cs-warning-bg);
+  border-bottom: 1px solid var(--cs-warning-border);
+  color: var(--cs-warning-text);
+  font-weight: 700;
+  font-size: var(--cs-text-sm);
+}
+
+.statusBanner[data-tone="success"] {
+  background: var(--cs-success-bg);
+  border-bottom-color: var(--cs-success-border);
+  color: var(--cs-success-text);
+}
+
+.statusBanner[data-tone="danger"] {
+  background: var(--cs-danger-bg);
+  border-bottom-color: var(--cs-danger-border);
+  color: var(--cs-danger-text);
+}
+
+.statusIcon {
+  display: inline-flex;
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.statusIcon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ============================================================
+   Valor — grande e inequívoco
+   ============================================================ */
+.amountBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  text-align: center;
+  padding-bottom: var(--cs-space-5);
+  margin-bottom: var(--cs-space-5);
+  border-bottom: 1px dashed var(--cs-line-strong);
+}
+
+.amountLabel {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  color: var(--cs-ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.amount {
+  font-family: var(--cs-font-display);
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--cs-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.orderCode {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
+}
+
+.alertGap {
+  margin: 0 0 var(--cs-space-5);
+}
+
+/* ============================================================
+   QR Code — em moldura, não perdido no meio da página
+   ============================================================ */
+.qrFrame {
+  display: flex;
+  justify-content: center;
+  padding: var(--cs-space-5);
+  margin-bottom: var(--cs-space-5);
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-xl);
+}
+
+.qrImage {
+  border-radius: var(--cs-radius-md);
+  background: #fff;
+  padding: var(--cs-space-3);
+  border: 1px solid var(--cs-line);
+  max-width: 100%;
+  height: auto;
+}
+
+/* ============================================================
+   Contagem regressiva
+   ============================================================ */
+.expiresRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4375rem;
+  margin-bottom: var(--cs-space-5);
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-muted);
+}
+
+.expiresRow svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.expiresValue {
+  font-family: var(--cs-font-mono);
+  font-weight: 700;
+  color: var(--cs-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.expiresValue[data-urgent] {
+  color: var(--cs-danger-text);
+}
+
+/* ============================================================
+   Copia e cola
+   ============================================================ */
+.copyPaste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: var(--cs-space-4);
+}
+
+.copyLabel {
+  font-size: var(--cs-text-xs);
+  font-weight: 600;
+  color: var(--cs-ink-body);
+}
+
+.copyField {
+  display: flex;
+}
+
+.copyInput {
+  width: 100%;
+  height: 2.75rem;
+  padding: 0 0.875rem;
+  border-radius: var(--cs-radius-md);
+  border: 1.5px solid var(--cs-line-strong);
+  background: var(--cs-surface);
+  color: var(--cs-ink-body);
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.copyInput:focus-visible {
+  outline: none;
+  border-color: var(--cs-blue-600);
+  box-shadow: var(--cs-ring);
+}
+
+.ticketLink {
+  text-align: center;
+  margin-bottom: var(--cs-space-4);
+  font-size: var(--cs-text-sm);
+}
+
+.ticketLink a {
+  color: var(--cs-blue-600);
+  font-weight: 600;
+}
+
+.backLink {
+  text-align: center;
+  margin-top: var(--cs-space-6);
+  font-size: var(--cs-text-sm);
+}
+
+.backLink a {
+  color: var(--cs-ink-muted);
+  text-decoration: none;
+}
+
+.backLink a:hover {
+  color: var(--cs-blue-600);
+}

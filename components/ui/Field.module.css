@@ -1,0 +1,50 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4375rem;
+  margin-bottom: var(--cs-space-5);
+}
+
+.label {
+  font-size: var(--cs-text-xs);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--cs-ink-body);
+}
+
+.required {
+  color: var(--cs-danger);
+}
+
+.hint {
+  font-size: var(--cs-text-xs);
+  line-height: 1.5;
+  color: var(--cs-ink-muted);
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.3125rem;
+  font-size: var(--cs-text-xs);
+  color: var(--cs-danger-text);
+  font-weight: 500;
+  animation: cs-field-error-in 180ms var(--cs-ease-out);
+}
+
+@keyframes cs-field-error-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .error {
+    animation: none;
+  }
+}

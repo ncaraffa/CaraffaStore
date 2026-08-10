@@ -1,0 +1,61 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: var(--cs-space-4);
+  margin-bottom: var(--cs-space-5);
+}
+
+.item {
+  margin: 0;
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  padding: var(--cs-space-3);
+  background: var(--cs-white);
+  box-shadow: var(--cs-shadow-xs);
+}
+
+.imageWrap {
+  position: relative;
+}
+
+.imageWrap img {
+  width: 100%;
+  height: 8rem;
+  object-fit: cover;
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-line);
+}
+
+.coverBadge {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.4rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.uploadForm {
+  max-width: 26rem;
+}
+
+.fileInput {
+  width: 100%;
+  font-size: var(--cs-text-sm);
+  padding: 0.5rem 0;
+  color: var(--cs-ink-body);
+}
+
+.alertGap {
+  margin-bottom: var(--cs-space-4);
+}
+
+.limitHint {
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
+}

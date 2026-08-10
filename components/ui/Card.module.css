@@ -1,0 +1,48 @@
+/* Superfície branca sobre fundo off-white. O `sheen` de 1px no topo é o
+   que separa o card do fundo sem precisar de borda pesada. */
+.card {
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-sm), var(--cs-sheen);
+}
+
+.padded {
+  padding: var(--cs-space-6);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--cs-space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--cs-space-5);
+}
+
+.title {
+  font-family: var(--cs-font-display);
+  font-size: var(--cs-text-h3);
+  font-weight: 700;
+  letter-spacing: var(--cs-tracking-tight);
+  color: var(--cs-ink);
+}
+
+.description {
+  margin-top: 0.25rem;
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-muted);
+  max-width: 60ch;
+}
+
+.actions {
+  display: flex;
+  gap: var(--cs-space-2);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .padded {
+    padding: var(--cs-space-5);
+  }
+}

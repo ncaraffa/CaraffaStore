@@ -1,0 +1,79 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  color: var(--cs-ink);
+  white-space: nowrap;
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.glyph {
+  width: 100%;
+  height: 100%;
+}
+
+.wordmark {
+  font-family: var(--cs-font-display);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+/* ---- Selo cobalto: o símbolo ganha uma superfície própria ---- */
+.logo[data-variant="tile"] .mark {
+  background: linear-gradient(150deg, var(--cs-blue-500), var(--cs-blue-700) 65%, var(--cs-blue-800));
+  color: #fff;
+  box-shadow: var(--cs-glow-blue), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+/* ---- Símbolo solto, sem selo ---- */
+.logo[data-variant="plain"] .mark {
+  color: var(--cs-blue-600);
+}
+
+/* Em telas muito estreitas o símbolo sozinho já identifica a marca, e a
+   palavra estaria disputando espaço com as ações do header. */
+@media (max-width: 420px) {
+  .compact .wordmark {
+    display: none;
+  }
+}
+
+/* ---- Escala ---- */
+.sm {
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+}
+.sm .mark {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.4375rem;
+  padding: 0.1875rem;
+}
+
+.md {
+  gap: 0.5625rem;
+  font-size: 1.1875rem;
+}
+.md .mark {
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: 0.5625rem;
+  padding: 0.1875rem;
+}
+
+.lg {
+  gap: 0.75rem;
+  font-size: 1.625rem;
+}
+.lg .mark {
+  width: 2.625rem;
+  height: 2.625rem;
+  border-radius: 0.8125rem;
+  padding: 0.3125rem;
+}

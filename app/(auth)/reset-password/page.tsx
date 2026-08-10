@@ -3,6 +3,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isCurrentSessionRecovery } from "@/lib/tenant/recovery-session";
 import { RESET_LINK_INVALID_MESSAGE } from "@/lib/auth/messages";
 import { ResetPasswordForm } from "./reset-password-form";
+import { Alert } from "@/components/ui/Alert";
+import styles from "../auth-form.module.css";
 
 // Sempre depende de sessão/cookies por requisição — nunca pode ser
 // pré-renderizada estaticamente no build.
@@ -31,10 +33,10 @@ export default async function ResetPasswordPage() {
     return (
       <>
         <h1>Link inválido</h1>
-        <p className="form-status" data-tone="error" role="alert">
-          {RESET_LINK_INVALID_MESSAGE}
-        </p>
-        <p className="auth-links">
+        <div className={styles.alertGap} style={{ marginTop: "1rem" }}>
+          <Alert tone="danger">{RESET_LINK_INVALID_MESSAGE}</Alert>
+        </div>
+        <p className={styles.links}>
           <Link href="/forgot-password">Solicitar novo link</Link>
         </p>
       </>
@@ -44,6 +46,7 @@ export default async function ResetPasswordPage() {
   return (
     <>
       <h1>Definir nova senha</h1>
+      <p className={styles.subtitle}>Escolha uma nova senha para acessar sua conta.</p>
       <ResetPasswordForm />
     </>
   );

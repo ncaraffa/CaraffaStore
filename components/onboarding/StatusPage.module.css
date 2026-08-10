@@ -1,0 +1,80 @@
+.shell {
+  min-height: 100dvh;
+  background: var(--cs-surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cs-space-6);
+  padding: var(--cs-space-6);
+}
+
+.logoLink {
+  text-decoration: none;
+}
+
+.card {
+  width: 100%;
+  max-width: 28rem;
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-xl);
+  box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
+  padding: var(--cs-space-8);
+  text-align: center;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: var(--cs-blue-50);
+  border: 1px solid var(--cs-blue-100);
+  color: var(--cs-blue-600);
+  margin-bottom: var(--cs-space-5);
+}
+
+.icon svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.icon[data-tone="success"] {
+  background: var(--cs-success-bg);
+  border-color: var(--cs-success-border);
+  color: var(--cs-success-text);
+}
+
+.icon[data-tone="warning"] {
+  background: var(--cs-warning-bg);
+  border-color: var(--cs-warning-border);
+  color: var(--cs-warning-text);
+}
+
+.icon[data-tone="danger"] {
+  background: var(--cs-danger-bg);
+  border-color: var(--cs-danger-border);
+  color: var(--cs-danger-text);
+}
+
+.title {
+  font-size: var(--cs-text-h3);
+  letter-spacing: var(--cs-tracking-tight);
+  margin-bottom: var(--cs-space-3);
+}
+
+.body {
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-muted);
+  line-height: 1.6;
+}
+
+.actions {
+  margin-top: var(--cs-space-6);
+  display: flex;
+  justify-content: center;
+  gap: var(--cs-space-3);
+}

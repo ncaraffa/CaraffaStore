@@ -21,8 +21,15 @@ describe("FakePixGateway", () => {
     expect(result.status).toBe("pending");
     expect(result.amountCents).toBe(1500);
     expect(result.qrCode).toBeTruthy();
-    expect(result.qrCodeBase64).toBeTruthy();
     expect(result.providerPaymentId).toBeTruthy();
+
+    // TASK008-RETEST-PIX-001: qrCodeBase64 precisa ser bytes PNG de
+    // verdade (assinatura válida), não um texto qualquer em base64 — a
+    // tela de pagamento monta `data:image/png;base64,${qrCodeBase64}`
+    // direto (payment-status-client.tsx), sem checar o conteúdo.
+    expect(result.qrCodeBase64).toBeTruthy();
+    const pngBytes = Buffer.from(result.qrCodeBase64 ?? "", "base64");
+    expect(pngBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))).toBe(true);
   });
 
   it("getPayment reflete setStatus (simulação determinística de aprovação)", async () => {

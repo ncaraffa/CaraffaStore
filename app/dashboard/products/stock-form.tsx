@@ -2,6 +2,11 @@
 
 import { useActionState } from "react";
 import { adjustStockAction } from "./actions";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
+import styles from "./stock-form.module.css";
 
 const IDLE: { status: "idle" | "error" | "success"; message?: string; fieldErrors?: Record<string, string>; newStock?: number } = {
   status: "idle",
@@ -21,7 +26,7 @@ export function StockForm({
 
   return (
     <div>
-      <p>
+      <p className={styles.current}>
         Estoque atual: <strong>{displayedStock}</strong>
       </p>
       <form action={formAction} noValidate>
@@ -29,25 +34,22 @@ export function StockForm({
         <input type="hidden" name="productId" value={productId} />
 
         {state.status === "error" && state.message && (
-          <p className="form-status" data-tone="error" role="alert">
-            {state.message}
-          </p>
+          <div className={styles.alertGap}>
+            <Alert tone="danger">{state.message}</Alert>
+          </div>
         )}
         {state.status === "success" && (
-          <p className="form-status" data-tone="success" role="status">
-            Estoque atualizado.
-          </p>
+          <div className={styles.alertGap}>
+            <Alert tone="success">Estoque atualizado.</Alert>
+          </div>
         )}
 
-        <div className="form-field">
-          <label htmlFor="delta">Ajuste (use negativo para reduzir, ex.: -3)</label>
-          <input id="delta" name="delta" type="number" required aria-invalid={Boolean(state.fieldErrors?.delta)} />
-          {state.fieldErrors?.delta && <small role="alert">{state.fieldErrors.delta}</small>}
-        </div>
+        <Field label="Ajuste (use negativo para reduzir, ex.: -3)" htmlFor="delta" required error={state.fieldErrors?.delta}>
+          <Input id="delta" name="delta" type="number" required aria-invalid={Boolean(state.fieldErrors?.delta)} />
+        </Field>
 
-        <div className="form-field">
-          <label htmlFor="reason">Motivo</label>
-          <input
+        <Field label="Motivo" htmlFor="reason" required error={state.fieldErrors?.reason}>
+          <Input
             id="reason"
             name="reason"
             required
@@ -55,17 +57,15 @@ export function StockForm({
             placeholder="Venda balcão, contagem, avaria..."
             aria-invalid={Boolean(state.fieldErrors?.reason)}
           />
-          {state.fieldErrors?.reason && <small role="alert">{state.fieldErrors.reason}</small>}
-        </div>
+        </Field>
 
-        <div className="form-field">
-          <label htmlFor="reference">Referência (opcional)</label>
-          <input id="reference" name="reference" maxLength={120} />
-        </div>
+        <Field label="Referência (opcional)" htmlFor="reference">
+          <Input id="reference" name="reference" maxLength={120} />
+        </Field>
 
-        <button type="submit" disabled={pending}>
-          {pending ? "Ajustando..." : "Ajustar estoque"}
-        </button>
+        <Button type="submit" variant="outline" loading={pending}>
+          Ajustar estoque
+        </Button>
       </form>
     </div>
   );

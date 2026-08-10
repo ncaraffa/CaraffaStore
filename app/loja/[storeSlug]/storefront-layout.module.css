@@ -1,0 +1,51 @@
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--cs-white);
+}
+
+/* Rodapé propositalmente neutro: a loja é do lojista, não da
+   CaraffaStore — a marca aparece só nesta linha discreta, sem o
+   vocabulário visual (jarra, azul dramático) usado no resto do produto. */
+.footer {
+  margin-top: auto;
+  padding: var(--cs-space-8) var(--cs-space-6);
+  border-top: 1px solid var(--cs-line);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-2);
+}
+
+.attribution {
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
+}
+
+.brandLink {
+  color: var(--cs-ink-body);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.brandLink:hover {
+  color: var(--cs-blue-600);
+  text-decoration: underline;
+}
+
+.legalLinks {
+  display: flex;
+  justify-content: center;
+  gap: var(--cs-space-4);
+  font-size: var(--cs-text-xs);
+}
+
+.legalLinks a {
+  color: var(--cs-ink-muted);
+  text-decoration: none;
+}
+
+.legalLinks a:hover {
+  color: var(--cs-ink);
+}

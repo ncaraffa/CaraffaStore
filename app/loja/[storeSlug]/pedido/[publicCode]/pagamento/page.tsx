@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getPublicPaymentView } from "@/lib/payments/service-only/payment-page-reader";
 import { RECEIPT_COOKIE_NAME } from "@/lib/payments/receipt-cookie";
 import { PaymentStatusClient } from "./payment-status-client";
+import styles from "./payment.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -33,11 +34,14 @@ export default async function PaymentPage({
   }
 
   return (
-    <main>
-      <h1>Pedido {view.publicCode}</h1>
-      <p>Pague pelo Pix abaixo para confirmar seu pedido. O comerciante será avisado automaticamente.</p>
+    <main className={styles.main}>
+      <div className={styles.header}>
+        <h1 className={styles.title}>Pagamento via Pix</h1>
+        <p className={styles.subtitle}>Pague abaixo para confirmar seu pedido. O comerciante será avisado automaticamente.</p>
+      </div>
 
       <PaymentStatusClient
+        publicCode={view.publicCode}
         status={view.status}
         amountCents={view.amountCents}
         qrCode={view.qrCode}
@@ -46,7 +50,7 @@ export default async function PaymentPage({
         expiresAt={view.expiresAt}
       />
 
-      <p>
+      <p className={styles.backLink}>
         <a href={`/loja/${storeSlug}`}>← Voltar para a loja</a>
       </p>
     </main>
