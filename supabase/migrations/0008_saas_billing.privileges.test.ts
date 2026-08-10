@@ -169,10 +169,27 @@ describe("billing_charge_apply_provider_state — único caminho de decisão, id
     expect(fn).toContain("status = 'manual_review'");
   });
 
-  it("conflito de estado terminal (já approved recebendo não-approved, ou já rejeitado recebendo approved) vira manual_review", () => {
+  it("conflito de estado terminal: já rejeitado/cancelado/expirado recebendo approved tardio vira manual_review (não ativa sozinho)", () => {
+    const fn = fnBody();
+    expect(fn).toContain("v_terminal_unpaid and p_internal_status = 'approved'");
+  });
+
+  it("QA-003 (achado no QA independente): já approved recebendo um evento terminal conflitante (ex.: expired tardio) NUNCA vira manual_review — preserva status/approved_at/period_start/period_end, só registra a anomalia", () => {
     const fn = fnBody();
     expect(fn).toContain("v_terminal_paid and p_internal_status <> 'approved'");
-    expect(fn).toContain("v_terminal_unpaid and p_internal_status = 'approved'");
+
+    const preserveBranch = sql.slice(
+      sql.indexOf("if v_terminal_paid and p_internal_status <> 'approved' then"),
+      sql.indexOf("if v_terminal_unpaid and p_internal_status = 'approved' then"),
+    );
+    // Este ramo nunca pode escrever `status = 'manual_review'` nem tocar
+    // approved_at/period_start/period_end — só atualiza metadados de
+    // rastreio (provider_status/provider_status_detail/last_webhook_at).
+    expect(preserveBranch).not.toContain("status = 'manual_review'");
+    expect(preserveBranch).not.toContain("approved_at");
+    expect(preserveBranch).not.toContain("period_start");
+    expect(preserveBranch).not.toContain("period_end");
+    expect(preserveBranch).toContain("terminal_state_conflict_after_approval");
   });
 
   it("manual_review nunca é reavaliado automaticamente depois (early return)", () => {

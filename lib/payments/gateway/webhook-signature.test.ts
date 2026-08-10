@@ -132,4 +132,31 @@ describe("verifyMercadoPagoWebhookSignature", () => {
       }),
     ).toBe(false);
   });
+
+  it("QA-002: rejeita quando x-request-id foi trocado depois de assinado (faz parte do manifest, não só um header de log)", () => {
+    const ts = "1700000000";
+    const dataId = "123456789";
+    const v1 = sign({ dataId, requestId: "req-original", ts });
+    expect(
+      verifyMercadoPagoWebhookSignature({
+        xSignature: `ts=${ts},v1=${v1}`,
+        xRequestId: "req-trocado", // diferente do que foi assinado
+        dataId,
+        secret: SECRET,
+      }),
+    ).toBe(false);
+  });
+
+  it("QA-002: rejeita quando o ts do manifest foi trocado depois de assinado (v1 calculado sobre outro ts)", () => {
+    const dataId = "123456789";
+    const v1 = sign({ dataId, requestId: "req-1", ts: "1700000000" });
+    expect(
+      verifyMercadoPagoWebhookSignature({
+        xSignature: `ts=1700000099,v1=${v1}`, // ts do header diferente do usado para assinar
+        xRequestId: "req-1",
+        dataId,
+        secret: SECRET,
+      }),
+    ).toBe(false);
+  });
 });

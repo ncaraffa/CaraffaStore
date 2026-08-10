@@ -436,8 +436,38 @@ begin
   v_terminal_paid := v_charge.status = 'approved';
   v_terminal_unpaid := v_charge.status in ('rejected', 'cancelled', 'expired');
 
-  if (v_terminal_paid and p_internal_status <> 'approved')
-    or (v_terminal_unpaid and p_internal_status = 'approved') then
+  -- QA-003 (achado no QA dinâmico da TASK-007): uma cobrança já
+  -- `approved` — com amount/currency/external_reference já conferidos
+  -- acima — representa um período pago CONSUMADO (period_start/
+  -- period_end, base de toda renovação futura via
+  -- billing_charge_upsert_creating). Um evento terminal conflitante
+  -- chegando DEPOIS (ex.: `expired`/`cancelled` tardio, stale ou
+  -- incorreto do provedor) NUNCA pode apagar esse fato — isso destruiria
+  -- silenciosamente o registro do período pago sem nenhum fluxo
+  -- explícito de estorno/chargeback (fora do escopo desta task). Por
+  -- isso este caso NÃO muda `status`/`approved_at`/`period_start`/
+  -- `period_end` — só registra a anomalia em audit_log para revisão
+  -- humana e atualiza metadados de rastreio, exatamente como o ramo
+  -- "já terminal e coerente" abaixo.
+  if v_terminal_paid and p_internal_status <> 'approved' then
+    update public.billing_charges
+    set provider_status = p_provider_status, provider_status_detail = p_provider_status_detail,
+        last_webhook_at = now(), updated_at = now()
+    where id = p_charge_id
+    returning * into v_charge;
+    insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
+    values (null, v_charge.store_id, 'billing_manual_review_required', 'billing_charge', v_charge.id::text,
+      jsonb_build_object('reason', 'terminal_state_conflict_after_approval', 'previous_status', 'approved', 'incoming_status', p_internal_status, 'provider_payment_id', p_provider_payment_id, 'note', 'approved status preserved — period pago não foi afetado'));
+    return v_charge;
+  end if;
+
+  -- Sentido oposto: cobrança já terminal SEM pagamento (rejected/
+  -- cancelled/expired) recebendo um `approved` tardio. Aqui SIM vai para
+  -- manual_review — não existe fato de pagamento consumado para
+  -- preservar, e ativar automaticamente a partir de um estado já
+  -- encerrado é o tipo de decisão que precisa de revisão humana (evita
+  -- ativação por evento duplicado/fora de ordem do provedor).
+  if v_terminal_unpaid and p_internal_status = 'approved' then
     update public.billing_charges set status = 'manual_review', updated_at = now()
       where id = p_charge_id returning * into v_charge;
     insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)

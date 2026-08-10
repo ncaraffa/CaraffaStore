@@ -85,8 +85,27 @@ export async function handlePlatformBillingWebhook(input: PlatformBillingWebhook
     p_error_code: errorCode,
   });
 
-  if (!outcome.ok && outcome.reason === "provider_unreachable") {
-    return { status: 503, body: { message: "provider_unreachable" } };
+  // QA-001 (achado no QA dinâmico da TASK-007): `outcome.ok` distingue
+  // dois mundos completamente diferentes — nunca responder 200 fora do
+  // caminho feliz. `ok: true` cobre exatamente os casos onde o
+  // processamento terminou de verdade, incluindo quando o resultado
+  // DELIBERADO foi `manual_review` (mismatch de valor/referência/moeda
+  // aplicado com sucesso — billing_charge_apply_provider_state retornou
+  // a linha normalmente, sem erro de RPC). `ok: false` cobre falha de
+  // PROCESSAMENTO — nada foi de fato persistido (erro de RPC/SQL
+  // inesperado, credenciais da plataforma ausentes, ou qualquer razão
+  // futura não mapeada aqui) — nesses casos o Mercado Pago precisa
+  // reenviar, então a resposta tem que ser um 5xx, nunca 200. Só
+  // `provider_unreachable` (falha transitória ao consultar o Mercado
+  // Pago, não nossa) usa 503; qualquer outra falha de processamento usa
+  // 500 — o registro em billing_webhook_events acima já é o log
+  // server-side seguro (processing_status='error', error_code=motivo),
+  // o corpo da resposta HTTP nunca expõe esse detalhe.
+  if (!outcome.ok) {
+    if (outcome.reason === "provider_unreachable") {
+      return { status: 503, body: { message: "provider_unreachable" } };
+    }
+    return { status: 500, body: { message: "processing_failed" } };
   }
 
   return { status: 200, body: { message: "processed" } };

@@ -106,4 +106,80 @@ describe("handlePlatformBillingWebhook", () => {
     const result = await handlePlatformBillingWebhook({ xSignature: "ts=1,v1=abc", xRequestId: "r", action: "payment.updated", dataId: "42" });
     expect(result.status).toBe(503);
   });
+
+  // QA-001 (achado no QA independente): outcome.ok distingue "processamento
+  // terminou de verdade" (mesmo quando o resultado deliberado é
+  // manual_review) de "nada foi persistido porque algo quebrou" — só o
+  // segundo mundo pode responder um status diferente de 200/503
+  // (503 reservado a provider_unreachable, que é falha do Mercado Pago,
+  // não nossa).
+  describe("QA-001 — nunca confirma 200 quando o processamento não terminou de verdade", () => {
+    it("replay idempotente (cobrança já terminal, evento coerente) devolve 200", async () => {
+      verifyMercadoPagoWebhookSignatureMock.mockReturnValue(true);
+      reconcileBillingChargeByProviderPaymentIdMock.mockResolvedValue({
+        ok: true,
+        charge: { id: "charge-1", store_id: "store-1", status: "approved" },
+        reason: "already_terminal",
+      });
+
+      const { handlePlatformBillingWebhook } = await import("./webhook-handler");
+      const result = await handlePlatformBillingWebhook({ xSignature: "ts=1,v1=abc", xRequestId: "r", action: "payment.updated", dataId: "42" });
+      expect(result.status).toBe(200);
+    });
+
+    it("mismatch de amount/currency/external_reference persistido com sucesso como manual_review devolve 200 (foi processado deliberadamente)", async () => {
+      verifyMercadoPagoWebhookSignatureMock.mockReturnValue(true);
+      reconcileBillingChargeByProviderPaymentIdMock.mockResolvedValue({
+        ok: true,
+        charge: { id: "charge-1", store_id: "store-1", status: "manual_review" },
+      });
+
+      const { handlePlatformBillingWebhook } = await import("./webhook-handler");
+      const result = await handlePlatformBillingWebhook({ xSignature: "ts=1,v1=abc", xRequestId: "r", action: "payment.updated", dataId: "42" });
+      expect(result.status).toBe(200);
+    });
+
+    it("falha inesperada do RPC/apply (nada foi persistido) NUNCA devolve 200 — usa 500, não confirma sucesso falso", async () => {
+      verifyMercadoPagoWebhookSignatureMock.mockReturnValue(true);
+      reconcileBillingChargeByProviderPaymentIdMock.mockResolvedValue({
+        ok: false,
+        charge: { id: "charge-1", store_id: "store-1", status: "pending" },
+        reason: "apply_failed",
+      });
+
+      const { handlePlatformBillingWebhook } = await import("./webhook-handler");
+      const result = await handlePlatformBillingWebhook({ xSignature: "ts=1,v1=abc", xRequestId: "r", action: "payment.updated", dataId: "42" });
+      expect(result.status).not.toBe(200);
+      expect(result.status).toBe(500);
+    });
+
+    it("qualquer razão de falha futura não mapeada explicitamente também nunca devolve 200 (default seguro)", async () => {
+      verifyMercadoPagoWebhookSignatureMock.mockReturnValue(true);
+      reconcileBillingChargeByProviderPaymentIdMock.mockResolvedValue({
+        ok: false,
+        charge: { id: "charge-1", store_id: "store-1", status: "pending" },
+        reason: "platform_not_configured",
+      });
+
+      const { handlePlatformBillingWebhook } = await import("./webhook-handler");
+      const result = await handlePlatformBillingWebhook({ xSignature: "ts=1,v1=abc", xRequestId: "r", action: "payment.updated", dataId: "42" });
+      expect(result.status).not.toBe(200);
+      expect(result.status).toBe(500);
+    });
+
+    it("resposta de falha nunca vaza detalhe interno (stack, secret, mensagem de erro do RPC) — só uma mensagem genérica", async () => {
+      verifyMercadoPagoWebhookSignatureMock.mockReturnValue(true);
+      reconcileBillingChargeByProviderPaymentIdMock.mockResolvedValue({
+        ok: false,
+        charge: { id: "charge-1", store_id: "store-1", status: "pending" },
+        reason: "apply_failed",
+      });
+
+      const { handlePlatformBillingWebhook } = await import("./webhook-handler");
+      const result = await handlePlatformBillingWebhook({ xSignature: "ts=1,v1=abc", xRequestId: "r", action: "payment.updated", dataId: "42" });
+      const bodyText = JSON.stringify(result.body);
+      expect(bodyText).not.toMatch(/secret|token|stack|at\s+\w+\s*\(/i);
+      expect(result.body).toEqual({ message: "processing_failed" });
+    });
+  });
 });
