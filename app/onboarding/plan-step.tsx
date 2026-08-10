@@ -4,28 +4,13 @@ import { useActionState } from "react";
 import { savePlanAction } from "./actions";
 import { IDLE_ACTION_STATE } from "@/lib/auth/action-state";
 import type { Database } from "@/lib/supabase/types";
+import { PLATFORM_PLANS as PLANS } from "@/lib/billing/plans";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { IconCheck } from "@/components/ui/icons";
 import styles from "./plan-step.module.css";
 
 type OnboardingRow = Database["public"]["Tables"]["onboarding_progress"]["Row"];
-
-/**
- * `code` é o identificador técnico gravado em `plan_code`, travado por
- * CHECK constraint em `in (30, 50, 80)` (supabase/migrations/0002_auth_
- * onboarding.sql) — nunca renomeie nem troque esses três números sem uma
- * migration. `price` é só o texto comercial exibido: o Profissional
- * (código 80) foi reprecificado para R$ 70 sem alterar o código interno,
- * exatamente para não exigir migration nesta rodada. Ver docs/PLANS-SPEC.md.
- * `tier` só ordena visualmente (mesmo motivo de nível do pricing da
- * landing); `featured` replica qual card recebe destaque lá.
- */
-const PLANS = [
-  { code: 30, label: "Essencial", price: 30, tier: 1, featured: false },
-  { code: 50, label: "Crescimento", price: 50, tier: 2, featured: true },
-  { code: 80, label: "Profissional", price: 70, tier: 3, featured: false },
-] as const;
 
 export function PlanStep({ progress }: { progress: OnboardingRow }) {
   const [state, formAction, pending] = useActionState(savePlanAction, IDLE_ACTION_STATE);
