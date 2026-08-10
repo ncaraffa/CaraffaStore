@@ -62,24 +62,43 @@
 }
 
 /* ============================================================
-   Mobile/tablet compacto — cards de pedido, não tabela espremida
-   (TASK008-RETEST-ORD-002 / TASK008-FINAL-ORD-003: zero corte, zero
-   scroll horizontal necessário; mesmo padrão de
+   Cards de pedido — não tabela espremida (TASK008-RETEST-ORD-002 /
+   TASK008-FINAL-ORD-003; mesmo padrão de
    app/dashboard/products/products-list.module.css).
 
-   O corte é 959px, não um número arbitrário: é o MESMO breakpoint que
-   o DashboardShell usa para a sidebar/bottom-nav
-   (components/dashboard/DashboardShell.module.css, `@media (min-width:
-   960px)` — "some por completo a partir de 960px"). Abaixo de 960px o
-   shell já está no layout compacto (sem sidebar, padding de conteúdo
-   menor); usar qualquer corte diferente aqui cria uma faixa (721–768px
-   era o caso) onde o shell já é compacto mas a lista de pedidos ainda
-   tenta caber a tabela de `min-width: 46rem`. */
+   O corte NÃO é o breakpoint do DashboardShell (960px). A sidebar
+   abrir não significa que sobrou largura suficiente para a tabela —
+   são necessidades diferentes de componentes diferentes. Medido ao
+   vivo (DevTools, `getBoundingClientRect` de cada `<th>` contra o
+   wrapper real, dados reais incluindo cliente com nome longo):
+
+   - 960–1023px: sidebar já aberta, mas o wrapper disponível
+     (viewport − 17rem de sidebar − padding) fica em ~640–704px,
+     menor que a largura natural da tabela (~1232px só com o cabeçalho
+     em conteúdo curto — `min-width: 46rem` nem chega a ser o limite
+     real). Só código/cliente/telefone ficam visíveis; data,
+     modalidade, total, status, pagamento e ações saem da área visível
+     — o mesmo problema que já existia em 768px, só que atrás da
+     sidebar.
+   - 1024–1259px: melhora, mas total/status ainda ficam fora da área
+     visível sem scroll na maior parte da faixa.
+   - a partir de ~1260–1280px: código, cliente, telefone, data,
+     modalidade, total e status ficam visíveis sem scroll; só
+     pagamento/ações (colunas finais, já alcançáveis por um scroll
+     curto contido no wrapper) ficam de fora — o mesmo padrão que já
+     foi considerado aceitável em 1280/1440.
+
+   1280px foi escolhido por ser o primeiro breakpoint redondo, já
+   testado e aprovado à parte, onde essa condição se sustenta —
+   nenhuma tentativa e erro além disso. Abaixo de 1280px a lista usa
+   cards mesmo com a sidebar desktop já aberta (960–1279px): é
+   responsive design correto ter páginas internas trocando de
+   apresentação em breakpoints diferentes do shell. */
 .cardList {
   display: none;
 }
 
-@media (max-width: 959px) {
+@media (max-width: 1279px) {
   .tableWrap {
     display: none;
   }
