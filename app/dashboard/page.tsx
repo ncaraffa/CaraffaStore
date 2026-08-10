@@ -1,8 +1,10 @@
 import Link from "next/link";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/types";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireStoreStatus } from "@/lib/tenant/access-control";
 import { getDashboardSummary } from "@/lib/dashboard/service";
-import { getPaymentSettings } from "@/lib/payments/settings-service";
+import { getPaymentSettings, PaymentSettingsError, type PaymentSettingsView } from "@/lib/payments/settings-service";
 import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/orders/messages";
 import { formatPriceCents } from "@/lib/catalog/format";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
@@ -26,6 +28,28 @@ import styles from "./dashboard-home.module.css";
 export const dynamic = "force-dynamic";
 
 /**
+ * Isola a leitura de payment_settings_get: só é chamada quando o membro é
+ * owner/admin (única condição em que can_manage_store_payments autoriza),
+ * então um erro aqui já não é falta de privilégio esperada — é uma falha
+ * real (RPC fora do ar, drift de ambiente). Registra no servidor e
+ * degrada só o cartão de Pix em vez de derrubar a dashboard inteira.
+ */
+async function fetchPaymentSettingsSafely(
+  supabase: SupabaseClient<Database>,
+  storeId: string,
+): Promise<PaymentSettingsView | null> {
+  try {
+    return await getPaymentSettings(supabase, storeId);
+  } catch (error) {
+    if (error instanceof PaymentSettingsError) {
+      console.error("[dashboard] falha ao carregar payment settings", { storeId, code: error.code });
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
  * requireStoreStatus exige uma loja `active` de verdade — sem `?store=`
  * resolve pela situação real de memberships (nunca libera acesso
  * genérico por ausência do parâmetro; corrige BUG-T2-001,
@@ -38,15 +62,27 @@ export default async function DashboardPage({
 }) {
   const { store: storeSlug } = await searchParams;
   const supabase = await createServerSupabaseClient();
-  const { store } = await requireStoreStatus(supabase, "active", storeSlug);
+  const { store, role } = await requireStoreStatus(supabase, "active", storeSlug);
+
+  /**
+   * payment_settings_get (0007_payments.sql) só autoriza owner/admin
+   * (can_manage_store_payments) — staff nunca lê configuração de
+   * pagamento, por desenho, porque o retorno é dado sensível de loja.
+   * Chamar o RPC para staff sempre lança insufficient_privilege; a
+   * dashboard precisa respeitar essa fronteira em vez de tentar a
+   * chamada e tratar o erro depois.
+   */
+  const canManagePayments = role === "owner" || role === "admin";
 
   const [summary, paymentSettings] = await Promise.all([
     getDashboardSummary(supabase, store.id),
-    getPaymentSettings(supabase, store.id),
+    canManagePayments ? fetchPaymentSettingsSafely(supabase, store.id) : Promise.resolve(null),
   ]);
 
-  const pixReady = paymentSettings.isConfigured && paymentSettings.isEnabled;
-  const needsAttention = summary.pendingPixCount > 0 || !pixReady || summary.lowStockProducts.length > 0;
+  const pixReady = paymentSettings ? paymentSettings.isConfigured && paymentSettings.isEnabled : false;
+  const pixStatusUnknown = canManagePayments && paymentSettings === null;
+  const needsAttention =
+    summary.pendingPixCount > 0 || (canManagePayments && !pixReady) || summary.lowStockProducts.length > 0;
 
   return (
     <DashboardShell storeName={store.name} storeSlug={store.slug} storeStatus={store.status} active="painel">
@@ -90,7 +126,7 @@ export default async function DashboardPage({
                 Precisa da sua atenção
               </p>
               <ul className={styles.attentionList}>
-                {!pixReady && (
+                {canManagePayments && !pixReady && (
                   <li>
                     <span>Pix ainda não está pronto para receber pagamentos.</span>
                     <Link href={`/dashboard/settings/payments?store=${store.slug}`}>Configurar agora</Link>
@@ -199,24 +235,48 @@ export default async function DashboardPage({
 
           <Card>
             <CardHeader title="Pix / Mercado Pago" />
-            <div className={styles.paymentStatus}>
-              <span className={styles.paymentIcon} data-ready={pixReady || undefined}>
-                {pixReady ? <IconCheck /> : <IconPix />}
-              </span>
-              <span>
-                <strong>{pixReady ? "Pronto para receber" : "Configuração pendente"}</strong>
-                <span className={styles.paymentSub}>
-                  {paymentSettings.isConfigured
-                    ? paymentSettings.isEnabled
-                      ? "Pix ativo para esta loja"
-                      : "Credenciais salvas, Pix desativado"
-                    : "Nenhuma credencial cadastrada"}
+            {!canManagePayments ? (
+              <div className={styles.paymentStatus}>
+                <span className={styles.paymentIcon}>
+                  <IconPix />
                 </span>
-              </span>
-            </div>
-            <Link href={`/dashboard/settings/payments?store=${store.slug}`} className={styles.cardFooterLink}>
-              {pixReady ? "Ver configuração" : "Configurar agora"}
-            </Link>
+                <span>
+                  <strong>Acesso restrito</strong>
+                  <span className={styles.paymentSub}>Configuração de pagamento é visível só para proprietários e administradores.</span>
+                </span>
+              </div>
+            ) : pixStatusUnknown ? (
+              <div className={styles.paymentStatus}>
+                <span className={styles.paymentIcon}>
+                  <IconAlertTriangle />
+                </span>
+                <span>
+                  <strong>Não foi possível carregar</strong>
+                  <span className={styles.paymentSub}>Tente novamente em instantes ou abra a configuração diretamente.</span>
+                </span>
+              </div>
+            ) : (
+              <div className={styles.paymentStatus}>
+                <span className={styles.paymentIcon} data-ready={pixReady || undefined}>
+                  {pixReady ? <IconCheck /> : <IconPix />}
+                </span>
+                <span>
+                  <strong>{pixReady ? "Pronto para receber" : "Configuração pendente"}</strong>
+                  <span className={styles.paymentSub}>
+                    {paymentSettings?.isConfigured
+                      ? paymentSettings.isEnabled
+                        ? "Pix ativo para esta loja"
+                        : "Credenciais salvas, Pix desativado"
+                      : "Nenhuma credencial cadastrada"}
+                  </span>
+                </span>
+              </div>
+            )}
+            {canManagePayments && (
+              <Link href={`/dashboard/settings/payments?store=${store.slug}`} className={styles.cardFooterLink}>
+                {pixReady ? "Ver configuração" : "Configurar agora"}
+              </Link>
+            )}
           </Card>
 
           <Card>
@@ -230,10 +290,12 @@ export default async function DashboardPage({
                 <IconTag />
                 Nova categoria
               </Link>
-              <Link href={`/dashboard/settings/payments?store=${store.slug}`} className={styles.quickLink}>
-                <IconCreditCard />
-                Pagamentos
-              </Link>
+              {canManagePayments && (
+                <Link href={`/dashboard/settings/payments?store=${store.slug}`} className={styles.quickLink}>
+                  <IconCreditCard />
+                  Pagamentos
+                </Link>
+              )}
             </div>
           </Card>
         </div>

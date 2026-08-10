@@ -18,10 +18,36 @@ type Client = SupabaseClient<Database>;
  * depois que o Pix foi de fato aprovado pelo Mercado Pago. Para
  * payment_mode='manual' significa confirmação administrativa. Em nenhum
  * caso é uma métrica inventada.
+ *
+ * Cada métrica é calculada com sua PRÓPRIA query, sem um `limit()` global
+ * que corte pedidos antigos (qa/reports/TASK-008-PROPAGATION-REVIEW.md,
+ * TASK008-PROP-003 — o antigo `RECENT_ORDERS_LIMIT = 300` subestimava
+ * receita/contagens em lojas de maior volume, sem aviso):
+ *
+ * - contagens (`ordersLast24h`, `pendingPixCount`) usam
+ *   `count: "exact", head: true` — o Postgres conta no banco e o
+ *   PostgREST devolve só o total no header, sem trafegar linha nenhuma,
+ *   então o custo não cresce com o volume de pedidos exibidos.
+ * - `revenueLast30dCents` filtra `status`/`created_at` já na query (só
+ *   os pedidos elegíveis da janela chegam ao servidor) e pagina em
+ *   blocos de 1000 via `.range()` só como proteção para janelas de alto
+ *   volume — não é um corte, soma todas as páginas até esgotar.
+ * - `recentOrders` (exibição) busca só os 5 mais recentes, que é tudo
+ *   que a UI usa; `hasAnyOrder` deriva desse mesmo resultado (se existe
+ *   qualquer pedido, ele aparece entre os 5 mais recentes).
+ *
+ * Agregação de SUM diretamente no Postgres via REST (`select=total_cents.sum()`)
+ * foi avaliada e descartada nesta rodada: o PostgREST local recusa com
+ * `PGRST123 — Use of aggregate functions is not allowed` porque
+ * `db-aggregates-enabled` está desligado por padrão; ligar esse flag é
+ * uma mudança de configuração de API (não só de código) que valeria por
+ * si só, e habilitaria agregações para outras tabelas além de `orders` —
+ * fora do escopo desta correção pontual.
  */
 const REVENUE_STATUSES: OrderStatus[] = ["confirmed", "preparing", "ready", "completed"];
-const RECENT_ORDERS_LIMIT = 300;
 const LOW_STOCK_THRESHOLD = 5;
+const RECENT_ORDERS_DISPLAY_LIMIT = 5;
+const REVENUE_PAGE_SIZE = 1000;
 
 export interface DashboardOrderSummary {
   id: string;
@@ -37,7 +63,6 @@ export interface DashboardSummary {
   ordersLast24h: number;
   revenueLast30dCents: number;
   pendingPixCount: number;
-  statusCounts: Record<OrderStatus, number>;
   recentOrders: DashboardOrderSummary[];
   productsPublished: number;
   productsDraft: number;
@@ -45,56 +70,68 @@ export interface DashboardSummary {
   lowStockProducts: { id: string; name: string; stock: number }[];
 }
 
-export async function getDashboardSummary(supabase: Client, storeId: string): Promise<DashboardSummary> {
-  const [ordersResult, productsResult] = await Promise.all([
-    supabase
+async function sumRevenueLast30d(supabase: Client, storeId: string, sinceIso: string): Promise<number> {
+  let total = 0;
+  let from = 0;
+
+  for (;;) {
+    const { data, error } = await supabase
       .from("orders")
-      .select("id, public_code, customer_name, total_cents, status, payment_mode, created_at")
+      .select("total_cents")
       .eq("store_id", storeId)
-      .order("created_at", { ascending: false })
-      .limit(RECENT_ORDERS_LIMIT),
-    supabase.from("products").select("id, name, stock, status").eq("store_id", storeId),
-  ]);
+      .in("status", REVENUE_STATUSES)
+      .gte("created_at", sinceIso)
+      .range(from, from + REVENUE_PAGE_SIZE - 1);
 
-  if (ordersResult.error) throw ordersResult.error;
-  if (productsResult.error) throw productsResult.error;
+    if (error) throw error;
 
-  const orders = ordersResult.data ?? [];
-  const products = productsResult.data ?? [];
+    const page = data ?? [];
+    for (const row of page) total += row.total_cents;
 
-  const now = Date.now();
-  const dayAgo = now - 24 * 60 * 60 * 1000;
-  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-
-  const statusCounts: Record<OrderStatus, number> = {
-    pending: 0,
-    confirmed: 0,
-    preparing: 0,
-    ready: 0,
-    completed: 0,
-    cancelled: 0,
-  };
-
-  let ordersLast24h = 0;
-  let revenueLast30dCents = 0;
-  let pendingPixCount = 0;
-
-  for (const order of orders) {
-    statusCounts[order.status] += 1;
-
-    const createdAtMs = new Date(order.created_at).getTime();
-    if (createdAtMs >= dayAgo) ordersLast24h += 1;
-
-    if (REVENUE_STATUSES.includes(order.status) && createdAtMs >= thirtyDaysAgo) {
-      revenueLast30dCents += order.total_cents;
-    }
-
-    if (order.status === "pending" && order.payment_mode === "pix") {
-      pendingPixCount += 1;
-    }
+    if (page.length < REVENUE_PAGE_SIZE) break;
+    from += REVENUE_PAGE_SIZE;
   }
 
-  const recentOrders: DashboardOrderSummary[] = orders.slice(0, 5).map((order) => ({
+  return total;
+}
+
+export async function getDashboardSummary(supabase: Client, storeId: string): Promise<DashboardSummary> {
+  const now = Date.now();
+  const dayAgoIso = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+  const thirtyDaysAgoIso = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [ordersLast24hResult, pendingPixResult, revenueLast30dCents, recentOrdersResult, productsResult] =
+    await Promise.all([
+      supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("store_id", storeId)
+        .gte("created_at", dayAgoIso),
+      supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("store_id", storeId)
+        .eq("status", "pending")
+        .eq("payment_mode", "pix"),
+      sumRevenueLast30d(supabase, storeId, thirtyDaysAgoIso),
+      supabase
+        .from("orders")
+        .select("id, public_code, customer_name, total_cents, status, created_at")
+        .eq("store_id", storeId)
+        .order("created_at", { ascending: false })
+        .limit(RECENT_ORDERS_DISPLAY_LIMIT),
+      supabase.from("products").select("id, name, stock, status").eq("store_id", storeId),
+    ]);
+
+  if (ordersLast24hResult.error) throw ordersLast24hResult.error;
+  if (pendingPixResult.error) throw pendingPixResult.error;
+  if (recentOrdersResult.error) throw recentOrdersResult.error;
+  if (productsResult.error) throw productsResult.error;
+
+  const recentOrdersRaw = recentOrdersResult.data ?? [];
+  const products = productsResult.data ?? [];
+
+  const recentOrders: DashboardOrderSummary[] = recentOrdersRaw.map((order) => ({
     id: order.id,
     publicCode: order.public_code,
     customerName: order.customer_name,
@@ -113,11 +150,10 @@ export async function getDashboardSummary(supabase: Client, storeId: string): Pr
     .map((p) => ({ id: p.id, name: p.name, stock: p.stock }));
 
   return {
-    hasAnyOrder: orders.length > 0,
-    ordersLast24h,
+    hasAnyOrder: recentOrders.length > 0,
+    ordersLast24h: ordersLast24hResult.count ?? 0,
     revenueLast30dCents,
-    pendingPixCount,
-    statusCounts,
+    pendingPixCount: pendingPixResult.count ?? 0,
     recentOrders,
     productsPublished,
     productsDraft,
