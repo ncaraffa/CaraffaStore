@@ -7,11 +7,16 @@ import type { PlanCode } from "@/lib/supabase/types";
 import { LogoutButton } from "@/app/logout/logout-button";
 import { BillingForm } from "./billing-form";
 import { BillingStatusClient } from "./billing-status-client";
+import { Alert } from "@/components/ui/Alert";
 import styles from "./pending-payment.module.css";
 
 export const dynamic = "force-dynamic";
 
-const NON_TERMINAL_STATUSES = new Set(["creating", "pending"]);
+// `creating` entra aqui só para acionar a reconciliação abaixo (uma
+// corrida rara pode ter deixado provider_payment_id gravado um instante
+// depois) — a decisão de retry usa `isStuckCreating` isoladamente, não
+// este conjunto (ver QA-FINAL-002).
+const RECONCILE_ON_STATUSES = new Set(["creating", "pending"]);
 
 /**
  * TASK-007 — substitui a versão puramente informativa da TASK-002: agora
@@ -39,13 +44,28 @@ export default async function PendingPaymentPage({
   const plan = planRow ? getPlatformPlan(planRow.plan_code as PlanCode) : null;
 
   let charge = await getCurrentPlatformBillingCharge(supabase, store.id);
-  if (charge && NON_TERMINAL_STATUSES.has(charge.status)) {
+  if (charge && RECONCILE_ON_STATUSES.has(charge.status)) {
     const outcome = await reconcileBillingChargeById(charge.id);
     if (outcome.charge) charge = mapBillingChargeRowToResult(outcome.charge);
   }
 
+  // QA-FINAL-002 (achado no QA independente): uma cobrança pode ficar
+  // presa em `creating` para sempre se a primeira chamada ao Mercado
+  // Pago sofreu erro transitório (timeout/5xx) — billing_charge_
+  // upsert_creating/mark_creation_failed deliberadamente NÃO marcam
+  // falha definitiva nesse caso (ver lib/billing/orchestration.ts), e
+  // reconcileBillingChargeById não tem provider_payment_id pra
+  // consultar ainda. Sem isto, o usuário via só "Gerando cobrança..."
+  // indefinidamente, sem QR e sem forma de continuar. `isStuckCreating`
+  // trata esse caso como "pode tentar de novo": reenviar o formulário
+  // chama createPlatformBillingCharge outra vez, que — graças ao fix do
+  // QA-FINAL-001 — reaproveita a MESMA cobrança e a MESMA
+  // provider_idempotency_key já persistida, nunca duplica nada.
+  const isStuckCreating = charge?.status === "creating";
   const canRetry =
-    !charge || (!NON_TERMINAL_STATUSES.has(charge.status) && charge.status !== "approved" && charge.status !== "manual_review");
+    !charge ||
+    isStuckCreating ||
+    (charge.status !== "pending" && charge.status !== "approved" && charge.status !== "manual_review");
 
   return (
     <main className={styles.main}>
@@ -72,7 +92,17 @@ export default async function PendingPaymentPage({
           expiresAt={charge.expiresAt}
         />
       ) : (
-        <BillingForm storeSlug={store.slug} />
+        <>
+          {isStuckCreating && (
+            <div className={styles.alertGap}>
+              <Alert tone="warning">
+                A geração da cobrança anterior não terminou (o Mercado Pago não respondeu a tempo). Preencha os dados
+                novamente para tentar de novo — nenhuma cobrança duplicada será criada.
+              </Alert>
+            </div>
+          )}
+          <BillingForm storeSlug={store.slug} />
+        </>
       )}
 
       <div className={styles.footerActions}>

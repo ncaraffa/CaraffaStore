@@ -27,6 +27,12 @@ export interface BillingReconcileOutcome {
  * aplica via `billing_charge_apply_provider_state`, mesma função usada
  * pelo webhook. Espelha lib/payments/reconcile.ts (contexto B); aqui
  * sempre com as credenciais da própria CaraffaStore, nunca de uma loja.
+ *
+ * Usada pela tela pending-payment (refresh sob demanda do usuário) —
+ * aqui SIM vale parar cedo quando a linha local já está terminal
+ * (approved/rejected/cancelled/expired/manual_review): evita uma
+ * consulta ao provider a cada carregamento de página sem necessidade
+ * nenhuma, já que nada de novo chegou.
  */
 export async function reconcileBillingChargeById(chargeId: string): Promise<BillingReconcileOutcome> {
   const serviceClient = createPaymentsServiceClient();
@@ -41,9 +47,20 @@ export async function reconcileBillingChargeById(chargeId: string): Promise<Bill
     return { ok: false, charge: null, reason: "not_found" };
   }
 
-  return reconcileChargeRow(serviceClient, charge);
+  return reconcileChargeRow(serviceClient, charge, { shortCircuitTerminal: true });
 }
 
+/**
+ * Usada pelo webhook — QA-FINAL-004 (achado no QA independente): NUNCA
+ * pode curto-circuitar em terminal. Uma notificação de verdade acabou de
+ * chegar do Mercado Pago; se a linha local já estiver terminal (ex.:
+ * `approved`) e o provider agora reportar um estado conflitante (ex.:
+ * `expired` tardio/stale), a lógica de conflito terminal de
+ * `billing_charge_apply_provider_state` (QA-003) só roda se a gente
+ * efetivamente consultar o provider e chamar a RPC de novo — pular essa
+ * consulta por já achar que "já resolvemos isso" descartaria o evento
+ * sem nunca registrar a anomalia.
+ */
 export async function reconcileBillingChargeByProviderPaymentId(providerPaymentId: string): Promise<BillingReconcileOutcome> {
   const serviceClient = createPaymentsServiceClient();
 
@@ -57,14 +74,15 @@ export async function reconcileBillingChargeByProviderPaymentId(providerPaymentI
     return { ok: false, charge: null, reason: "not_found" };
   }
 
-  return reconcileChargeRow(serviceClient, charge);
+  return reconcileChargeRow(serviceClient, charge, { shortCircuitTerminal: false });
 }
 
 async function reconcileChargeRow(
   serviceClient: ReturnType<typeof createPaymentsServiceClient>,
   charge: BillingChargeRow,
+  options: { shortCircuitTerminal: boolean },
 ): Promise<BillingReconcileOutcome> {
-  if (TERMINAL_STATUSES.has(charge.status)) {
+  if (options.shortCircuitTerminal && TERMINAL_STATUSES.has(charge.status)) {
     return { ok: true, charge, reason: "already_terminal" };
   }
   if (!charge.provider_payment_id) {
@@ -106,7 +124,13 @@ async function reconcileChargeRow(
     p_provider_status_detail: providerState.statusDetail,
     p_amount_cents: providerState.amountCents,
     p_currency: providerState.currency,
-    p_external_reference: providerState.externalReference ?? charge.external_reference,
+    // QA-FINAL-003 (achado no QA independente): NUNCA completar com
+    // charge.external_reference quando o provider não devolve o campo —
+    // isso simularia artificialmente uma referência correta e passaria
+    // pela checagem de integridade sem provar nada. Repassa exatamente
+    // o que o provider respondeu (inclusive null); a RPC trata ausência/
+    // divergência como manual_review, nunca ativa.
+    p_external_reference: providerState.externalReference,
     p_qr_code: providerState.qrCode,
     p_qr_code_base64: providerState.qrCodeBase64,
     p_ticket_url: providerState.ticketUrl,

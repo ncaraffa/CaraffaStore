@@ -88,11 +88,18 @@ function mapRpcErrorToBillingCode(message: string | undefined): string {
  */
 export async function createPlatformBillingCharge(params: BillingChargeParams): Promise<BillingChargeResult> {
   const serviceClient = createPaymentsServiceClient();
-  const providerIdempotencyKey = buildProviderIdempotencyKey(params.storeId);
+  // Só uma CANDIDATA a chave — o banco só a persiste se de fato inserir
+  // uma linha nova. Se `billing_charge_upsert_creating` devolver uma
+  // cobrança já existente (reaproveitada), `charge.provider_idempotency_key`
+  // abaixo é a única fonte de verdade a partir daqui: usar esta variável
+  // local depois deste ponto duplicaria a X-Idempotency-Key enviada ao
+  // Mercado Pago entre duas execuções concorrentes/retry da mesma
+  // cobrança local (QA-FINAL-001).
+  const candidateIdempotencyKey = buildProviderIdempotencyKey(params.storeId);
 
   const { data: charge, error: upsertError } = await serviceClient.rpc("billing_charge_upsert_creating", {
     p_store_id: params.storeId,
-    p_provider_idempotency_key: providerIdempotencyKey,
+    p_provider_idempotency_key: candidateIdempotencyKey,
     p_payer_email: params.payerEmail,
     p_payer_doc_type: params.payerDocType,
     p_payer_doc_last4: params.payerDocNumber.slice(-4),
@@ -101,6 +108,11 @@ export async function createPlatformBillingCharge(params: BillingChargeParams): 
   if (upsertError || !charge) {
     throw new BillingCheckoutError(mapRpcErrorToBillingCode(upsertError?.message));
   }
+
+  // Única fonte de verdade da chave a partir daqui — pode ser a
+  // candidata acima (linha nova) ou a chave persistida de uma cobrança
+  // `creating` reaproveitada (retry após timeout/erro transitório).
+  const providerIdempotencyKey = charge.provider_idempotency_key;
 
   if (charge.status !== "creating") {
     // Reaproveitada (já enviada ao provedor antes, ou ainda pendente) —

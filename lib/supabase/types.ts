@@ -1250,7 +1250,7 @@ export interface Database {
           p_provider_status_detail: string | null;
           p_amount_cents: number;
           p_currency: string;
-          p_external_reference: string;
+          p_external_reference: string | null;
           p_qr_code: string | null;
           p_qr_code_base64: string | null;
           p_ticket_url: string | null;

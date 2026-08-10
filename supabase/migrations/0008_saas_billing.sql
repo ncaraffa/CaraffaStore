@@ -115,19 +115,18 @@ create unique index billing_charges_one_active_per_store
 create index billing_charges_store_status_idx on public.billing_charges (store_id, status);
 create index billing_charges_store_period_idx on public.billing_charges (store_id, period_end desc) where status = 'approved';
 
+-- QA-FINAL-006 (achado no QA independente): SEM nenhuma policy pra
+-- `authenticated` e SEM GRANT de SELECT — mesmo padrão deny-by-default
+-- de billing_webhook_events/payment_webhook_events/audit_log. A leitura
+-- sanitizada (billing_get_current_charge, mais abaixo) já cobre
+-- exatamente o que a tela pending-payment precisa; um GRANT SELECT
+-- bruto aqui contornaria a sanitização por completo (qualquer membro
+-- autenticado poderia consultar provider_payment_id/
+-- provider_idempotency_key/payer_email/payer_doc_* direto da tabela,
+-- ignorando o RPC).
 alter table public.billing_charges enable row level security;
 
-create policy billing_charges_select_member
-  on public.billing_charges
-  for select
-  to authenticated
-  using (public.is_store_member(store_id));
-
-comment on policy billing_charges_select_member on public.billing_charges is
-  'Qualquer membro da loja (não só owner/admin) — diferente de order_payments, porque a loja inteira fica bloqueada em pending_payment até a ativação; é a única tela que qualquer membro vê nesse estado. Nenhuma escrita direta concedida (nem a authenticated nem a service_role via RLS — service_role tem GRANT de tabela e passa por cima da RLS, desenho igual a order_payments).';
-
 revoke all on public.billing_charges from public, anon, authenticated, service_role;
-grant select on public.billing_charges to authenticated;
 grant select, insert, update, delete on public.billing_charges to service_role;
 
 -- ============================================================
@@ -422,9 +421,16 @@ begin
     return v_charge; -- já sinalizado para revisão humana — nunca decide sozinho depois disso.
   end if;
 
-  if v_charge.external_reference <> p_external_reference
-    or v_charge.amount_cents <> p_amount_cents
-    or v_charge.currency <> p_currency then
+  -- QA-FINAL-003 (achado no QA independente): `<>` com operando NULL
+  -- avalia para NULL em SQL, e `if null then` em PL/pgSQL é tratado como
+  -- falso — ou seja, um provider_state chegando SEM external_reference/
+  -- amount_cents/currency (nulo) passaria pela checagem de integridade
+  -- como se estivesse correto. `IS DISTINCT FROM` é null-safe (NULL só é
+  -- igual a NULL, nunca "igual" a um valor real): qualquer campo crítico
+  -- ausente/divergente sempre cai em manual_review, nunca ativa.
+  if v_charge.external_reference is distinct from p_external_reference
+    or v_charge.amount_cents is distinct from p_amount_cents
+    or v_charge.currency is distinct from p_currency then
     update public.billing_charges set status = 'manual_review', updated_at = now()
       where id = p_charge_id returning * into v_charge;
     insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)

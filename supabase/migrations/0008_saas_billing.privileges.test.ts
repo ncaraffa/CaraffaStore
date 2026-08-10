@@ -42,7 +42,7 @@ describe("platform_plan_price_cents — única fonte de verdade de preço no ban
   });
 });
 
-describe("billing_charges — leitura por qualquer membro, escrita só via RPC", () => {
+describe("billing_charges — QA-FINAL-006: sem SELECT bruto pra authenticated, só RPC sanitizado", () => {
   it("plan_code restrito a 30/50/80 e amount_cents sempre positivo (nunca aceita valor negativo/zero)", () => {
     expect(sql).toContain("plan_code integer not null check (plan_code in (30, 50, 80))");
     expect(sql).toContain("amount_cents integer not null check (amount_cents > 0)");
@@ -63,25 +63,21 @@ describe("billing_charges — leitura por qualquer membro, escrita só via RPC",
     expect(sql).toContain("payer_doc_last4 text not null check (payer_doc_last4 ~ '^[0-9]{4}$')");
   });
 
-  it("RLS habilitada, única policy é SELECT via is_store_member (qualquer membro, não só owner/admin)", () => {
+  it("RLS habilitada, ZERO policy (deny-by-default, mesmo padrão de billing_webhook_events/payment_webhook_events/audit_log)", () => {
     expect(sql).toContain("alter table public.billing_charges enable row level security");
-    expect(sql).toMatch(/create policy billing_charges_select_member[\s\S]*?using \(public\.is_store_member\(store_id\)\)/);
 
     const policyNames = [...sql.matchAll(/create policy (\w+)\s+on public\.billing_charges/g)].map((m) => m[1]);
-    expect(policyNames).toEqual(["billing_charges_select_member"]);
+    expect(policyNames).toEqual([]);
   });
 
-  it("revoga tudo antes de conceder; authenticated só recebe SELECT; service_role recebe DML completo; nunca anon", () => {
+  it("QA-FINAL-006 (achado no QA independente): authenticated NUNCA recebe GRANT algum em billing_charges — nenhuma leitura bruta contornando billing_get_current_charge; só service_role tem DML completo", () => {
     expect(sql).toContain("revoke all on public.billing_charges from public, anon, authenticated, service_role");
-    expect(sql).toContain("grant select on public.billing_charges to authenticated");
     expect(sql).toContain("grant select, insert, update, delete on public.billing_charges to service_role");
 
     const grantLines = sql.split(";").filter((s) => /^\s*grant\s/.test(s.trimStart()) && /\bon\s+public\.billing_charges\b/.test(s));
     for (const line of grantLines) {
       expect(line).not.toMatch(/\banon\b/);
-      if (/\bto\b[^;]*\bauthenticated\b/.test(line)) {
-        expect(line).not.toMatch(/\binsert\b|\bupdate\b|\bdelete\b/);
-      }
+      expect(line).not.toMatch(/\bto\b[^;]*\bauthenticated\b/);
     }
   });
 });
@@ -163,10 +159,18 @@ describe("billing_charge_apply_provider_state — único caminho de decisão, id
 
   it("diverência de external_reference/amount/currency vira manual_review, nunca decide sozinho", () => {
     const fn = fnBody();
-    expect(fn).toContain("v_charge.external_reference <> p_external_reference");
-    expect(fn).toContain("v_charge.amount_cents <> p_amount_cents");
-    expect(fn).toContain("v_charge.currency <> p_currency");
+    expect(fn).toContain("v_charge.external_reference is distinct from p_external_reference");
+    expect(fn).toContain("v_charge.amount_cents is distinct from p_amount_cents");
+    expect(fn).toContain("v_charge.currency is distinct from p_currency");
     expect(fn).toContain("status = 'manual_review'");
+  });
+
+  it("QA-FINAL-003 (achado no QA independente): comparação null-safe via IS DISTINCT FROM, nunca <> sozinho — <> com operando NULL avalia pra NULL e `if null then` é tratado como falso em PL/pgSQL, deixando passar um provider_state sem external_reference/amount/currency como se estivesse correto", () => {
+    const fn = fnBody();
+    expect(fn).not.toMatch(/v_charge\.external_reference\s*<>\s*p_external_reference/);
+    expect(fn).not.toMatch(/v_charge\.amount_cents\s*<>\s*p_amount_cents/);
+    expect(fn).not.toMatch(/v_charge\.currency\s*<>\s*p_currency/);
+    expect(fn).toContain("is distinct from");
   });
 
   it("conflito de estado terminal: já rejeitado/cancelado/expirado recebendo approved tardio vira manual_review (não ativa sozinho)", () => {

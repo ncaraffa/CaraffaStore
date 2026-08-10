@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { handlePlatformBillingWebhook } from "@/lib/billing/webhook-handler";
+import { resolveWebhookDataId } from "./resolve-data-id";
 
 // Runtime Node.js explícito: a validação de assinatura HMAC usa
 // node:crypto, incompatível com o Edge Runtime — mesmo motivo de
@@ -21,17 +22,19 @@ export async function POST(request: NextRequest) {
   const xRequestId = request.headers.get("x-request-id");
 
   let action: string | null = null;
-  let dataId: string | null = null;
+  let bodyDataId: string | null = null;
   try {
     const body = (await request.json()) as { action?: string; type?: string; data?: { id?: string | number } };
     action = body.action ?? body.type ?? null;
-    dataId = body.data?.id !== undefined && body.data?.id !== null ? String(body.data.id) : null;
+    bodyDataId = body.data?.id !== undefined && body.data?.id !== null ? String(body.data.id) : null;
   } catch {
     return NextResponse.json({ message: "invalid_request" }, { status: 400 });
   }
 
-  if (!dataId) {
-    dataId = request.nextUrl.searchParams.get("data.id") ?? request.nextUrl.searchParams.get("id");
+  const queryDataId = request.nextUrl.searchParams.get("data.id") ?? request.nextUrl.searchParams.get("id");
+  const { dataId, inconsistent } = resolveWebhookDataId(queryDataId, bodyDataId);
+  if (inconsistent) {
+    return NextResponse.json({ message: "invalid_request" }, { status: 400 });
   }
 
   const result = await handlePlatformBillingWebhook({ xSignature, xRequestId, action, dataId });

@@ -30,6 +30,7 @@ const CREATING_CHARGE = {
   plan_code: 50,
   amount_cents: 5000,
   external_reference: "charge-1",
+  provider_idempotency_key: "persisted-key-from-db",
   status: "creating",
 };
 
@@ -142,5 +143,112 @@ describe("createPlatformBillingCharge", () => {
       "billing_charge_mark_creation_failed",
       expect.objectContaining({ p_charge_id: "charge-1", p_error_code: "invalid_credentials" }),
     );
+  });
+
+  // QA-FINAL-001 (achado no QA independente): a chave enviada ao Mercado
+  // Pago tem que ser a PERSISTIDA na linha devolvida pelo RPC, nunca a
+  // gerada localmente nesta execução — senão duas execuções para a
+  // mesma cobrança local (retry após timeout, duas abas, corrida real)
+  // enviam X-Idempotency-Key diferentes ao provider para a MESMA
+  // operação, quebrando a garantia de idempotência ponta a ponta.
+  describe("QA-FINAL-001 — idempotency key do provider é sempre a persistida, nunca a gerada localmente", () => {
+    it("RPC devolve charge creating com provider_idempotency_key diferente da chave candidata — gateway recebe a PERSISTIDA", async () => {
+      const chargeWithDifferentKey = { ...CREATING_CHARGE, provider_idempotency_key: "persisted-key" };
+      serviceClientMock.rpc
+        .mockResolvedValueOnce({ data: chargeWithDifferentKey, error: null }) // upsert_creating
+        .mockResolvedValueOnce({ data: { ...chargeWithDifferentKey, status: "pending" }, error: null }); // mark_created
+      createPaymentMock.mockResolvedValue({
+        providerPaymentId: "fake-1",
+        status: "pending",
+        statusDetail: null,
+        qrCode: "qr",
+        qrCodeBase64: "b64",
+        ticketUrl: "https://ticket",
+        expiresAt: "2026-01-01T00:00:00Z",
+      });
+
+      const { createPlatformBillingCharge } = await import("./orchestration");
+      await createPlatformBillingCharge({ storeId: "store-1", payerEmail: "a@b.com", payerDocType: "CPF", payerDocNumber: "12345678901" });
+
+      expect(createPaymentMock).toHaveBeenCalledTimes(1);
+      const callArgs = createPaymentMock.mock.calls[0]?.[0];
+      expect(callArgs.idempotencyKey).toBe("persisted-key");
+      // A chave candidata gerada nesta execução (aleatória, com prefixo
+      // plat-<storeId>-) NUNCA pode ser o que chegou ao gateway.
+      expect(callArgs.idempotencyKey).not.toMatch(/^plat-store1-/);
+    });
+
+    it("retry após timeout: segunda execução da orchestration reaproveita a MESMA charge/key da primeira tentativa transitória", async () => {
+      const persistedCharge = { ...CREATING_CHARGE, provider_idempotency_key: "key-from-first-attempt" };
+
+      // Primeira execução: upsert_creating cria a linha, provider sofre
+      // timeout — mark_creation_failed NUNCA é chamado para erro
+      // transitório (mantém `creating`, já coberto por outro teste).
+      serviceClientMock.rpc.mockResolvedValueOnce({ data: persistedCharge, error: null });
+      createPaymentMock.mockRejectedValueOnce(new MercadoPagoGatewayError("timeout", true));
+
+      const { createPlatformBillingCharge, BillingCheckoutError } = await import("./orchestration");
+      await expect(
+        createPlatformBillingCharge({ storeId: "store-1", payerEmail: "a@b.com", payerDocType: "CPF", payerDocNumber: "12345678901" }),
+      ).rejects.toThrow(BillingCheckoutError);
+
+      // Segunda execução (retry real do usuário/UI): RPC devolve a MESMA
+      // linha, ainda `creating`, com a mesma provider_idempotency_key
+      // persistida da primeira tentativa.
+      serviceClientMock.rpc.mockResolvedValueOnce({ data: persistedCharge, error: null }); // upsert_creating (reaproveita)
+      serviceClientMock.rpc.mockResolvedValueOnce({ data: { ...persistedCharge, status: "pending" }, error: null }); // mark_created
+      createPaymentMock.mockResolvedValueOnce({
+        providerPaymentId: "fake-2",
+        status: "pending",
+        statusDetail: null,
+        qrCode: "qr",
+        qrCodeBase64: "b64",
+        ticketUrl: "https://ticket",
+        expiresAt: "2026-01-01T00:00:00Z",
+      });
+
+      const result = await createPlatformBillingCharge({ storeId: "store-1", payerEmail: "a@b.com", payerDocType: "CPF", payerDocNumber: "12345678901" });
+
+      expect(createPaymentMock).toHaveBeenCalledTimes(2);
+      const secondCallArgs = createPaymentMock.mock.calls[1]?.[0];
+      expect(secondCallArgs.idempotencyKey).toBe("key-from-first-attempt");
+      expect(result.status).toBe("pending");
+    });
+
+    it("concorrência na camada de aplicação: duas chamadas simultâneas de createPlatformBillingCharge para a mesma loja usam a MESMA idempotency key no provider", async () => {
+      // Simula o que o índice único parcial do banco garante: as duas
+      // chamadas ao RPC devolvem a MESMA linha (a segunda "vence" e
+      // persiste sua chave; a primeira, ao consultar de volta, recebe a
+      // chave da vencedora) — aqui fixamos as duas respostas do RPC para
+      // devolverem exatamente a mesma linha/chave, como o banco garante
+      // sob concorrência real (já provado contra Postgres real no QA
+      // dinâmico anterior; este teste prova que a CAMADA DE APLICAÇÃO
+      // respeita esse contrato e nunca usa a chave que gerou localmente
+      // em vez da devolvida).
+      const winningCharge = { ...CREATING_CHARGE, provider_idempotency_key: "concurrency-winner-key" };
+      serviceClientMock.rpc.mockResolvedValue({ data: winningCharge, error: null });
+      createPaymentMock.mockImplementation(async () => ({
+        providerPaymentId: `fake-${Math.floor(Math.random() * 1e9)}`,
+        status: "pending",
+        statusDetail: null,
+        qrCode: "qr",
+        qrCodeBase64: "b64",
+        ticketUrl: "https://ticket",
+        expiresAt: "2026-01-01T00:00:00Z",
+      }));
+
+      const { createPlatformBillingCharge } = await import("./orchestration");
+      const [resultA, resultB] = await Promise.all([
+        createPlatformBillingCharge({ storeId: "store-1", payerEmail: "a@b.com", payerDocType: "CPF", payerDocNumber: "12345678901" }),
+        createPlatformBillingCharge({ storeId: "store-1", payerEmail: "b@b.com", payerDocType: "CPF", payerDocNumber: "10987654321" }),
+      ]);
+
+      expect(resultA.id).toBe(winningCharge.id);
+      expect(resultB.id).toBe(winningCharge.id);
+      expect(createPaymentMock).toHaveBeenCalledTimes(2);
+      const keysUsed = createPaymentMock.mock.calls.map((call) => call[0].idempotencyKey);
+      expect(new Set(keysUsed).size).toBe(1);
+      expect(keysUsed[0]).toBe("concurrency-winner-key");
+    });
   });
 });
