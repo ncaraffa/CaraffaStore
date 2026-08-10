@@ -81,6 +81,13 @@ async function sumRevenueLast30d(supabase: Client, storeId: string, sinceIso: st
       .eq("store_id", storeId)
       .in("status", REVENUE_STATUSES)
       .gte("created_at", sinceIso)
+      // TASK008-RETEST-DATA-001: .range() sem ORDER BY estável não
+      // garante a mesma ordem entre páginas — sob escrita concorrente,
+      // OFFSET pode pular ou repetir linha. `created_at` sozinho pode
+      // empatar (mesmo timestamp), então `id` desempata e torna a
+      // ordenação verdadeiramente determinística.
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + REVENUE_PAGE_SIZE - 1);
 
     if (error) throw error;

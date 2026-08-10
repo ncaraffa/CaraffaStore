@@ -28,12 +28,22 @@ export async function cancelOrderAction(formData: FormData): Promise<void> {
   const orderId = String(formData.get("orderId") ?? "");
 
   const supabase = await createServerSupabaseClient();
-  await requireStoreStatus(supabase, "active", storeSlug);
+  const { role } = await requireStoreStatus(supabase, "active", storeSlug);
 
   const order = await getOrderById(supabase, orderId);
   try {
     if (order?.payment_mode === "pix") {
-      await cancelPixOrder(orderId);
+      /**
+       * cancelPixOrder (lib/payments/admin-actions.ts) chama
+       * getStorePaymentCredentials — leitor service_role sem autorização
+       * própria — e o gateway do provedor. Mesma classe de falha do
+       * TASK008-RETEST-SEC-001: só owner/admin pode acionar esse
+       * caminho. Cancelamento manual (não-Pix) continua liberado para
+       * staff, que já administra pedidos normalmente.
+       */
+      if (role === "owner" || role === "admin") {
+        await cancelPixOrder(orderId);
+      }
     } else {
       await cancelOrder(supabase, orderId);
     }
@@ -48,7 +58,16 @@ export async function reconcileOrderPaymentAction(formData: FormData): Promise<v
   const orderId = String(formData.get("orderId") ?? "");
 
   const supabase = await createServerSupabaseClient();
-  await requireStoreStatus(supabase, "active", storeSlug);
+  const { role } = await requireStoreStatus(supabase, "active", storeSlug);
+
+  /**
+   * reconcileOrderPayment também passa por getStorePaymentCredentials
+   * (service_role) e pelo gateway do provedor — restrito a owner/admin,
+   * mesmo raciocínio de cancelOrderAction acima.
+   */
+  if (role !== "owner" && role !== "admin") {
+    redirect(`/dashboard/orders/${orderId}?store=${storeSlug}`);
+  }
 
   try {
     await reconcileOrderPayment(orderId);

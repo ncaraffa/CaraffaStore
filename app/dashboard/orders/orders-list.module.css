@@ -1,0 +1,160 @@
+/* ============================================================
+   Desktop — tabela
+   ============================================================ */
+.tableWrap {
+  overflow-x: auto;
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-sm), var(--cs-sheen);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--cs-text-sm);
+  min-width: 46rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 0.75rem 1.125rem;
+  background: var(--cs-surface);
+  color: var(--cs-ink-muted);
+  font-family: var(--cs-font-mono);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--cs-line);
+}
+
+.table td {
+  padding: 0.625rem 1.125rem;
+  border-bottom: 1px solid var(--cs-line);
+  color: var(--cs-ink);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover td {
+  background: var(--cs-surface);
+}
+
+.code {
+  font-family: var(--cs-font-mono);
+  font-weight: 600;
+}
+
+.priceCell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.thActions {
+  text-align: right;
+  width: 1%;
+}
+
+/* ============================================================
+   Mobile — cards de pedido, não tabela espremida
+   (TASK008-RETEST-ORD-002: zero corte, zero scroll horizontal
+   necessário; mesmo padrão de app/dashboard/products/products-list.module.css)
+   ============================================================ */
+.cardList {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .tableWrap {
+    display: none;
+  }
+
+  .cardList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .orderCard {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.875rem;
+    background: var(--cs-white);
+    border: 1px solid var(--cs-line);
+    border-radius: var(--cs-radius-lg);
+    box-shadow: var(--cs-shadow-xs);
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .cardTop {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .cardCode {
+    font-family: var(--cs-font-mono);
+    font-weight: 700;
+    font-size: var(--cs-text-sm);
+    color: var(--cs-ink);
+  }
+
+  .cardPrice {
+    font-weight: 700;
+    font-size: var(--cs-text-base);
+    color: var(--cs-ink);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .cardCustomer {
+    font-weight: 600;
+    font-size: var(--cs-text-sm);
+    color: var(--cs-ink-body);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cardMeta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--cs-ink-muted);
+  }
+
+  .cardBadges {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex-wrap: wrap;
+  }
+
+  .cardFooter {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.125rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .cardTop {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+  }
+}

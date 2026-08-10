@@ -104,7 +104,7 @@ export default async function OrderDetailPage({
   const { orderId } = await params;
   const { store: storeSlug } = await searchParams;
   const supabase = await createServerSupabaseClient();
-  const { store } = await requireStoreStatus(supabase, "active", storeSlug);
+  const { store, role } = await requireStoreStatus(supabase, "active", storeSlug);
 
   const order = await orders.getOrderById(supabase, orderId);
   if (!order || order.store_id !== store.id) {
@@ -112,12 +112,26 @@ export default async function OrderDetailPage({
   }
   const items = await orders.listOrderItems(supabase, orderId);
   const isPix = order.payment_mode === "pix";
-  const payment = isPix ? await getOrderPayment(supabase, orderId) : null;
-  const events = isPix ? await listPaymentEvents(supabase, orderId) : [];
+  /**
+   * payment_events_list_sanitized (0007_payments.sql) lança
+   * insufficient_privilege/42501 para quem não é owner/admin
+   * (can_manage_store_payments) — leitura de order_payments segue a
+   * mesma fronteira via RLS. Staff nunca deveria tentar essas leituras
+   * (TASK008-RETEST-ORD-001, mesma classe do bug já corrigido na home
+   * do dashboard): a checagem tem que vir ANTES da chamada, não depois
+   * de um catch.
+   */
+  const canManagePayments = role === "owner" || role === "admin";
+  const payment = isPix && canManagePayments ? await getOrderPayment(supabase, orderId) : null;
+  const events = isPix && canManagePayments ? await listPaymentEvents(supabase, orderId) : [];
 
   const paymentApproved = payment?.status === "approved";
   const next = isPix && order.status === "pending" ? undefined : NEXT_STATUS[order.status];
-  const canCancel = order.status !== "completed" && order.status !== "cancelled" && !paymentApproved;
+  const canCancel =
+    order.status !== "completed" &&
+    order.status !== "cancelled" &&
+    !paymentApproved &&
+    (!isPix || canManagePayments);
 
   return (
     <DashboardShell
@@ -242,7 +256,9 @@ export default async function OrderDetailPage({
           <div className={styles.sideCol}>
             <Card>
               <CardHeader title="Pagamento Pix" />
-              {payment ? (
+              {!canManagePayments ? (
+                <p className={styles.muted}>Detalhes de pagamento são visíveis só para proprietários e administradores.</p>
+              ) : payment ? (
                 <>
                   <dl className={styles.infoGrid}>
                     <div>

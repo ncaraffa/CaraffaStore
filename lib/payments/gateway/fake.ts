@@ -5,6 +5,7 @@ import type {
   ProviderPaymentState,
   ValidateCredentialsResult,
 } from "./types";
+import { generateFakeQrPngBase64 } from "./fake-qr";
 
 /**
  * Gateway determinístico para testes automatizados e desenvolvimento
@@ -41,7 +42,7 @@ export class FakePixGateway implements PixPaymentGateway {
       paymentMethodId: "pix",
       externalReference: params.externalReference,
       qrCode: `00020126fake-copia-e-cola-${providerPaymentId}`,
-      qrCodeBase64: Buffer.from(`fake-qr-${providerPaymentId}`).toString("base64"),
+      qrCodeBase64: generateFakeQrPngBase64(providerPaymentId),
       ticketUrl: `https://fake.mercadopago.local/ticket/${providerPaymentId}`,
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),

@@ -89,7 +89,21 @@ export async function testPaymentConnectionAction(formData: FormData): Promise<v
   const storeSlug = String(formData.get("storeSlug") ?? "");
 
   const supabase = await createServerSupabaseClient();
-  const { store } = await requireStoreStatus(supabase, "active", storeSlug);
+  const { store, role } = await requireStoreStatus(supabase, "active", storeSlug);
+
+  /**
+   * getStorePaymentCredentials usa service_role e descriptografa a
+   * credencial da loja — diferente de savePaymentSettingsAction/
+   * setPaymentEnabledAction, que só chamam RPCs SECURITY DEFINER que já
+   * reautorizam sozinhas (payment_settings_upsert/set_enabled). Esta
+   * action pula essas RPCs e vai direto ao leitor service-role, então
+   * precisa da MESMA checagem de can_manage_store_payments (owner/admin)
+   * feita aqui, antes de qualquer leitura/chamada externa — nunca depois
+   * (TASK008-RETEST-SEC-001).
+   */
+  if (role !== "owner" && role !== "admin") {
+    redirect(`/dashboard?store=${store.slug}`);
+  }
 
   const credentials = await getStorePaymentCredentials(store.id);
   if (!credentials) {

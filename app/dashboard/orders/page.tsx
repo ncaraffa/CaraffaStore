@@ -9,11 +9,11 @@ import { formatPriceCents } from "@/lib/catalog/format";
 import type { Database } from "@/lib/supabase/types";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Table } from "@/components/ui/Table";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { IconReceipt } from "@/components/ui/icons";
 import pageStyles from "../dashboard-list.module.css";
 import filterStyles from "../filter-pills.module.css";
+import styles from "./orders-list.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -105,50 +105,81 @@ export default async function OrdersPage({
       {filtered.length === 0 ? (
         <EmptyState icon={<IconReceipt />} title="Nenhum pedido encontrado" description="Pedidos feitos no seu catálogo público aparecem aqui." />
       ) : (
-        <Table>
-          <thead>
-            <tr>
-              <th>Código</th>
-              <th>Cliente</th>
-              <th>Telefone</th>
-              <th>Data</th>
-              <th>Modalidade</th>
-              <th>Total</th>
-              <th>Status</th>
-              <th>Pagamento</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          {/* Desktop: tabela completa. Mobile: cards — mesma composição de
+              app/dashboard/products (TASK008-RETEST-ORD-002), não a mesma
+              tabela cortada com overflow-x. */}
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Cliente</th>
+                  <th>Telefone</th>
+                  <th>Data</th>
+                  <th>Modalidade</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th>Pagamento</th>
+                  <th className={styles.thActions}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((order) => {
+                  const payment = paymentByOrderId.get(order.id);
+                  const badge = payment ? PAYMENT_BADGE[payment.status] : undefined;
+                  return (
+                    <tr key={order.id}>
+                      <td className={styles.code}>{order.public_code}</td>
+                      <td>{order.customer_name}</td>
+                      <td>{order.customer_phone}</td>
+                      <td>{new Date(order.created_at).toLocaleString("pt-BR")}</td>
+                      <td>{order.fulfillment_method === "pickup" ? "Retirada" : "Entrega"}</td>
+                      <td className={styles.priceCell}>{formatPriceCents(order.total_cents)}</td>
+                      <td>
+                        <Badge tone={ORDER_STATUS_TONE[order.status]}>{ORDER_STATUS_LABEL[order.status]}</Badge>
+                      </td>
+                      <td>{badge ? <Badge tone={badge.tone}>{badge.label}</Badge> : "—"}</td>
+                      <td className={styles.thActions}>
+                        <Link href={`/dashboard/orders/${order.id}?store=${store.slug}`}>
+                          <Button variant="ghost" size="sm">
+                            Abrir
+                          </Button>
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <ul className={styles.cardList}>
             {filtered.map((order) => {
               const payment = paymentByOrderId.get(order.id);
               const badge = payment ? PAYMENT_BADGE[payment.status] : undefined;
               return (
-                <tr key={order.id}>
-                  <td>
-                    <strong>{order.public_code}</strong>
-                  </td>
-                  <td>{order.customer_name}</td>
-                  <td>{order.customer_phone}</td>
-                  <td>{new Date(order.created_at).toLocaleString("pt-BR")}</td>
-                  <td>{order.fulfillment_method === "pickup" ? "Retirada" : "Entrega"}</td>
-                  <td>{formatPriceCents(order.total_cents)}</td>
-                  <td>
-                    <Badge tone={ORDER_STATUS_TONE[order.status]}>{ORDER_STATUS_LABEL[order.status]}</Badge>
-                  </td>
-                  <td>{badge ? <Badge tone={badge.tone}>{badge.label}</Badge> : "—"}</td>
-                  <td>
-                    <Link href={`/dashboard/orders/${order.id}?store=${store.slug}`}>
-                      <Button variant="ghost" size="sm">
-                        Abrir
-                      </Button>
-                    </Link>
-                  </td>
-                </tr>
+                <li key={order.id}>
+                  <Link href={`/dashboard/orders/${order.id}?store=${store.slug}`} className={styles.orderCard}>
+                    <div className={styles.cardTop}>
+                      <span className={styles.cardCode}>#{order.public_code}</span>
+                      <span className={styles.cardPrice}>{formatPriceCents(order.total_cents)}</span>
+                    </div>
+                    <span className={styles.cardCustomer}>{order.customer_name}</span>
+                    <div className={styles.cardMeta}>
+                      <span>{new Date(order.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                      <span>{order.fulfillment_method === "pickup" ? "Retirada" : "Entrega"}</span>
+                    </div>
+                    <div className={styles.cardBadges}>
+                      <Badge tone={ORDER_STATUS_TONE[order.status]}>{ORDER_STATUS_LABEL[order.status]}</Badge>
+                      {badge && <Badge tone={badge.tone}>{badge.label}</Badge>}
+                    </div>
+                  </Link>
+                </li>
               );
             })}
-          </tbody>
-        </Table>
+          </ul>
+        </>
       )}
     </DashboardShell>
   );
