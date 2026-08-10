@@ -62,15 +62,24 @@
 }
 
 /* ============================================================
-   Mobile — cards de pedido, não tabela espremida
-   (TASK008-RETEST-ORD-002: zero corte, zero scroll horizontal
-   necessário; mesmo padrão de app/dashboard/products/products-list.module.css)
-   ============================================================ */
+   Mobile/tablet compacto — cards de pedido, não tabela espremida
+   (TASK008-RETEST-ORD-002 / TASK008-FINAL-ORD-003: zero corte, zero
+   scroll horizontal necessário; mesmo padrão de
+   app/dashboard/products/products-list.module.css).
+
+   O corte é 959px, não um número arbitrário: é o MESMO breakpoint que
+   o DashboardShell usa para a sidebar/bottom-nav
+   (components/dashboard/DashboardShell.module.css, `@media (min-width:
+   960px)` — "some por completo a partir de 960px"). Abaixo de 960px o
+   shell já está no layout compacto (sem sidebar, padding de conteúdo
+   menor); usar qualquer corte diferente aqui cria uma faixa (721–768px
+   era o caso) onde o shell já é compacto mas a lista de pedidos ainda
+   tenta caber a tabela de `min-width: 46rem`. */
 .cardList {
   display: none;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 959px) {
   .tableWrap {
     display: none;
   }
@@ -146,8 +155,18 @@
 
   .cardFooter {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
+    gap: 0.25rem;
     margin-top: 0.125rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--cs-ink-muted);
+  }
+
+  .cardFooter svg {
+    width: 0.875rem;
+    height: 0.875rem;
   }
 }
 

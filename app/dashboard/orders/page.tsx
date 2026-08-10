@@ -10,7 +10,7 @@ import type { Database } from "@/lib/supabase/types";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { IconReceipt } from "@/components/ui/icons";
+import { IconArrowRight, IconReceipt } from "@/components/ui/icons";
 import pageStyles from "../dashboard-list.module.css";
 import filterStyles from "../filter-pills.module.css";
 import styles from "./orders-list.module.css";
@@ -174,6 +174,10 @@ export default async function OrdersPage({
                       <Badge tone={ORDER_STATUS_TONE[order.status]}>{ORDER_STATUS_LABEL[order.status]}</Badge>
                       {badge && <Badge tone={badge.tone}>{badge.label}</Badge>}
                     </div>
+                    <span className={styles.cardFooter} aria-hidden="true">
+                      Abrir
+                      <IconArrowRight />
+                    </span>
                   </Link>
                 </li>
               );
