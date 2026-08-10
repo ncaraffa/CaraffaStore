@@ -484,8 +484,10 @@ begin
     -- Ativação atômica: só transiciona pending_payment->active (uma vez —
     -- WHERE status='pending_payment' torna a segunda chamada um no-op sem
     -- erro). Loja já active (renovação) só ganha o novo período acima,
-    -- sem mudança de status.
-    update public.stores set status = 'active', updated_at = now()
+    -- sem mudança de status. `stores` nunca teve coluna updated_at (ver
+    -- 0001_init.sql) — só status muda aqui, ao contrário de
+    -- billing_charges/order_payments, que têm updated_at próprio.
+    update public.stores set status = 'active'
       where id = v_charge.store_id and status = 'pending_payment';
     if found then
       insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)

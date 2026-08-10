@@ -182,10 +182,22 @@ describe("billing_charge_apply_provider_state — único caminho de decisão, id
 
   it("aprovação ativa a loja atomicamente (pending_payment->active) só uma vez, via WHERE status='pending_payment'", () => {
     const fn = fnBody();
-    expect(fn).toContain("update public.stores set status = 'active', updated_at = now()");
+    expect(fn).toContain("update public.stores set status = 'active'");
     expect(fn).toContain("where id = v_charge.store_id and status = 'pending_payment'");
     expect(fn).toContain("store_activated_by_billing");
     expect(fn).toContain("billing_subscription_renewed");
+  });
+
+  it("REGRESSÃO (bug encontrado no QA dinâmico): UPDATE em public.stores nunca referencia updated_at — a tabela não tem essa coluna (ver 0001_init.sql), e referenciá-la faz o RPC inteiro falhar em silêncio (reconcile.ts trata erro de RPC como apply_failed, e o webhook ainda responde 200 — a loja nunca é ativada de verdade)", () => {
+    const approvedBranch = sql.slice(
+      sql.indexOf("if p_internal_status = 'approved' then"),
+      sql.indexOf("return v_charge;\n  end if;\n\n  -- rejected"),
+    );
+    const storesUpdateStatements = approvedBranch.match(/update public\.stores set[^;]*;/g) ?? [];
+    expect(storesUpdateStatements.length).toBeGreaterThan(0);
+    for (const statement of storesUpdateStatements) {
+      expect(statement).not.toContain("updated_at");
+    }
   });
 
   it("trava a linha da cobrança (FOR UPDATE) antes de decidir — webhook duplicado/reconciliação concorrente serializam aqui", () => {
