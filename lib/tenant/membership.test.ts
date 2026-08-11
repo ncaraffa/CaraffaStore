@@ -13,7 +13,11 @@ interface FakeStoreRow {
   status: "onboarding" | "pending_payment" | "active" | "suspended";
 }
 
-function fakeSupabase(memberships: FakeStoreMembersRow[], stores: Record<string, FakeStoreRow>) {
+function fakeSupabase(
+  memberships: FakeStoreMembersRow[],
+  stores: Record<string, FakeStoreRow>,
+  options: { isPlatformAdmin?: boolean } = {},
+) {
   return {
     from: vi.fn((table: string) => {
       if (table === "store_members") {
@@ -33,9 +37,15 @@ function fakeSupabase(memberships: FakeStoreMembersRow[], stores: Record<string,
         };
       }
       throw new Error(`unexpected table ${table}`);
-       
+
     }),
-     
+    rpc: vi.fn((fn: string) => {
+      if (fn === "is_platform_admin") {
+        return Promise.resolve({ data: options.isPlatformAdmin ?? false, error: null });
+      }
+      throw new Error(`unexpected rpc ${fn}`);
+    }),
+
   } as any;
 }
 
@@ -112,5 +122,21 @@ describe("resolveUserDestination", () => {
     );
     const result = await resolveUserDestination(supabase, "user-1");
     expect(result.path).toBe("/suspended?store=loja-susp");
+  });
+
+  it("admin da plataforma -> /admin, mesmo sem nenhuma loja", async () => {
+    const supabase = fakeSupabase([], {}, { isPlatformAdmin: true });
+    const result = await resolveUserDestination(supabase, "user-1");
+    expect(result.path).toBe("/admin");
+  });
+
+  it("admin da plataforma -> /admin tem PRIORIDADE sobre ter uma loja própria active (conta é exclusiva pro painel do dono)", async () => {
+    const supabase = fakeSupabase(
+      [{ store_id: "store-a", role: "owner" }],
+      { "store-a": { id: "store-a", slug: "loja-ativa", name: "Loja Ativa", status: "active" } },
+      { isPlatformAdmin: true },
+    );
+    const result = await resolveUserDestination(supabase, "user-1");
+    expect(result.path).toBe("/admin");
   });
 });

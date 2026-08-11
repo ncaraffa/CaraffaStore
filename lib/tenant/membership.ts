@@ -67,17 +67,24 @@ export interface DestinationResult {
 
 /**
  * Matriz de redirecionamento aprovada (docs/handoff.md,
- * "Matriz de estados e redirecionamentos"): sem loja → onboarding;
- * múltiplas lojas → seletor explícito, nunca a primeira silenciosamente;
- * uma loja → destino conforme o status dela. Usado só pelo resolvedor
- * central (`app/page.tsx`) — páginas de estado específico usam
- * `lib/tenant/access-control.ts`, que exige o status exato, não apenas
- * "para onde mandar".
+ * "Matriz de estados e redirecionamentos"): admin da plataforma → painel
+ * do dono, sempre, sem passar por lógica de loja (a conta é exclusiva
+ * pra isso — ver supabase/migrations/0009_platform_admin.sql); sem loja
+ * → onboarding; múltiplas lojas → seletor explícito, nunca a primeira
+ * silenciosamente; uma loja → destino conforme o status dela. Usado só
+ * pelo resolvedor central (`app/page.tsx`) — páginas de estado
+ * específico usam `lib/tenant/access-control.ts`, que exige o status
+ * exato, não apenas "para onde mandar".
  */
 export async function resolveUserDestination(
   supabase: SupabaseClient<Database>,
   userId: string,
 ): Promise<DestinationResult> {
+  const { data: isPlatformAdmin } = await supabase.rpc("is_platform_admin");
+  if (isPlatformAdmin) {
+    return { path: "/admin", membershipCount: 0 };
+  }
+
   const situation = await resolveMembershipSituation(supabase, userId);
 
   if (situation.kind === "none") {
