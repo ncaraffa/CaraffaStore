@@ -12,6 +12,8 @@ interface ConfirmSubmitButtonProps {
   variant?: ButtonVariant;
   size?: "sm" | "md" | "lg";
   disabled?: boolean;
+  /** Ícone do botão que abre a confirmação (o de confirmar fica só texto). */
+  icon?: ReactNode;
 }
 
 /**
@@ -28,6 +30,7 @@ export function ConfirmSubmitButton({
   variant = "destructive",
   size = "sm",
   disabled,
+  icon,
 }: ConfirmSubmitButtonProps) {
   const [open, setOpen] = useState(false);
 
@@ -38,6 +41,7 @@ export function ConfirmSubmitButton({
         variant={variant}
         size={size}
         disabled={disabled}
+        icon={icon}
         onClick={() => setOpen(true)}
       >
         {label}

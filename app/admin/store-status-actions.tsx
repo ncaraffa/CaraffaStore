@@ -2,8 +2,17 @@
 
 import { setStoreStatusAction } from "./actions";
 import { ConfirmSubmitButton } from "@/components/ui/ConfirmSubmitButton";
+import { IconBan, IconRotate } from "@/components/ui/icons";
 
-export function StoreStatusActions({ storeId, storeName, isSuspended }: { storeId: string; storeName: string; isSuspended: boolean }) {
+export function StoreStatusActions({
+  storeId,
+  storeName,
+  isSuspended,
+}: {
+  storeId: string;
+  storeName: string;
+  isSuspended: boolean;
+}) {
   return (
     <form action={setStoreStatusAction}>
       <input type="hidden" name="storeId" value={storeId} />
@@ -11,18 +20,20 @@ export function StoreStatusActions({ storeId, storeName, isSuspended }: { storeI
       {isSuspended ? (
         <ConfirmSubmitButton
           label="Reativar"
+          icon={<IconRotate />}
           variant="primary"
           confirmTitle={`Reativar "${storeName}"?`}
-          confirmMessage="A loja volta exatamente ao status que tinha antes de ser suspensa (não pula etapa de pagamento se ainda não tiver pago)."
+          confirmMessage="A loja volta exatamente ao status que tinha antes de ser suspensa — se ainda não tinha pago a assinatura, continua aguardando o pagamento."
           confirmLabel="Reativar loja"
         />
       ) : (
         <ConfirmSubmitButton
-          label="Suspender"
+          label="Bloquear"
+          icon={<IconBan />}
           variant="destructive"
-          confirmTitle={`Suspender "${storeName}"?`}
-          confirmMessage="A loja e o catálogo público ficam bloqueados imediatamente. Pode reativar depois — o status atual fica salvo."
-          confirmLabel="Suspender loja"
+          confirmTitle={`Bloquear "${storeName}"?`}
+          confirmMessage="O painel do lojista e o catálogo público ficam indisponíveis na hora. Você pode reativar quando quiser — o status atual fica guardado."
+          confirmLabel="Bloquear loja"
         />
       )}
     </form>

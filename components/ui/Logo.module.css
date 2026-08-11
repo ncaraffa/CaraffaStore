@@ -36,6 +36,15 @@
   color: var(--cs-blue-600);
 }
 
+/* ---- Sobre superfície escura ---- */
+.logo[data-tone="inverse"] {
+  color: var(--cs-ink-inverse);
+}
+
+.logo[data-tone="inverse"][data-variant="plain"] .mark {
+  color: var(--cs-blue-300);
+}
+
 /* Em telas muito estreitas o símbolo sozinho já identifica a marca, e a
    palavra estaria disputando espaço com as ações do header. */
 @media (max-width: 420px) {

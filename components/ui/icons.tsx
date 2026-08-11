@@ -202,6 +202,46 @@ export const IconLayers = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const IconChevronLeft = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="m15 18-6-6 6-6" />
+  </Icon>
+);
+
+export const IconChevronRight = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="m9 18 6-6-6-6" />
+  </Icon>
+);
+
+export const IconWhatsapp = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M3.5 20.5 4.8 16a8 8 0 1 1 3.2 3.2l-4.5 1.3Z" />
+    <path d="M9 9.5c0 3 2.5 5.5 5.5 5.5.7 0 1-.4 1-1v-.8l-1.7-.8-.9 1a4.6 4.6 0 0 1-2.3-2.3l1-.9-.8-1.7h-.8c-.6 0-1 .3-1 1Z" />
+  </Icon>
+);
+
+export const IconMail = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="m3.5 6.5 8.5 6 8.5-6" />
+  </Icon>
+);
+
+export const IconBan = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m5.6 5.6 12.8 12.8" />
+  </Icon>
+);
+
+export const IconRotate = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M3 12a9 9 0 1 1 2.6 6.4" />
+    <path d="M3 20v-5h5" />
+  </Icon>
+);
+
 export const IconInfo = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <circle cx="12" cy="12" r="9" />

@@ -7,6 +7,7 @@ type Client = SupabaseClient<Database>;
 
 export interface PlatformAdminSession {
   userId: string;
+  email: string | null;
 }
 
 /**
@@ -25,5 +26,9 @@ export async function requirePlatformAdmin(supabase: Client): Promise<PlatformAd
     redirect("/dashboard");
   }
 
-  return { userId: session.userId };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return { userId: session.userId, email: user?.email ?? null };
 }

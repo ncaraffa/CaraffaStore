@@ -32,6 +32,12 @@ interface LogoProps {
   size?: LogoSize;
   /** `tile` põe o símbolo em um selo cobalto; `plain` deixa o símbolo solto em azul. */
   variant?: "tile" | "plain";
+  /**
+   * `inverse` pinta a palavra em branco — obrigatório sobre superfície
+   * escura: o padrão (`--cs-ink`, azul-marinho) some no fundo escuro,
+   * mesmo que o container defina outra cor (o próprio `.logo` seta `color`).
+   */
+  tone?: "default" | "inverse";
   /** Só o símbolo, sem a palavra — para espaços apertados (sidebar colapsada, favicon inline). */
   markOnly?: boolean;
   /** Esconde a palavra abaixo de 420px, onde ela rouba a largura das ações do header. */
@@ -39,11 +45,19 @@ interface LogoProps {
   className?: string;
 }
 
-export function Logo({ size = "md", variant = "tile", markOnly = false, compact = false, className }: LogoProps) {
+export function Logo({
+  size = "md",
+  variant = "tile",
+  tone = "default",
+  markOnly = false,
+  compact = false,
+  className,
+}: LogoProps) {
   return (
     <span
       className={[styles.logo, styles[size], compact ? styles.compact : "", className].filter(Boolean).join(" ")}
       data-variant={variant}
+      data-tone={tone}
     >
       <span className={styles.mark}>
         <CaraffaMark className={styles.glyph} />
