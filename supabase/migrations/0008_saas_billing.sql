@@ -396,6 +396,7 @@ set search_path = ''
 as $$
 declare
   v_charge public.billing_charges;
+  v_previous_status text;
   v_terminal_paid boolean;
   v_terminal_unpaid boolean;
 begin
@@ -421,6 +422,17 @@ begin
     return v_charge; -- já sinalizado para revisão humana — nunca decide sozinho depois disso.
   end if;
 
+  -- QA-V3-001 (achado no QA independente): captura o status ANTES de
+  -- qualquer verificação de integridade (external_reference/amount/
+  -- currency) ou de conflito terminal. Uma cobrança já `approved`
+  -- representa um período pago CONSUMADO — nada que chegue depois
+  -- (mismatch de campo ou evento terminal tardio) pode decidir usando um
+  -- `v_charge.status` que já foi sobrescrito por um UPDATE anterior
+  -- nesta mesma execução.
+  v_previous_status := v_charge.status;
+  v_terminal_paid := v_previous_status = 'approved';
+  v_terminal_unpaid := v_previous_status in ('rejected', 'cancelled', 'expired');
+
   -- QA-FINAL-003 (achado no QA independente): `<>` com operando NULL
   -- avalia para NULL em SQL, e `if null then` em PL/pgSQL é tratado como
   -- falso — ou seja, um provider_state chegando SEM external_reference/
@@ -431,6 +443,36 @@ begin
   if v_charge.external_reference is distinct from p_external_reference
     or v_charge.amount_cents is distinct from p_amount_cents
     or v_charge.currency is distinct from p_currency then
+
+    -- QA-V3-001 (achado no QA independente): antes desta correção, este
+    -- mismatch era decidido ANTES de considerar `v_terminal_paid`, então
+    -- uma cobrança já `approved` (fato financeiro consumado, base de
+    -- billing_charge_upsert_creating para renovação) podia ser rebaixada
+    -- para `manual_review` por causa de um provider_state posterior
+    -- stale/incorreto (ex.: webhook antigo sem external_reference),
+    -- apagando silenciosamente approved_at/period_start/period_end. Sem
+    -- fluxo explícito de estorno/chargeback (fora do escopo desta task),
+    -- esse fato nunca pode ser desfeito por mismatch — só registra a
+    -- anomalia para revisão humana e atualiza metadados de rastreio.
+    if v_terminal_paid then
+      update public.billing_charges
+      set provider_status = p_provider_status, provider_status_detail = p_provider_status_detail,
+          last_webhook_at = now(), updated_at = now()
+      where id = p_charge_id
+      returning * into v_charge;
+      insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
+      values (null, v_charge.store_id, 'billing_manual_review_required', 'billing_charge', v_charge.id::text,
+        jsonb_build_object(
+          'reason', 'integrity_mismatch_after_approval',
+          'previous_status', v_previous_status,
+          'provider_payment_id', p_provider_payment_id,
+          'external_reference_mismatch', v_charge.external_reference is distinct from p_external_reference,
+          'amount_mismatch', v_charge.amount_cents is distinct from p_amount_cents,
+          'currency_mismatch', v_charge.currency is distinct from p_currency,
+          'note', 'approved status preserved — período pago não foi afetado'));
+      return v_charge;
+    end if;
+
     update public.billing_charges set status = 'manual_review', updated_at = now()
       where id = p_charge_id returning * into v_charge;
     insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
@@ -438,9 +480,6 @@ begin
       jsonb_build_object('reason', 'external_reference_or_amount_mismatch', 'provider_payment_id', p_provider_payment_id));
     return v_charge;
   end if;
-
-  v_terminal_paid := v_charge.status = 'approved';
-  v_terminal_unpaid := v_charge.status in ('rejected', 'cancelled', 'expired');
 
   -- QA-003 (achado no QA dinâmico da TASK-007): uma cobrança já
   -- `approved` — com amount/currency/external_reference já conferidos
@@ -463,7 +502,7 @@ begin
     returning * into v_charge;
     insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
     values (null, v_charge.store_id, 'billing_manual_review_required', 'billing_charge', v_charge.id::text,
-      jsonb_build_object('reason', 'terminal_state_conflict_after_approval', 'previous_status', 'approved', 'incoming_status', p_internal_status, 'provider_payment_id', p_provider_payment_id, 'note', 'approved status preserved — period pago não foi afetado'));
+      jsonb_build_object('reason', 'terminal_state_conflict_after_approval', 'previous_status', v_previous_status, 'incoming_status', p_internal_status, 'provider_payment_id', p_provider_payment_id, 'note', 'approved status preserved — period pago não foi afetado'));
     return v_charge;
   end if;
 
@@ -478,7 +517,13 @@ begin
       where id = p_charge_id returning * into v_charge;
     insert into public.audit_log (actor_user_id, store_id, action, target_type, target_id, metadata)
     values (null, v_charge.store_id, 'billing_manual_review_required', 'billing_charge', v_charge.id::text,
-      jsonb_build_object('reason', 'terminal_state_conflict', 'previous_status', v_charge.status, 'incoming_status', p_internal_status, 'provider_payment_id', p_provider_payment_id));
+      -- QA-V3-002 (achado no QA independente): antes desta correção,
+      -- `v_charge.status` já tinha sido sobrescrito para 'manual_review'
+      -- pelo UPDATE ... RETURNING acima, então o audit gravava
+      -- previous_status='manual_review' em vez do estado real anterior
+      -- (ex.: 'expired'). Usa `v_previous_status`, capturado antes de
+      -- qualquer UPDATE nesta execução.
+      jsonb_build_object('reason', 'terminal_state_conflict', 'previous_status', v_previous_status, 'incoming_status', p_internal_status, 'provider_payment_id', p_provider_payment_id));
     return v_charge;
   end if;
 

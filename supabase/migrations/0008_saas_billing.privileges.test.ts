@@ -231,6 +231,57 @@ describe("billing_charge_apply_provider_state — único caminho de decisão, id
     expect(fn).toContain("v_charge.provider_payment_id is not null and v_charge.provider_payment_id <> p_provider_payment_id");
     expect(fn).toContain("provider_payment_id_mismatch");
   });
+
+  it("QA-V3-001 (achado no QA independente do patch V2): v_previous_status é capturado ANTES da checagem de mismatch de external_reference/amount/currency, não depois", () => {
+    const fn = fnBody();
+    const captureIndex = fn.indexOf("v_previous_status := v_charge.status;");
+    const mismatchIndex = fn.indexOf("v_charge.external_reference is distinct from p_external_reference");
+    expect(captureIndex).toBeGreaterThan(-1);
+    expect(mismatchIndex).toBeGreaterThan(-1);
+    expect(captureIndex).toBeLessThan(mismatchIndex);
+    expect(fn).toContain("v_terminal_paid := v_previous_status = 'approved'");
+    expect(fn).toContain("v_terminal_unpaid := v_previous_status in ('rejected', 'cancelled', 'expired')");
+  });
+
+  it("QA-V3-001: cobrança já approved com mismatch posterior de external_reference/amount/currency NUNCA vira manual_review — só registra anomalia e preserva o período pago", () => {
+    const fn = fnBody();
+    const mismatchBlock = sql.slice(
+      sql.indexOf("if v_charge.external_reference is distinct from p_external_reference"),
+      sql.indexOf("-- QA-003 (achado no QA dinâmico da TASK-007): uma cobrança já"),
+    );
+    expect(mismatchBlock).toContain("if v_terminal_paid then");
+
+    const preserveBranch = mismatchBlock.slice(
+      mismatchBlock.indexOf("if v_terminal_paid then"),
+      mismatchBlock.indexOf("end if;", mismatchBlock.indexOf("if v_terminal_paid then")),
+    );
+    // Mesma garantia do QA-003: este ramo nunca escreve status =
+    // 'manual_review' nem toca approved_at/period_start/period_end — só
+    // atualiza metadados de rastreio.
+    expect(preserveBranch).not.toContain("status = 'manual_review'");
+    expect(preserveBranch).not.toContain("approved_at");
+    expect(preserveBranch).not.toContain("period_start");
+    expect(preserveBranch).not.toContain("period_end");
+    expect(preserveBranch).toContain("integrity_mismatch_after_approval");
+    expect(preserveBranch).toContain("'previous_status', v_previous_status");
+
+    // A checagem de v_terminal_paid precisa vir ANTES do UPDATE que
+    // gravaria manual_review para o caso não-approved, senão o branch
+    // approved nunca é alcançado.
+    const plainMismatchUpdateIndex = mismatchBlock.indexOf("update public.billing_charges set status = 'manual_review'");
+    const terminalPaidCheckIndex = mismatchBlock.indexOf("if v_terminal_paid then");
+    expect(terminalPaidCheckIndex).toBeGreaterThan(-1);
+    expect(terminalPaidCheckIndex).toBeLessThan(plainMismatchUpdateIndex);
+  });
+
+  it("QA-V3-002 (achado no QA independente do patch V2): audit de terminal_state_conflict (expired/rejected/cancelled -> approved tardio) usa v_previous_status, nunca v_charge.status (que já foi sobrescrito pelo UPDATE ... RETURNING anterior)", () => {
+    const conflictBranch = sql.slice(
+      sql.indexOf("if v_terminal_unpaid and p_internal_status = 'approved' then"),
+      sql.indexOf("if v_terminal_paid or v_terminal_unpaid then"),
+    );
+    expect(conflictBranch).toContain("'previous_status', v_previous_status");
+    expect(conflictBranch).not.toContain("'previous_status', v_charge.status");
+  });
 });
 
 describe("billing_charge_* / billing_webhook_event_record — exclusivos de service_role", () => {
