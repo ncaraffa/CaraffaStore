@@ -201,3 +201,11 @@ export const IconLayers = (p: SVGProps<SVGSVGElement>) => (
     <path d="m3 13 9 5 9-5" />
   </Icon>
 );
+
+export const IconInfo = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5.5" />
+    <circle cx="12" cy="8" r="0.1" fill="currentColor" stroke="currentColor" strokeWidth={2.5} />
+  </Icon>
+);

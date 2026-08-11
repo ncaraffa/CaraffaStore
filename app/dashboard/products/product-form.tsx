@@ -56,7 +56,13 @@ export function ProductForm({
           </div>
         )}
 
-        <Field label="Nome" htmlFor="name" required error={state.fieldErrors?.name}>
+        <Field
+          label="Nome"
+          htmlFor="name"
+          required
+          error={state.fieldErrors?.name}
+          info="O nome do produto exatamente como o cliente vai ver no seu catálogo."
+        >
           <Input
             id="name"
             name="name"
@@ -70,7 +76,13 @@ export function ProductForm({
           />
         </Field>
 
-        <Field label="Endereço (slug)" htmlFor="slug" required error={state.fieldErrors?.slug}>
+        <Field
+          label="Endereço (slug)"
+          htmlFor="slug"
+          required
+          error={state.fieldErrors?.slug}
+          info="O endereço único desse produto dentro da sua loja, usado no link que você compartilha (ex.: /produto/nome-do-produto). É gerado automaticamente a partir do nome, mas pode editar."
+        >
           <Input
             id="slug"
             name="slug"
@@ -85,11 +97,21 @@ export function ProductForm({
           />
         </Field>
 
-        <Field label="Descrição (opcional)" htmlFor="description">
+        <Field
+          label="Descrição (opcional)"
+          htmlFor="description"
+          info="Texto que aparece na página do produto com mais detalhes pro cliente — ingredientes, tamanho, material, o que vier. Pode deixar em branco."
+        >
           <Textarea id="description" name="description" maxLength={4000} defaultValue={product?.description ?? ""} />
         </Field>
 
-        <Field label="Preço (R$)" htmlFor="price" required error={state.fieldErrors?.priceCents}>
+        <Field
+          label="Preço (R$)"
+          htmlFor="price"
+          required
+          error={state.fieldErrors?.priceCents}
+          info="O preço de venda desse produto pro cliente final, em reais."
+        >
           <Input
             id="price"
             name="price"
@@ -101,11 +123,19 @@ export function ProductForm({
           />
         </Field>
 
-        <Field label="SKU (opcional)" htmlFor="sku">
+        <Field
+          label="SKU (opcional)"
+          htmlFor="sku"
+          info="Um código interno seu pra identificar o produto no seu controle de estoque — o cliente nunca vê isso. Se você não usa esse tipo de código, pode deixar em branco."
+        >
           <Input id="sku" name="sku" maxLength={64} defaultValue={product?.sku ?? ""} />
         </Field>
 
-        <Field label="Categoria (opcional)" htmlFor="categoryId">
+        <Field
+          label="Categoria (opcional)"
+          htmlFor="categoryId"
+          info="Agrupa produtos parecidos pra facilitar a busca do cliente na sua loja, tipo 'Bebidas' ou 'Sobremesas'."
+        >
           <Select id="categoryId" name="categoryId" defaultValue={product?.category_id ?? ""}>
             <option value="">Sem categoria</option>
             {categories.map((category) => (
@@ -123,6 +153,7 @@ export function ProductForm({
             required
             error={state.fieldErrors?.stock}
             hint="Depois de criado, ajustes de estoque ficam numa seção própria (com motivo registrado)."
+            info="Quantas unidades desse produto você tem disponível agora pra vender. Esse número baixa sozinho a cada pedido pago."
           >
             <Input
               id="stock"

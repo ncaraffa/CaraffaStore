@@ -1,0 +1,101 @@
+.wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 0.3125rem;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--cs-radius-full);
+  background: transparent;
+  color: var(--cs-ink-faint);
+  cursor: pointer;
+  transition: color 140ms var(--cs-ease-out);
+}
+
+.trigger svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  stroke-width: 1.6;
+}
+
+.trigger:hover,
+.trigger:focus-visible,
+.trigger[aria-expanded="true"] {
+  color: var(--cs-blue-600);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--cs-blue-600);
+  outline-offset: 2px;
+}
+
+.bubble {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--cs-z-sticky);
+  width: max-content;
+  max-width: 15.5rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-ink);
+  color: var(--cs-ink-inverse);
+  font-size: var(--cs-text-xs);
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  box-shadow: var(--cs-shadow-lg);
+  animation: cs-tooltip-in 120ms var(--cs-ease-out);
+}
+
+.bubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--cs-ink);
+}
+
+/* Perto da borda esquerda da tela, centralizar cortaria a bolha — ancora
+   pela esquerda em vez de pelo centro. */
+@media (max-width: 420px) {
+  .bubble {
+    left: 0;
+    transform: none;
+    max-width: min(15.5rem, calc(100vw - 3rem));
+  }
+
+  .bubble::after {
+    left: 0.5625rem;
+    transform: none;
+  }
+}
+
+@keyframes cs-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble {
+    animation: none;
+  }
+}

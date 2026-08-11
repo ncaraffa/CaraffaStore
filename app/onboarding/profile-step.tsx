@@ -23,7 +23,13 @@ export function ProfileStep({ progress }: { progress: OnboardingRow }) {
         </div>
       )}
 
-      <Field label="Seu nome" htmlFor="merchantName" required error={state.fieldErrors?.merchantName}>
+      <Field
+        label="Seu nome"
+        htmlFor="merchantName"
+        required
+        error={state.fieldErrors?.merchantName}
+        info="Seu nome pessoal, só pra identificação na sua conta — não aparece pros clientes na loja."
+      >
         <Input
           id="merchantName"
           name="merchantName"
@@ -35,7 +41,13 @@ export function ProfileStep({ progress }: { progress: OnboardingRow }) {
         />
       </Field>
 
-      <Field label="WhatsApp" htmlFor="whatsapp" required error={state.fieldErrors?.whatsapp}>
+      <Field
+        label="WhatsApp"
+        htmlFor="whatsapp"
+        required
+        error={state.fieldErrors?.whatsapp}
+        info="Número onde você recebe avisos sobre a sua loja. Não aparece pros clientes — quem vê a loja não tem acesso a esse número."
+      >
         <Input
           id="whatsapp"
           name="whatsapp"

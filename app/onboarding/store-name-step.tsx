@@ -23,7 +23,13 @@ export function StoreNameStep({ progress }: { progress: OnboardingRow }) {
         </div>
       )}
 
-      <Field label="Nome da loja" htmlFor="storeName" required error={state.fieldErrors?.storeName}>
+      <Field
+        label="Nome da loja"
+        htmlFor="storeName"
+        required
+        error={state.fieldErrors?.storeName}
+        info="O nome que o cliente vê no topo da sua loja online — pode ser diferente do seu nome pessoal. Ex.: 'Casa do Café'."
+      >
         <Input
           id="storeName"
           name="storeName"

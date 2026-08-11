@@ -43,6 +43,7 @@ export function SlugStep({ progress }: { progress: OnboardingRow }) {
         required
         error={state.fieldErrors?.slug}
         hint="Só letras minúsculas, números e hífen. É normalizado automaticamente e pode ser alterado até você concluir o cadastro — depois disso fica bloqueado."
+        info="O endereço único da sua loja na internet — é o link que você vai mandar pros seus clientes no WhatsApp, Instagram etc. Ex.: caraffastore.vercel.app/loja/casa-do-cafe."
       >
         <Input
           id="slug"
