@@ -56,7 +56,9 @@ export type AuditAction =
   | "billing_charge_expired"
   | "billing_manual_review_required"
   | "store_activated_by_billing"
-  | "billing_subscription_renewed";
+  | "billing_subscription_renewed"
+  | "store_suspended_by_platform_admin"
+  | "store_reactivated_by_platform_admin";
 export type ProductStatus = "draft" | "published" | "archived";
 export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "completed" | "cancelled";
 export type FulfillmentMethod = "pickup" | "delivery";
@@ -70,7 +72,7 @@ export type BillingChargeStatus = PaymentStatus;
 
 /**
  * Minimal hand-written mirror of `supabase/migrations/0001_init.sql`
- * through `0008_saas_billing.sql`. Kept small on purpose — only what
+ * through `0009_platform_admin.sql`. Kept small on purpose — only what
  * each migration actually created, not raw `supabase gen types` output.
  */
 export interface Database {
@@ -83,6 +85,7 @@ export interface Database {
           name: string;
           status: StoreStatus;
           whatsapp: string | null;
+          pre_suspension_status: StoreStatus | null;
           created_at: string;
         };
         Insert: {
@@ -91,6 +94,7 @@ export interface Database {
           name: string;
           status?: StoreStatus;
           whatsapp?: string | null;
+          pre_suspension_status?: StoreStatus | null;
           created_at?: string;
         };
         Update: {
@@ -99,7 +103,23 @@ export interface Database {
           name?: string;
           status?: StoreStatus;
           whatsapp?: string | null;
+          pre_suspension_status?: StoreStatus | null;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      platform_admins: {
+        Row: {
+          user_id: string;
+          granted_at: string;
+        };
+        Insert: {
+          user_id: string;
+          granted_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          granted_at?: string;
         };
         Relationships: [];
       };
@@ -1286,6 +1306,34 @@ export interface Database {
           period_end: string;
           created_at: string;
         }[];
+      };
+      is_platform_admin: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      platform_admin_store_overview: {
+        Args: Record<string, never>;
+        Returns: {
+          store_id: string;
+          slug: string;
+          name: string;
+          status: StoreStatus;
+          pre_suspension_status: StoreStatus | null;
+          whatsapp: string | null;
+          plan_code: PlanCode | null;
+          store_created_at: string;
+          owner_user_id: string | null;
+          owner_email: string | null;
+          owner_display_name: string | null;
+          latest_charge_status: BillingChargeStatus | null;
+          latest_charge_amount_cents: number | null;
+          latest_charge_approved_at: string | null;
+          latest_charge_period_end: string | null;
+        }[];
+      };
+      platform_admin_set_store_status: {
+        Args: { p_store_id: string; p_action: "suspend" | "reactivate" };
+        Returns: Database["public"]["Tables"]["stores"]["Row"];
       };
     };
   };
