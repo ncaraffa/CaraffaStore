@@ -17,7 +17,22 @@ import { isCurrentSessionRecovery } from "@/lib/tenant/recovery-session";
  * https://nextjs.org/docs/messages/middleware-to-proxy); a função
  * continua rodando antes de toda requisição, no mesmo lugar do pipeline.
  */
+// Vercel não suporta redirect entre dois subdomínios *.vercel.app via
+// Domains API (mesmo apex compartilhado) — feito aqui em código. Nunca
+// redireciona /api/*: o webhook do Mercado Pago está configurado para o
+// domínio antigo e precisa continuar respondendo lá sem redirect.
+const CANONICAL_HOST_REDIRECT: Record<string, string> = {
+  "commerce-platform-pi.vercel.app": "caraffastore.vercel.app",
+};
+
 export async function proxy(request: NextRequest) {
+  const host = request.headers.get("host");
+  const canonicalHost = host ? CANONICAL_HOST_REDIRECT[host] : undefined;
+  if (canonicalHost && !request.nextUrl.pathname.startsWith("/api/")) {
+    const url = new URL(request.nextUrl.pathname + request.nextUrl.search, `https://${canonicalHost}`);
+    return NextResponse.redirect(url, 308);
+  }
+
   let response = NextResponse.next({ request });
 
   const env = getPublicSupabaseEnv();
