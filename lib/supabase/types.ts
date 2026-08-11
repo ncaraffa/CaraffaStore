@@ -47,7 +47,16 @@ export type AuditAction =
   | "pix_payment_reconciliation_failed"
   | "order_confirmed_by_payment"
   | "order_cancelled_by_payment_failure"
-  | "payment_manual_review_required";
+  | "payment_manual_review_required"
+  | "billing_charge_creation_started"
+  | "billing_charge_created"
+  | "billing_charge_approved"
+  | "billing_charge_rejected"
+  | "billing_charge_cancelled"
+  | "billing_charge_expired"
+  | "billing_manual_review_required"
+  | "store_activated_by_billing"
+  | "billing_subscription_renewed";
 export type ProductStatus = "draft" | "published" | "archived";
 export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "completed" | "cancelled";
 export type FulfillmentMethod = "pickup" | "delivery";
@@ -56,12 +65,13 @@ export type PixPaymentEnvironment = "test" | "production";
 export type PixDocType = "CPF" | "CNPJ";
 export type PaymentStatus = "creating" | "pending" | "approved" | "rejected" | "cancelled" | "expired" | "error" | "manual_review";
 export type WebhookProcessingStatus = "received" | "processed" | "ignored" | "rejected" | "error";
+/** billing_charges.status usa exatamente o mesmo vocabulário de PaymentStatus (order_payments) — mesma máquina de estados, dois domínios (0007_payments.sql loja↔cliente vs 0008_saas_billing.sql CaraffaStore↔comerciante). */
+export type BillingChargeStatus = PaymentStatus;
 
 /**
  * Minimal hand-written mirror of `supabase/migrations/0001_init.sql`
- * through `0004_account_audit.sql`. Kept small on purpose — only what
- * TASK-001/TASK-002 actually created, not the full future catalog/
- * billing schema.
+ * through `0008_saas_billing.sql`. Kept small on purpose — only what
+ * each migration actually created, not raw `supabase gen types` output.
  */
 export interface Database {
   public: {
@@ -785,6 +795,164 @@ export interface Database {
         };
         Relationships: [];
       };
+      billing_charges: {
+        Row: {
+          id: string;
+          store_id: string;
+          plan_code: PlanCode;
+          amount_cents: number;
+          currency: string;
+          provider: "mercado_pago";
+          provider_payment_id: string | null;
+          provider_idempotency_key: string;
+          external_reference: string;
+          status: BillingChargeStatus;
+          provider_status: string | null;
+          provider_status_detail: string | null;
+          payer_email: string;
+          payer_doc_type: PixDocType;
+          payer_doc_last4: string;
+          period_start: string;
+          period_end: string;
+          qr_code: string | null;
+          qr_code_base64: string | null;
+          ticket_url: string | null;
+          expires_at: string | null;
+          approved_at: string | null;
+          failed_at: string | null;
+          cancelled_at: string | null;
+          last_webhook_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          store_id: string;
+          plan_code: PlanCode;
+          amount_cents: number;
+          currency?: string;
+          provider?: "mercado_pago";
+          provider_payment_id?: string | null;
+          provider_idempotency_key: string;
+          external_reference: string;
+          status?: BillingChargeStatus;
+          provider_status?: string | null;
+          provider_status_detail?: string | null;
+          payer_email: string;
+          payer_doc_type: PixDocType;
+          payer_doc_last4: string;
+          period_start: string;
+          period_end: string;
+          qr_code?: string | null;
+          qr_code_base64?: string | null;
+          ticket_url?: string | null;
+          expires_at?: string | null;
+          approved_at?: string | null;
+          failed_at?: string | null;
+          cancelled_at?: string | null;
+          last_webhook_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          store_id?: string;
+          plan_code?: PlanCode;
+          amount_cents?: number;
+          currency?: string;
+          provider?: "mercado_pago";
+          provider_payment_id?: string | null;
+          provider_idempotency_key?: string;
+          external_reference?: string;
+          status?: BillingChargeStatus;
+          provider_status?: string | null;
+          provider_status_detail?: string | null;
+          payer_email?: string;
+          payer_doc_type?: PixDocType;
+          payer_doc_last4?: string;
+          period_start?: string;
+          period_end?: string;
+          qr_code?: string | null;
+          qr_code_base64?: string | null;
+          ticket_url?: string | null;
+          expires_at?: string | null;
+          approved_at?: string | null;
+          failed_at?: string | null;
+          cancelled_at?: string | null;
+          last_webhook_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "billing_charges_store_id_fkey";
+            columns: ["store_id"];
+            isOneToOne: false;
+            referencedRelation: "stores";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      billing_webhook_events: {
+        Row: {
+          id: string;
+          store_id: string;
+          charge_id: string | null;
+          provider: "mercado_pago";
+          provider_event_id: string | null;
+          provider_payment_id: string | null;
+          action: string | null;
+          payload_hash: string;
+          received_at: string;
+          processed_at: string | null;
+          processing_status: WebhookProcessingStatus;
+          error_code: string | null;
+        };
+        Insert: {
+          id?: string;
+          store_id: string;
+          charge_id?: string | null;
+          provider?: "mercado_pago";
+          provider_event_id?: string | null;
+          provider_payment_id?: string | null;
+          action?: string | null;
+          payload_hash: string;
+          received_at?: string;
+          processed_at?: string | null;
+          processing_status?: WebhookProcessingStatus;
+          error_code?: string | null;
+        };
+        Update: {
+          id?: string;
+          store_id?: string;
+          charge_id?: string | null;
+          provider?: "mercado_pago";
+          provider_event_id?: string | null;
+          provider_payment_id?: string | null;
+          action?: string | null;
+          payload_hash?: string;
+          received_at?: string;
+          processed_at?: string | null;
+          processing_status?: WebhookProcessingStatus;
+          error_code?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "billing_webhook_events_charge_id_fkey";
+            columns: ["charge_id"];
+            isOneToOne: false;
+            referencedRelation: "billing_charges";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "billing_webhook_events_store_id_fkey";
+            columns: ["store_id"];
+            isOneToOne: false;
+            referencedRelation: "stores";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -1040,6 +1208,83 @@ export interface Database {
           received_at: string;
           processed_at: string | null;
           error_code: string | null;
+        }[];
+      };
+      platform_plan_price_cents: {
+        Args: { p_plan_code: PlanCode };
+        Returns: number | null;
+      };
+      billing_charge_upsert_creating: {
+        Args: {
+          p_store_id: string;
+          p_provider_idempotency_key: string;
+          p_payer_email: string;
+          p_payer_doc_type: PixDocType;
+          p_payer_doc_last4: string;
+        };
+        Returns: Database["public"]["Tables"]["billing_charges"]["Row"];
+      };
+      billing_charge_mark_created: {
+        Args: {
+          p_charge_id: string;
+          p_provider_payment_id: string;
+          p_provider_status: string;
+          p_provider_status_detail: string | null;
+          p_qr_code: string | null;
+          p_qr_code_base64: string | null;
+          p_ticket_url: string | null;
+          p_expires_at: string | null;
+        };
+        Returns: Database["public"]["Tables"]["billing_charges"]["Row"];
+      };
+      billing_charge_mark_creation_failed: {
+        Args: { p_charge_id: string; p_error_code: string };
+        Returns: Database["public"]["Tables"]["billing_charges"]["Row"];
+      };
+      billing_charge_apply_provider_state: {
+        Args: {
+          p_charge_id: string;
+          p_provider_payment_id: string;
+          p_internal_status: string;
+          p_provider_status: string;
+          p_provider_status_detail: string | null;
+          p_amount_cents: number;
+          p_currency: string;
+          p_external_reference: string | null;
+          p_qr_code: string | null;
+          p_qr_code_base64: string | null;
+          p_ticket_url: string | null;
+          p_expires_at: string | null;
+        };
+        Returns: Database["public"]["Tables"]["billing_charges"]["Row"];
+      };
+      billing_webhook_event_record: {
+        Args: {
+          p_store_id: string;
+          p_charge_id: string | null;
+          p_provider_event_id: string | null;
+          p_provider_payment_id: string;
+          p_action: string | null;
+          p_payload_hash: string;
+          p_processing_status: WebhookProcessingStatus;
+          p_error_code: string | null;
+        };
+        Returns: { event_id: string; is_duplicate: boolean }[];
+      };
+      billing_get_current_charge: {
+        Args: { p_store_id: string };
+        Returns: {
+          id: string;
+          status: BillingChargeStatus;
+          plan_code: PlanCode;
+          amount_cents: number;
+          qr_code: string | null;
+          qr_code_base64: string | null;
+          ticket_url: string | null;
+          expires_at: string | null;
+          period_start: string;
+          period_end: string;
+          created_at: string;
         }[];
       };
     };
