@@ -41,6 +41,10 @@ import styles from "./LandingPage.module.css";
  * ver a auditoria na seção 7 do spec. Anunciá-la aqui seria publicidade
  * enganosa. Assim que um item virar realidade no código, ele entra nesta
  * lista — a arquitetura visual já está pronta para isso.
+ *
+ * `fit`/`forWho` também nunca alegam recurso — só estágio/volume do
+ * negócio do lojista, a única diferença honesta que existe hoje entre os
+ * três planos além do preço (seção 8 do spec).
  */
 const PLANS = [
   {
@@ -48,7 +52,8 @@ const PLANS = [
     name: "Essencial",
     price: 30,
     tier: 1,
-    fit: "Tudo que você precisa para começar a vender online.",
+    fit: "Sua primeira loja, no ar ainda hoje.",
+    forWho: "Ideal se você está começando a vender online agora.",
     features: [] as string[],
     featured: false,
   },
@@ -57,7 +62,8 @@ const PLANS = [
     name: "Crescimento",
     price: 50,
     tier: 2,
-    fit: "Para quem quer crescer com a própria marca.",
+    fit: "Para quem já vende e quer aprofundar a marca.",
+    forWho: "Ideal se você já tem clientes e quer profissionalizar a operação.",
     features: [] as string[],
     featured: true,
   },
@@ -66,7 +72,8 @@ const PLANS = [
     name: "Profissional",
     price: 70,
     tier: 3,
-    fit: "Para operações que precisam ir além.",
+    fit: "Para operações que já passaram do início.",
+    forWho: "Ideal se seu volume de vendas já é maior e mais constante.",
     features: [] as string[],
     featured: false,
   },
@@ -469,6 +476,7 @@ export function LandingPage() {
                   <span className={styles.planPeriod}>/mês</span>
                 </p>
                 <p className={styles.planFit}>{plan.fit}</p>
+                <p className={styles.planForWho}>{plan.forWho}</p>
 
                 {plan.features.length > 0 && (
                   <ul className={styles.planFeatures}>
