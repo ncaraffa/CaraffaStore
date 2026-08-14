@@ -1,0 +1,284 @@
+.panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-2xl);
+  background: var(--cs-white);
+  box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
+  overflow: hidden;
+}
+
+@media (min-width: 880px) {
+  .panel {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  }
+}
+
+/* ============================================================
+   Coluna do preço
+   ============================================================ */
+.pricing {
+  padding: var(--cs-space-8);
+  display: flex;
+  flex-direction: column;
+}
+
+.pickerLabel {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+  margin-bottom: var(--cs-space-3);
+}
+
+.picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.375rem;
+  padding: 0.375rem;
+  border-radius: var(--cs-radius-lg);
+  background: var(--cs-surface-sunken);
+}
+
+.option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  /* 2.75rem é o piso; o conteúdo real deixa o alvo bem acima disso. */
+  min-height: 2.75rem;
+  padding: 0.625rem 0.6875rem;
+  border: 1px solid transparent;
+  border-radius: var(--cs-radius-md);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: var(--cs-ink-body);
+  transition:
+    background-color var(--cs-duration-fast) var(--cs-ease),
+    border-color var(--cs-duration-fast) var(--cs-ease),
+    color var(--cs-duration-fast) var(--cs-ease);
+}
+
+@media (hover: hover) {
+  .option:hover:not([data-selected]) {
+    background: rgba(255, 255, 255, 0.6);
+  }
+}
+
+.option[data-selected] {
+  background: var(--cs-white);
+  border-color: var(--cs-blue-200);
+  color: var(--cs-ink);
+  box-shadow: var(--cs-shadow-sm);
+}
+
+.optionName {
+  font-size: var(--cs-text-sm);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.optionPrice {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.option[data-selected] .optionPrice {
+  color: var(--cs-blue-700);
+}
+
+/* Linha de nível — três traços, os "cheios" indicam a faixa. */
+.level {
+  display: flex;
+  gap: 0.1875rem;
+  align-items: flex-end;
+  height: 0.75rem;
+}
+
+.level span {
+  width: 0.375rem;
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-line-strong);
+}
+
+.level span:nth-child(1) {
+  height: 0.375rem;
+}
+
+.level span:nth-child(2) {
+  height: 0.5625rem;
+}
+
+.level span:nth-child(3) {
+  height: 0.75rem;
+}
+
+.option[data-selected] .level span[data-on] {
+  background: var(--cs-blue-600);
+}
+
+/* ============================================================
+   Preço
+   ============================================================ */
+.priceBlock {
+  margin-top: var(--cs-space-8);
+}
+
+.price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  font-family: var(--cs-font-display);
+  color: var(--cs-ink);
+  letter-spacing: var(--cs-tracking-display);
+}
+
+.currency {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--cs-ink-muted);
+}
+
+.priceValue {
+  font-size: clamp(3.25rem, 2.4rem + 3vw, 4.5rem);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.period {
+  font-family: var(--cs-font-sans);
+  font-size: var(--cs-text-lg);
+  font-weight: 500;
+  color: var(--cs-ink-muted);
+  letter-spacing: 0;
+}
+
+.priceNote {
+  margin-top: var(--cs-space-3);
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-body);
+  line-height: var(--cs-leading-body);
+}
+
+.priceNote strong {
+  color: var(--cs-ink);
+}
+
+.cta {
+  display: block;
+  margin-top: var(--cs-space-6);
+  text-decoration: none;
+}
+
+.switchNote {
+  margin-top: var(--cs-space-4);
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
+  line-height: 1.5;
+}
+
+/* ============================================================
+   Coluna do que está incluído
+   ============================================================ */
+.included {
+  padding: var(--cs-space-8);
+  background: var(--cs-surface);
+  border-top: 1px solid var(--cs-line);
+}
+
+@media (min-width: 880px) {
+  .included {
+    border-top: 0;
+    border-left: 1px solid var(--cs-line);
+  }
+}
+
+.includedTitle {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+  margin-bottom: var(--cs-space-4);
+}
+
+.includedList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-3);
+}
+
+.includedList li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-body);
+  line-height: 1.45;
+}
+
+.includedList svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  margin-top: 0.1875rem;
+  color: var(--cs-blue-600);
+}
+
+/* ============================================================
+   Mobile
+   ============================================================ */
+@media (max-width: 640px) {
+  .pricing,
+  .included {
+    padding: var(--cs-space-6) var(--cs-space-5);
+  }
+
+  .picker {
+    gap: 0.25rem;
+    padding: 0.25rem;
+  }
+
+  .option {
+    padding: 0.5rem 0.4375rem;
+    gap: 0.25rem;
+  }
+
+  .optionName {
+    font-size: 0.75rem;
+  }
+
+  .optionPrice {
+    font-size: 0.6875rem;
+  }
+}
+
+/* Abaixo de 375px, "Crescimento" não cabe em um terço da largura sem
+   ser cortado — medido, não estimado. Aí o seletor vira uma coluna:
+   nome à esquerda, preço à direita, nada truncado. */
+@media (max-width: 374px) {
+  .picker {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .option {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .optionPrice {
+    margin-left: auto;
+  }
+}

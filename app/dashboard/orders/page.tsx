@@ -142,7 +142,7 @@ export default async function OrdersPage({
                       <td>{badge ? <Badge tone={badge.tone}>{badge.label}</Badge> : "—"}</td>
                       <td className={styles.thActions}>
                         <Link href={`/dashboard/orders/${order.id}?store=${store.slug}`}>
-                          <Button variant="ghost" size="sm">
+                          <Button as="span" variant="ghost" size="sm">
                             Abrir
                           </Button>
                         </Link>

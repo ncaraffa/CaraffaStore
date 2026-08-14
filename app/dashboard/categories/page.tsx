@@ -45,7 +45,7 @@ export default async function CategoriesPage({
         </div>
         {canManage && (
           <Link href={`/dashboard/categories/new?store=${store.slug}`}>
-            <Button icon={<IconPlus />}>Nova categoria</Button>
+            <Button as="span" icon={<IconPlus />}>Nova categoria</Button>
           </Link>
         )}
       </div>
@@ -58,7 +58,7 @@ export default async function CategoriesPage({
           action={
             canManage && (
               <Link href={`/dashboard/categories/new?store=${store.slug}`}>
-                <Button icon={<IconPlus />}>Criar primeira categoria</Button>
+                <Button as="span" icon={<IconPlus />}>Criar primeira categoria</Button>
               </Link>
             )
           }
@@ -87,7 +87,7 @@ export default async function CategoriesPage({
                 {canManage && (
                   <div className={styles.actions}>
                     <Link href={`/dashboard/categories/${category.id}/edit?store=${store.slug}`}>
-                      <Button variant="ghost" size="sm">
+                      <Button as="span" variant="ghost" size="sm">
                         Editar
                       </Button>
                     </Link>

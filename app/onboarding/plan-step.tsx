@@ -18,8 +18,13 @@ export function PlanStep({ progress }: { progress: OnboardingRow }) {
   return (
     <form action={formAction} noValidate>
       <h2>Escolha um plano</h2>
+      {/* Mesma verdade da landing, dita aqui também: as três faixas dão
+          acesso à plataforma inteira. Se esta tela sugerisse recursos
+          diferentes por plano, ela estaria mentindo — não existe nenhum
+          gating por plan_code no produto. */}
       <p className={styles.hint}>
-        Só o registro da escolha inicial — sem cobrança nesta etapa. Você pode revisar isso depois com o suporte.
+        Os três dão acesso a todos os recursos, sem limite de produtos ou pedidos — escolha a faixa que combina com o
+        tamanho da sua operação. Nada é cobrado nesta etapa; o pagamento vem no passo seguinte, por Pix.
       </p>
       {state.status === "error" && state.message && (
         <div style={{ marginBottom: "1.25rem" }}>

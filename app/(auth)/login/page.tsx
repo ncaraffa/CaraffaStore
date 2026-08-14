@@ -1,3 +1,9 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Entrar",
+};
+
 import { LoginForm } from "./login-form";
 import { RESET_LINK_INVALID_MESSAGE } from "@/lib/auth/messages";
 

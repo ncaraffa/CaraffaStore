@@ -1,3 +1,9 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Definir nova senha",
+};
+
 import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isCurrentSessionRecovery } from "@/lib/tenant/recovery-session";

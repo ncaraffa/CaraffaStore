@@ -228,7 +228,7 @@
     width: 100%;
   }
 
-  .statusToggle :global(button) {
+  .statusToggle :global(.cs-btn) {
     width: 100%;
   }
 }

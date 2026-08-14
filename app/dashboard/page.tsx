@@ -192,7 +192,7 @@ export default async function DashboardPage({
                   description="Assim que alguém comprar no seu catálogo público, o pedido aparece aqui."
                   action={
                     <a href={`/loja/${store.slug}`} target="_blank" rel="noreferrer">
-                      <Button variant="outline" icon={<IconArrowRight />} iconPosition="end">
+                      <Button as="span" variant="outline" icon={<IconArrowRight />} iconPosition="end">
                         Ver catálogo público
                       </Button>
                     </a>

@@ -124,7 +124,7 @@
     height: 2.75rem;
   }
 
-  .headerCta :global(button) {
+  .headerCta :global(.cs-btn) {
     height: 2.75rem;
     padding-inline: 0.875rem;
   }
@@ -252,6 +252,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* O texto do fato precisa do próprio elemento — ver o comentário no
+   LandingPage.tsx: solto no <li>, o JSX descarta o espaço em branco
+   antes dele e o par vira "0%de comissão" na cópia e na leitura por
+   voz, ainda que a coluna flex o mostre em outra linha. */
+.factText {
+  display: block;
+}
+
 /* A cena já usa a trilha larga (1360) e o card de estoque avança sobre a
    calha lateral. Nada de margem negativa aqui: ela empurraria o card para
    fora da viewport em 1440 e ele seria cortado. */
@@ -363,6 +371,38 @@
   font-size: var(--cs-text-lg);
   color: var(--cs-ink-muted);
   max-width: 42rem;
+}
+
+/* Endereço da loja de demonstração, ao lado do título da seção: o
+   visitante vê que uma loja tem link próprio antes mesmo de olhar a
+   moldura do navegador. */
+.demoUrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: var(--cs-space-5);
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-white);
+  box-shadow: var(--cs-shadow-xs);
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink);
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.demoUrl svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  color: var(--cs-blue-600);
+}
+
+.demoUrl span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 640px) {
@@ -503,9 +543,7 @@
    direita — mesma informação, metade da altura, ritmo melhor. */
 @media (max-width: 600px) {
   .bentoCell[data-cell="produtos"],
-  .bentoCell[data-cell="pedidos"],
-  .bentoCell[data-cell="categorias"],
-  .bentoCell[data-cell="busca"] {
+  .bentoCell[data-cell="pedidos"] {
     flex-direction: row;
     align-items: flex-start;
     gap: var(--cs-space-4);
@@ -516,9 +554,7 @@
   }
 
   .bentoCell[data-cell="produtos"] .bentoIcon,
-  .bentoCell[data-cell="pedidos"] .bentoIcon,
-  .bentoCell[data-cell="categorias"] .bentoIcon,
-  .bentoCell[data-cell="busca"] .bentoIcon {
+  .bentoCell[data-cell="pedidos"] .bentoIcon {
     width: 2.125rem;
     height: 2.125rem;
     margin-bottom: 0;
@@ -526,27 +562,27 @@
   }
 
   .bentoCell[data-cell="produtos"] h3,
-  .bentoCell[data-cell="pedidos"] h3,
-  .bentoCell[data-cell="categorias"] h3,
-  .bentoCell[data-cell="busca"] h3 {
+  .bentoCell[data-cell="pedidos"] h3 {
     font-size: 1rem;
     margin-bottom: 0.25rem;
   }
 }
 
-/* Tablet: duas colunas em ritmo cheio / par / par / cheio. */
+/* Tablet: duas colunas em ritmo cheio / cheio / par. */
 @media (min-width: 601px) {
   .bento {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .bentoCell[data-cell="catalogo"],
-  .bentoCell[data-cell="busca"] {
+  .bentoCell[data-cell="pix"] {
     grid-column: span 2;
   }
 }
 
-/* Desktop: seis colunas de verdade, usando a largura larga. */
+/* Desktop: seis colunas de verdade, usando a largura larga. O Pix ocupa
+   duas linhas à direita — é a coluna que o olho segue enquanto lê as
+   duas caixas menores embaixo do catálogo. */
 @media (min-width: 901px) {
   .bento {
     grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -565,11 +601,6 @@
     grid-column: span 2;
     grid-row: span 2;
     padding: var(--cs-space-8);
-  }
-
-  .bentoCell[data-cell="categorias"],
-  .bentoCell[data-cell="busca"] {
-    grid-column: span 3;
   }
 
   .bentoCell[data-cell="catalogo"] h3,
@@ -627,6 +658,13 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* São três itens numa grade de duas colunas: sem isso o primeiro fica
+   sozinho na última linha. O item que abre a lista é também o mais
+   importante (comissão), então é ele que ganha a linha inteira. */
+.bandList li:first-child {
+  grid-column: 1 / -1;
 }
 
 .bandList li {
@@ -785,14 +823,14 @@
   text-decoration: none;
 }
 
-.blueActions :global(button) {
+.blueActions :global(.cs-btn) {
   background: #fff;
   color: var(--cs-blue-700);
   border-color: transparent;
   box-shadow: 0 12px 30px -10px rgba(4, 12, 40, 0.7);
 }
 
-.blueActions :global(button:hover) {
+.blueActions a:hover :global(.cs-btn) {
   background: var(--cs-blue-50);
   color: var(--cs-blue-800);
   box-shadow: 0 16px 38px -10px rgba(4, 12, 40, 0.8);
@@ -986,295 +1024,57 @@
 }
 
 /* ============================================================
-   6. Planos
+   7. Planos
+   O painel de faixa de preço (components/marketing/PlanPicker)
+   traz o próprio estilo; aqui fica só o enquadramento dele na
+   página e a nota de honestidade que o acompanha.
    ============================================================ */
-.plans {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--cs-space-5);
-  align-items: center;
+.planPanel {
   max-width: var(--cs-container);
   margin-inline: auto;
 }
 
-.plan {
-  position: relative;
+/* Nota de honestidade sobre o preço: precisa ser lida, não escondida
+   em letra miúda — daí o mesmo peso visual de um bloco de conteúdo,
+   com o escudo à esquerda amarrando ao tom de confiança da página. */
+.planHonesty {
   display: flex;
-  flex-direction: column;
-  padding: var(--cs-space-8);
-  background: var(--cs-white);
-  border: 1px solid var(--cs-line);
-  border-radius: var(--cs-radius-xl);
-  box-shadow: var(--cs-shadow-sm), var(--cs-sheen);
-  transition:
-    box-shadow var(--cs-duration-slow) var(--cs-ease-out),
-    border-color var(--cs-duration-slow) var(--cs-ease-out),
-    transform var(--cs-duration-slow) var(--cs-ease-out);
-}
-
-/* O plano do meio é o mais forte: mais alto, elevado e em cobalto. */
-.plan[data-featured] {
-  padding-block: clamp(3rem, 2.4rem + 2vw, 4.25rem);
-  background: linear-gradient(168deg, var(--cs-blue-700), var(--cs-blue-900) 92%);
-  border-color: var(--cs-blue-800);
-  box-shadow: var(--cs-shadow-xl), 0 0 0 1px rgba(27, 77, 255, 0.2);
-  z-index: 1;
-}
-
-@media (hover: hover) {
-  .plan:hover {
-    transform: translateY(-4px);
-    border-color: var(--cs-blue-200);
-    box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
-  }
-
-  .plan[data-featured]:hover {
-    border-color: var(--cs-blue-700);
-    box-shadow: var(--cs-shadow-xl), 0 0 0 1px rgba(92, 141, 255, 0.45), 0 26px 60px -18px rgba(27, 77, 255, 0.6);
-  }
-}
-
-.planBadge {
-  position: absolute;
-  top: var(--cs-space-5);
-  right: var(--cs-space-5);
-  padding: 0.1875rem 0.5rem;
-  border-radius: var(--cs-radius-sm);
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  color: #fff;
-  font-family: var(--cs-font-mono);
-  font-size: 0.625rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-/* Nível do plano — o mesmo gesto da linha de nível da jarra. Ordena a
-   oferta visualmente sem prometer recurso nenhum. */
-.planLevel {
-  display: flex;
-  gap: 0.1875rem;
-  margin-bottom: var(--cs-space-4);
-}
-
-.planLevel span {
-  width: 1.375rem;
-  height: 0.25rem;
-  border-radius: var(--cs-radius-full);
-  background: var(--cs-surface-sunken);
-  transition: background-color var(--cs-duration-slow) var(--cs-ease);
-}
-
-.planLevel span[data-on] {
-  background: var(--cs-blue-500);
-}
-
-.plan[data-featured] .planLevel span {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.plan[data-featured] .planLevel span[data-on] {
-  background: #fff;
-}
-
-.planName {
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--cs-ink);
-}
-
-.plan[data-featured] .planName {
-  color: #fff;
-}
-
-.planPrice {
-  display: flex;
-  align-items: baseline;
-  gap: 0.125rem;
-  margin-top: var(--cs-space-4);
-  font-family: var(--cs-font-display);
-  font-size: 3.25rem;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  color: var(--cs-ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.plan[data-featured] .planPrice {
-  color: #fff;
-  font-size: 3.75rem;
-}
-
-.planCurrency {
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--cs-ink-muted);
-  align-self: flex-start;
-  margin-top: 0.375rem;
-}
-
-.plan[data-featured] .planCurrency {
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.planPeriod {
-  font-family: var(--cs-font-sans);
-  font-size: var(--cs-text-sm);
-  font-weight: 500;
-  letter-spacing: 0;
-  color: var(--cs-ink-muted);
-  margin-left: 0.25rem;
-}
-
-.plan[data-featured] .planPeriod {
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.planFit {
-  margin-top: var(--cs-space-4);
-  font-size: var(--cs-text-base);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.4;
-  color: var(--cs-ink);
-  min-height: 2.75rem;
-}
-
-.plan[data-featured] .planFit {
-  color: #fff;
-}
-
-/* "Ideal para..." — a única diferença honesta entre planos hoje é
-   estágio/volume do negócio, não recurso (docs/PLANS-SPEC.md §8). Um
-   degrau abaixo do .planFit tanto em peso quanto em cor, pra ler como
-   qualificador, não como uma segunda promessa. */
-.planForWho {
-  margin-top: 0.375rem;
-  font-size: var(--cs-text-sm);
-  line-height: 1.5;
-  color: var(--cs-ink-muted);
-  min-height: 2.6rem;
-}
-
-.plan[data-featured] .planForWho {
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.planFeatures {
-  margin: var(--cs-space-5) 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: var(--cs-space-2);
-}
-
-.planFeatures li {
-  display: flex;
+  gap: var(--cs-space-4);
   align-items: flex-start;
-  gap: var(--cs-space-2);
-  font-size: var(--cs-text-sm);
-  color: var(--cs-ink-body);
-}
-
-.planCta {
-  display: block;
-  margin-top: var(--cs-space-8);
-  text-decoration: none;
-}
-
-.plan[data-featured] .planCta :global(button) {
-  background: #fff;
-  color: var(--cs-blue-700);
-  border-color: transparent;
-  box-shadow: 0 8px 20px -8px rgba(4, 12, 40, 0.5);
-}
-
-.plan[data-featured] .planCta :global(button:hover) {
-  background: var(--cs-blue-50);
-  color: var(--cs-blue-800);
-}
-
-/* ---- Bloco compartilhado: o que existe hoje vale para os três ---- */
-.included {
-  max-width: var(--cs-container);
+  max-width: 52rem;
   margin: var(--cs-space-8) auto 0;
-  padding: var(--cs-space-6) var(--cs-space-8);
-  background: var(--cs-white);
+  padding: var(--cs-space-5) var(--cs-space-6);
   border: 1px solid var(--cs-line);
   border-radius: var(--cs-radius-xl);
+  background: var(--cs-white);
   box-shadow: var(--cs-shadow-xs);
-}
-
-.includedTitle {
-  font-family: var(--cs-font-mono);
-  font-size: var(--cs-text-label);
-  font-weight: 500;
-  letter-spacing: var(--cs-tracking-label);
-  text-transform: uppercase;
-  color: var(--cs-ink-muted);
-  margin-bottom: var(--cs-space-4);
-}
-
-.includedList {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--cs-space-3) var(--cs-space-6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.includedList li {
-  display: flex;
-  align-items: center;
-  gap: var(--cs-space-2);
   font-size: var(--cs-text-sm);
+  line-height: 1.6;
   color: var(--cs-ink-body);
 }
 
-.includedList svg,
-.planFeatures svg {
-  width: 1rem;
-  height: 1rem;
+.planHonesty strong {
+  color: var(--cs-ink);
+  font-weight: 700;
+}
+
+.planHonesty svg {
+  width: 1.25rem;
+  height: 1.25rem;
   flex-shrink: 0;
+  margin-top: 0.125rem;
   color: var(--cs-blue-600);
 }
 
-@media (max-width: 900px) {
-  .plans {
-    grid-template-columns: minmax(0, 1fr);
-    max-width: 30rem;
-  }
-
-  .plan[data-featured] {
-    order: -1;
-  }
-
-  .includedList {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 560px) {
-  .plan {
-    padding: var(--cs-space-6);
-  }
-
-  .included {
-    padding: var(--cs-space-6);
-  }
-
-  .includedList {
-    grid-template-columns: minmax(0, 1fr);
+  .planHonesty {
+    padding: var(--cs-space-5);
+    gap: var(--cs-space-3);
   }
 }
 
 /* ============================================================
-   7. FAQ
+   8. FAQ
    ============================================================ */
 .faq {
   display: grid;
@@ -1362,6 +1162,21 @@
   line-height: 1.68;
   color: var(--cs-ink-body);
   max-width: 68ch;
+}
+
+/* Ponte para os documentos legais: é o fim natural das dúvidas, e
+   coloca Termos e Privacidade a um clique de quem está decidindo. */
+.faqFooter {
+  max-width: 56rem;
+  margin-top: var(--cs-space-6);
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-muted);
+}
+
+.faqFooter a {
+  font-weight: 600;
+  color: var(--cs-blue-600);
+  text-decoration: underline;
 }
 
 /* Abertura animada onde o navegador já suporta; onde não suporta, abre

@@ -72,7 +72,8 @@ export default async function PendingPaymentPage({
       <div className={styles.header}>
         <h1 className={styles.title}>Ative sua loja</h1>
         <p className={styles.subtitle}>
-          Cadastro concluído — falta só a assinatura mensal via Pix para o painel ser liberado.
+          Cadastro concluído. Pague a primeira mensalidade por Pix e o painel é liberado automaticamente, assim que o
+          pagamento for aprovado.
         </p>
         {plan && (
           <p className={styles.planLine}>
