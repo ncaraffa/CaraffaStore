@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Product film — CaraffaStore</title>
+    <style>
+      /* Tokens copiados de app/globals.css, para a página de conferência
+         ter o mesmo entorno que a landing terá. */
+      :root {
+        --cs-blue-600: #1b4dff;
+        --cs-blue-50: #f0f5ff;
+        --cs-blue-100: #dee9ff;
+        --cs-ink: #0c1b33;
+        --cs-ink-body: #33425c;
+        --cs-ink-muted: #64728e;
+        --cs-white: #fff;
+        --cs-surface: #f7f9fd;
+        --cs-line: #e4eaf4;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: var(--cs-ink-body);
+        background: var(--cs-white);
+        line-height: 1.6;
+      }
+      .wrap { max-width: 1320px; margin: 0 auto; padding: 48px 24px 80px; }
+      .label {
+        font-family: ui-monospace, "SFMono-Regular", monospace;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--cs-ink-muted);
+      }
+      h1 {
+        font-size: clamp(28px, 2.4vw, 40px);
+        letter-spacing: -0.03em;
+        color: var(--cs-ink);
+        margin: 10px 0 8px;
+      }
+      p.lead { font-size: 17px; color: var(--cs-ink-muted); margin: 0 0 32px; max-width: 60ch; }
+
+      /* Enquadramento igual ao que a landing usaria: largura cheia da
+         trilha de conteúdo, cantos arredondados, sombra azulada. */
+      .stage {
+        border-radius: 20px;
+        overflow: hidden;
+        border: 1px solid var(--cs-line);
+        box-shadow: 0 4px 8px -2px rgba(12, 27, 51, 0.06), 0 20px 44px -12px rgba(12, 27, 51, 0.16);
+        background: var(--cs-white);
+      }
+      video { display: block; width: 100%; height: auto; }
+
+      .bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin: 22px 0 0;
+      }
+      button, .chip {
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 9px 16px;
+        border-radius: 999px;
+        border: 1px solid var(--cs-line);
+        background: var(--cs-white);
+        color: var(--cs-ink-body);
+        cursor: pointer;
+      }
+      button[data-active] { background: var(--cs-blue-600); border-color: var(--cs-blue-600); color: #fff; }
+      .chip { cursor: default; font-family: ui-monospace, monospace; font-weight: 500; font-size: 13px; }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 40px; }
+      .card { border: 1px solid var(--cs-line); border-radius: 14px; padding: 16px; background: var(--cs-surface); }
+      .card h3 { margin: 0 0 4px; font-size: 14px; color: var(--cs-ink); }
+      .card p { margin: 0; font-size: 13px; color: var(--cs-ink-muted); }
+      code { font-family: ui-monospace, monospace; font-size: 12.5px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <span class="label">Product film · aprovação</span>
+      <h1>CaraffaStore — 30 s, sem áudio</h1>
+      <p class="lead">
+        Reproduzindo com <code>autoplay muted loop playsInline</code>, exatamente como ficaria na landing. O
+        vídeo <strong>não</strong> foi inserido na página ainda.
+      </p>
+
+      <div class="stage">
+        <video
+          id="film"
+          src="/caraffastore-product-film-web.mp4"
+          poster="/caraffastore-product-film-poster.jpeg"
+          autoplay
+          muted
+          loop
+          playsinline
+        ></video>
+      </div>
+
+      <div class="bar">
+        <button id="src-web" data-active>web .mp4 · 2,8 MB</button>
+        <button id="src-webm">.webm · 3,2 MB</button>
+        <button id="src-master">master .mp4 · 7,5 MB</button>
+        <button id="poster">ver só o poster</button>
+        <span class="chip" id="clock">0,0 s / 30,0 s</span>
+      </div>
+
+      <div class="grid">
+        <div class="card"><h3>1 · 0,0–3,2 s</h3><p>Abertura. Manchete e peças de interface.</p></div>
+        <div class="card"><h3>2 · 3,2–7,6 s</h3><p>Lojista publica o produto no painel.</p></div>
+        <div class="card"><h3>3 · 7,6–12,4 s</h3><p>Cliente abre a loja e adiciona ao carrinho.</p></div>
+        <div class="card"><h3>4 · 12,4–17,0 s</h3><p>Checkout no celular e geração do Pix.</p></div>
+        <div class="card"><h3>5 · 17,0–20,2 s</h3><p>Pagamento confirmado.</p></div>
+        <div class="card"><h3>6 · 20,2–24,2 s</h3><p>Pedido aparece no painel do lojista.</p></div>
+        <div class="card"><h3>7 · 24,2–27,2 s</h3><p>Estoque cai de 12 para 11.</p></div>
+        <div class="card"><h3>8 · 27,2–30,0 s</h3><p>Fechamento e CTA.</p></div>
+      </div>
+    </div>
+
+    <script>
+      const film = document.getElementById("film");
+      const clock = document.getElementById("clock");
+      const buttons = {
+        "src-web": "/caraffastore-product-film-web.mp4",
+        "src-webm": "/caraffastore-product-film.webm",
+        "src-master": "/caraffastore-product-film-master.mp4",
+      };
+
+      for (const [id, src] of Object.entries(buttons)) {
+        document.getElementById(id).addEventListener("click", () => {
+          Object.keys(buttons).forEach((b) => document.getElementById(b).removeAttribute("data-active"));
+          document.getElementById(id).setAttribute("data-active", "");
+          film.src = src;
+          film.play();
+        });
+      }
+
+      document.getElementById("poster").addEventListener("click", () => {
+        film.pause();
+        film.currentTime = 0;
+      });
+
+      const fmt = (n) => n.toFixed(1).replace(".", ",");
+      film.addEventListener("timeupdate", () => {
+        clock.textContent = `${fmt(film.currentTime)} s / ${fmt(film.duration || 30)} s`;
+      });
+    </script>
+  </body>
+</html>
