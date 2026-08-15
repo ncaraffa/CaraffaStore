@@ -39,8 +39,8 @@ const PLAN_COPY: Record<number, PlanCopy> = {
     fit: "Para quem quer configurar e tocar a própria loja.",
     listTitle: "Inclui",
     bullets: [
-      "A CaraffaStore completa, sem recurso bloqueado",
-      "Produtos, fotos e categorias sem limite artificial",
+      "Acesso completo à plataforma",
+      "Cadastre seus produtos, fotos e categorias",
       "Pedidos e estoque no painel, com baixa automática",
       "Cobrança por Pix em cada pedido",
       "Link exclusivo da sua loja para compartilhar",
