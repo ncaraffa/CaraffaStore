@@ -25,7 +25,7 @@ export function CartPageClient({ storeSlug, storeName }: { storeSlug: string; st
             description="Adicione produtos do catálogo para continuar."
             action={
               <Link href={`/loja/${storeSlug}`}>
-                <Button>Ver catálogo</Button>
+                <Button as="span">Ver catálogo</Button>
               </Link>
             }
           />
@@ -96,7 +96,7 @@ export function CartPageClient({ storeSlug, storeName }: { storeSlug: string; st
                 <span className={styles.subtotal}>{formatPriceCents(subtotalCents)}</span>
               </div>
               <Link href={`/loja/${storeSlug}/checkout`} className={styles.checkoutLink}>
-                <Button size="lg" fullWidth icon={<IconArrowRight />} iconPosition="end">
+                <Button as="span" size="lg" fullWidth icon={<IconArrowRight />} iconPosition="end">
                   Finalizar pedido
                 </Button>
               </Link>

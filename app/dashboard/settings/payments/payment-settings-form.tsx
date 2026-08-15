@@ -43,7 +43,7 @@ export function PaymentSettingsForm({
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>Pagamentos</h1>
-          <p className={styles.subtitle}>Configure o Pix da sua loja via Mercado Pago.</p>
+          <p className={styles.subtitle}>Conecte sua conta do Mercado Pago para receber por Pix.</p>
         </div>
       </div>
 
@@ -54,7 +54,7 @@ export function PaymentSettingsForm({
         <div className={styles.statusBody}>
           <span className={styles.statusLabel}>{status.label}</span>
           <span className={styles.statusCaption}>
-            {!settings.isConfigured && "Cadastre suas credenciais do Mercado Pago para começar a receber."}
+            {!settings.isConfigured && "Conecte sua conta do Mercado Pago para começar a receber."}
             {settings.isConfigured && settings.lastErrorCode && "A última verificação encontrou um problema — teste a conexão novamente."}
             {settings.isConfigured && !settings.lastErrorCode && !settings.isEnabled && "As credenciais estão salvas, mas o Pix ainda não está ativado nesta loja."}
             {status.ready && "Seus clientes já podem pagar por Pix nos pedidos desta loja."}
@@ -71,23 +71,32 @@ export function PaymentSettingsForm({
         )}
       </div>
 
-      {/* Primeiros passos: só aparece antes de configurar — é exatamente
-          o "o que fazer primeiro" que faltava. */}
+      {/* Primeiros passos: só aparece antes de configurar. A conexão com o
+          Mercado Pago é feita à mão mesmo (não existe "entrar com Mercado
+          Pago" aqui), e esconder isso só produziria um lojista travado no
+          meio do caminho — então cada passo diz o que fazer, onde e por
+          quê, sem jargão. */}
       {!settings.isConfigured && (
         <Card className={styles.stepsCard}>
-          <CardHeader title="Como configurar" />
+          <CardHeader
+            title="Como conectar sua conta"
+            description="São três passos, feitos uma única vez. Dois deles acontecem no site do Mercado Pago."
+          />
           <ol className={styles.steps}>
             <li>
               <span>1</span>
-              Acesse sua conta do Mercado Pago e gere um Access Token (produção ou teste).
+              No site do Mercado Pago, gere as credenciais de integração da sua conta: uma chave de acesso (Access
+              Token) e uma senha de notificação (Webhook Secret), que você mesmo define.
             </li>
             <li>
               <span>2</span>
-              Cole o Access Token e defina um Webhook Secret abaixo — os dois ficam criptografados.
+              Cole as duas aqui embaixo. Elas ficam guardadas criptografadas e nunca são exibidas de novo por
+              completo — é assim que a loja consegue gerar o Pix em seu nome.
             </li>
             <li>
               <span>3</span>
-              Cadastre a URL de webhook desta loja no painel do Mercado Pago para receber confirmações automáticas.
+              Copie o endereço de notificação que aparece nesta página e cadastre no painel do Mercado Pago. É o que
+              faz o pedido ser confirmado sozinho quando o cliente paga.
             </li>
           </ol>
         </Card>
@@ -150,8 +159,8 @@ export function PaymentSettingsForm({
       {webhookUrl && (
         <Card>
           <CardHeader
-            title="URL do Webhook"
-            description="Cadastre esta URL no painel do Mercado Pago para receber notificações de pagamento."
+            title="Endereço de notificação"
+            description="Cadastre este endereço no painel do Mercado Pago. É por ele que o Mercado Pago avisa a sua loja quando um Pix é pago."
           />
           <div className={styles.webhookRow}>
             <Input readOnly value={webhookUrl} onFocus={(event) => event.currentTarget.select()} className={styles.webhookInput} />
@@ -173,13 +182,13 @@ export function PaymentSettingsForm({
 
       <Card>
         <CardHeader
-          title={settings.isConfigured ? "Substituir credenciais" : "Configurar Mercado Pago"}
+          title={settings.isConfigured ? "Substituir credenciais" : "Conectar sua conta do Mercado Pago"}
           description="As credenciais são criptografadas antes de serem salvas — nunca exibidas por completo depois."
         />
 
         <Alert tone="info" title="Segurança">
-          Access Token e Webhook Secret nunca são exibidos completos depois de salvos. Preencha os dois campos abaixo
-          somente para cadastrar ou substituir as credenciais.
+          A chave de acesso e a senha de notificação nunca são exibidas completas depois de salvas. Preencha os dois
+          campos abaixo somente para conectar a conta pela primeira vez ou para substituir as credenciais.
         </Alert>
 
         <form action={formAction} noValidate className={styles.form}>
@@ -197,11 +206,27 @@ export function PaymentSettingsForm({
           </Field>
           {state.fieldErrors?.environment && <p className={styles.fieldError}>{state.fieldErrors.environment}</p>}
 
-          <Field label="Access Token" htmlFor="accessToken" required error={state.fieldErrors?.accessToken}>
+          {/* Os nomes técnicos ficam: é exatamente assim que os campos
+              aparecem no site do Mercado Pago, e trocá-los por termos
+              "amigáveis" faria o lojista procurar algo que não existe lá.
+              A explicação em português vem na dica, embaixo do campo. */}
+          <Field
+            label="Access Token"
+            htmlFor="accessToken"
+            required
+            error={state.fieldErrors?.accessToken}
+            hint="A chave de acesso da sua conta, gerada no Mercado Pago. É o que autoriza a loja a criar o Pix em seu nome."
+          >
             <Input id="accessToken" name="accessToken" type="password" autoComplete="off" required minLength={10} />
           </Field>
 
-          <Field label="Webhook Secret" htmlFor="webhookSecret" required error={state.fieldErrors?.webhookSecret}>
+          <Field
+            label="Webhook Secret"
+            htmlFor="webhookSecret"
+            required
+            error={state.fieldErrors?.webhookSecret}
+            hint="Uma senha que você mesmo escolhe e informa também no Mercado Pago. Serve para a loja confirmar que o aviso de pagamento veio mesmo de lá."
+          >
             <Input id="webhookSecret" name="webhookSecret" type="password" autoComplete="off" required minLength={10} />
           </Field>
 

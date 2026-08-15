@@ -31,14 +31,17 @@ export default async function OrderSuccessPage({
       tone="success"
       actions={
         <Link href={`/loja/${storeSlug}`}>
-          <Button variant="outline">Voltar para a loja</Button>
+          <Button as="span" variant="outline">Voltar para a loja</Button>
         </Link>
       }
     >
       <p>
         Código do pedido: <strong>{publicCode}</strong>
       </p>
-      <p>Guarde este código. O comerciante vai entrar em contato para combinar o pagamento e os próximos passos.</p>
+      {/* O texto antigo dizia que o comerciante entraria em contato para
+          combinar o pagamento — isso descrevia o fluxo anterior ao Pix e
+          contradizia o que o cliente acabou de fazer na tela de pagamento. */}
+      <p>Guarde este código: é por ele que o comerciante identifica o seu pedido.</p>
     </StatusPage>
   );
 }

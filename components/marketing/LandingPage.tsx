@@ -4,7 +4,10 @@ import { Button } from "@/components/ui/Button";
 import { HeroScene } from "./HeroScene";
 import { StoreScene } from "./StoreScene";
 import { ConversationScene } from "./ConversationScene";
+import { StorefrontDemo } from "./StorefrontDemo";
+import { PricingPlans } from "./PricingPlans";
 import { RevealRoot } from "./RevealRoot";
+import { getStoreUrlExample } from "@/lib/config/site";
 import {
   IconArrowRight,
   IconBox,
@@ -12,196 +15,123 @@ import {
   IconLink,
   IconPix,
   IconReceipt,
-  IconSearch,
   IconShield,
-  IconTag,
 } from "@/components/ui/icons";
 import styles from "./LandingPage.module.css";
 
 /* ============================================================
    Conteúdo
-   Regra desta página: só afirma o que o produto faz hoje. Sem
-   prova social, sem número de clientes, sem depoimento, sem
-   "usado por" — nada disso existe ainda e nada disso é inventado.
 
-   Ritmo da página, deliberadamente cinematográfico:
-   impacto → produto → benefício → QUEBRA AZUL → aprofundamento
-   humano → planos → dúvidas → fechamento.
+   Regra desta página: só afirma o que o produto faz hoje. Sem prova
+   social, sem número de clientes, sem depoimento, sem "usado por" —
+   nada disso existe ainda e nada disso é inventado.
+
+   Segunda regra, da V2: cada vantagem é dita UMA vez, no lugar onde
+   ela pesa mais. "Sem comissão", "Pix", "estoque" e "link no
+   WhatsApp" apareciam quatro e cinco vezes cada; a repetição não
+   convencia mais ninguém depois da segunda — ocupava o espaço que a
+   demonstração da loja merecia.
+
+   Terceira regra: quem lê é comerciante, não programador. Nenhuma
+   frase aqui explica arquitetura. Se o argumento só faz sentido para
+   quem conhece o banco de dados, ele não é um argumento de venda.
+
+   Ritmo: impacto → a loja do cliente (a prova) → recursos → o que
+   não fazemos → QUEBRA AZUL → como funciona → planos → dúvidas →
+   fechamento.
    ============================================================ */
-
-/**
- * Especificação oficial em docs/PLANS-SPEC.md. `code` é o `plan_code`
- * técnico (travado por CHECK constraint em 30|50|80 — nunca renomeie sem
- * migration); `price` é o valor comercial exibido, hoje desacoplado do
- * código para o Profissional (código 80, preço R$ 70).
- *
- * `features: []` continua vazio de propósito: quase toda a diferenciação
- * real entre planos (logo, cores, banner, cupons, dashboard completo,
- * relatórios, domínio próprio, multiloja) ainda não está implementada —
- * ver a auditoria na seção 7 do spec. Anunciá-la aqui seria publicidade
- * enganosa. Assim que um item virar realidade no código, ele entra nesta
- * lista — a arquitetura visual já está pronta para isso.
- *
- * `fit`/`forWho` também nunca alegam recurso — só estágio/volume do
- * negócio do lojista, a única diferença honesta que existe hoje entre os
- * três planos além do preço (seção 8 do spec).
- */
-const PLANS = [
-  {
-    code: 30,
-    name: "Essencial",
-    price: 30,
-    tier: 1,
-    fit: "Sua primeira loja, no ar ainda hoje.",
-    forWho: "Ideal se você está começando a vender online agora.",
-    features: [] as string[],
-    featured: false,
-  },
-  {
-    code: 50,
-    name: "Crescimento",
-    price: 50,
-    tier: 2,
-    fit: "Para quem já vende e quer aprofundar a marca.",
-    forWho: "Ideal se você já tem clientes e quer profissionalizar a operação.",
-    features: [] as string[],
-    featured: true,
-  },
-  {
-    code: 80,
-    name: "Profissional",
-    price: 70,
-    tier: 3,
-    fit: "Para operações que já passaram do início.",
-    forWho: "Ideal se seu volume de vendas já é maior e mais constante.",
-    features: [] as string[],
-    featured: false,
-  },
-];
-
-/** Recursos reais, hoje comuns a todos os planos. */
-const INCLUDED = [
-  "Catálogo público com link próprio",
-  "Produtos com fotos, preço e estoque",
-  "Categorias para organizar a vitrine",
-  "Carrinho e checkout sem cadastro do cliente",
-  "Cobrança por Pix em cada pedido",
-  "Painel de pedidos e baixa de estoque",
-];
-
-const STEPS = [
-  {
-    title: "Crie sua conta",
-    body: "E-mail e senha, com confirmação por e-mail. Leva um minuto.",
-  },
-  {
-    title: "Configure a loja",
-    body: "Nome, endereço do link e o plano. A loja fica pronta para receber produtos.",
-  },
-  {
-    title: "Monte o catálogo",
-    body: "Categorias, fotos, preço e estoque. Você publica cada produto quando quiser.",
-  },
-  {
-    title: "Mande o link e venda",
-    body: "Suas credenciais do Mercado Pago no painel, e cada pedido já nasce com QR Code.",
-  },
-];
-
-const NOT_DOING = [
-  {
-    title: "Não fica com uma fatia da sua venda",
-    body: "Você paga a mensalidade do plano e pronto. O valor do pedido é seu.",
-  },
-  {
-    title: "Não obriga seu cliente a criar conta",
-    body: "Ele escolhe, informa nome e telefone, e paga. Sem cadastro, sem senha, sem atrito.",
-  },
-  {
-    title: "Não exige conhecimento técnico",
-    body: "Nenhum código, nenhum servidor, nenhum plugin para instalar ou atualizar.",
-  },
-  {
-    title: "Não mistura sua loja com outra",
-    body: "O isolamento entre lojas é imposto no banco de dados, não só na tela.",
-  },
-];
-
-const FAQS = [
-  {
-    q: "Como eu recebo o dinheiro das vendas?",
-    a: "Por Pix, direto na sua conta do Mercado Pago. Você conecta suas próprias credenciais no painel e cada pedido gera um QR Code e um código copia e cola. A CaraffaStore nunca fica com o dinheiro no meio do caminho.",
-  },
-  {
-    q: "A CaraffaStore cobra comissão sobre as vendas?",
-    a: "Não. A cobrança é só a mensalidade do plano. As tarifas do Mercado Pago sobre cada Pix são do Mercado Pago e seguem as condições da sua conta lá.",
-  },
-  {
-    q: "Preciso saber programar ou contratar alguém?",
-    a: "Não. Você cria a conta, define o nome e o endereço da loja, cadastra os produtos e compartilha o link. Tudo pelo painel.",
-  },
-  {
-    q: "Como o cliente compra na minha loja?",
-    a: "Ele abre o link da loja, busca ou navega pelas categorias, adiciona ao carrinho e finaliza informando nome e telefone. Depois paga o Pix. Não precisa criar conta.",
-  },
-  {
-    q: "O pagamento é confirmado sozinho?",
-    a: "Sim. Quando o Pix é pago, a CaraffaStore recebe a confirmação do Mercado Pago e atualiza o pedido no seu painel. Há também uma reconciliação periódica para o caso de uma notificação se perder.",
-  },
-  {
-    q: "E se eu precisar cancelar um pedido?",
-    a: "Você cancela pelo painel, na tela do pedido. O estoque reservado volta para o catálogo.",
-  },
-  {
-    q: "Meus dados e os do meu cliente estão seguros?",
-    a: "Cada loja é isolada das demais por regras no próprio banco de dados, e suas credenciais de pagamento ficam criptografadas. O acesso à loja é sempre por conta autenticada.",
-  },
-  {
-    q: "Posso trocar de plano depois?",
-    a: "Pode. Hoje a troca é feita com o suporte; os três planos dão acesso aos mesmos recursos da plataforma.",
-  },
-];
 
 const BENTO = [
   {
     key: "catalogo",
     icon: <IconLink />,
     title: "Um link, sua loja inteira",
-    body: "Cada loja ganha um endereço próprio para mandar no WhatsApp, colocar na bio ou imprimir no cartão.",
+    body: "Um link exclusivo para mandar no WhatsApp ou pôr na bio, com categorias e busca para o cliente achar o que quer.",
   },
   {
     key: "pix",
     icon: <IconPix />,
     title: "Pix por pedido, na sua conta",
-    body: "QR Code e copia e cola gerados automaticamente, com confirmação de pagamento sem você conferir extrato.",
+    body: "QR Code e copia e cola gerados no ato. O pedido é confirmado sem você conferir extrato.",
   },
   {
     key: "produtos",
     icon: <IconBox />,
     title: "Produtos e estoque",
-    body: "Fotos, preço, estoque e status de publicação. O estoque baixa sozinho a cada pedido pago.",
+    body: "Fotos, preço e publicação sob seu controle. O estoque baixa sozinho a cada pedido pago.",
   },
   {
     key: "pedidos",
     icon: <IconReceipt />,
     title: "Pedidos em um lugar só",
-    body: "Quem comprou, o que comprou, quanto pagou e em que ponto está.",
+    body: "Quem comprou, o quê, quanto pagou e em que ponto está.",
+  },
+];
+
+const NOT_DOING = [
+  {
+    title: "Não fica com uma fatia da sua venda",
+    body: "Você paga a mensalidade e pronto. O valor do pedido cai inteiro na sua conta.",
   },
   {
-    key: "categorias",
-    icon: <IconTag />,
-    title: "Categorias",
-    body: "Organize a vitrine do jeito que seu cliente procura.",
+    title: "Não obriga seu cliente a criar conta",
+    body: "Ele escolhe, informa os dados do pedido e paga. Sem senha, sem app para baixar.",
   },
   {
-    key: "busca",
-    icon: <IconSearch />,
-    title: "Busca no catálogo",
-    body: "Seu cliente digita o que quer e encontra, mesmo com o catálogo grande.",
+    title: "Não mistura sua loja com outra",
+    body: "Seus produtos, pedidos e clientes ficam separados de qualquer outra loja da plataforma.",
+  },
+];
+
+const STEPS = [
+  {
+    title: "Crie sua conta",
+    body: "E-mail, senha e confirmação por e-mail. Leva um minuto.",
+  },
+  {
+    title: "Configure a loja",
+    body: "Nome, endereço do link e plano. A loja abre assim que a primeira mensalidade for paga.",
+  },
+  {
+    title: "Monte o catálogo",
+    body: "Categorias, fotos, preço e estoque. Você publica cada produto quando quiser.",
+  },
+  {
+    title: "Conecte o Mercado Pago",
+    body: "Uma vez só, no painel. Daí em diante todo pedido já nasce com o Pix pronto.",
+  },
+];
+
+const FAQS = [
+  {
+    q: "Como eu recebo o dinheiro das vendas?",
+    a: "Direto na sua conta do Mercado Pago, por Pix. A CaraffaStore nunca fica com o dinheiro no caminho e não cobra comissão — as tarifas de cada Pix são do Mercado Pago, nas condições da sua conta lá.",
+  },
+  {
+    q: "O que preciso fazer para conectar o Mercado Pago?",
+    a: "Gerar uma chave de integração na sua conta, colar no painel e cadastrar lá um endereço que mostramos pronto. Três passos, com as instruções na tela. Não precisa programar, mas parte deles acontece no site do Mercado Pago.",
+  },
+  {
+    q: "Quando minha loja fica no ar?",
+    a: "Você paga a primeira mensalidade por Pix na própria plataforma e, assim que ela é aprovada, a loja é ativada e o painel liberado. Não guardamos cartão nem fazemos débito automático.",
+  },
+  {
+    q: "Como o cliente compra na minha loja?",
+    a: "Abre o link, escolhe os produtos e informa nome, telefone e os dados que o Pix exige (e-mail e CPF ou CNPJ). Depois escolhe entre retirada e entrega e paga. Sem criar conta.",
+  },
+  {
+    q: "O pagamento é confirmado sozinho?",
+    a: "Sim: o Mercado Pago avisa a loja, o pedido muda de status e o estoque baixa. Uma conferência periódica cobre o caso raro de um aviso se perder.",
+  },
+  {
+    q: "E se eu precisar cancelar um pedido?",
+    a: "Cancela pelo painel, na tela do pedido. O estoque reservado volta para o catálogo na hora.",
   },
 ];
 
 export function LandingPage() {
+  const storeUrlExample = getStoreUrlExample();
+
   return (
     <div className={styles.page}>
       <RevealRoot />
@@ -212,6 +142,7 @@ export function LandingPage() {
             <Logo size="md" compact />
           </Link>
           <nav className={styles.headerNav} aria-label="Seções desta página">
+            <a href="#loja-demo">Ver a loja</a>
             <a href="#recursos">Recursos</a>
             <a href="#como-funciona">Como funciona</a>
             <a href="#planos">Planos</a>
@@ -222,7 +153,7 @@ export function LandingPage() {
               Entrar
             </Link>
             <Link href="/signup" className={styles.headerCta}>
-              <Button size="sm">Criar minha loja</Button>
+              <Button as="span" size="sm">Criar minha loja</Button>
             </Link>
           </div>
         </div>
@@ -245,7 +176,7 @@ export function LandingPage() {
                 style={{ "--reveal-delay": "150ms" } as React.CSSProperties}
               >
                 Monte o catálogo, mande o link para os seus clientes e receba por Pix direto na sua conta do Mercado
-                Pago — sem comissão da CaraffaStore sobre o que você vende.
+                Pago. Sem comissão sobre o que você vende.
               </p>
               <div
                 className={styles.heroActions}
@@ -253,30 +184,34 @@ export function LandingPage() {
                 style={{ "--reveal-delay": "220ms" } as React.CSSProperties}
               >
                 <Link href="/signup">
-                  <Button size="lg" icon={<IconArrowRight />} iconPosition="end">
+                  <Button as="span" size="lg" icon={<IconArrowRight />} iconPosition="end">
                     Criar minha loja
                   </Button>
                 </Link>
-                <a href="#como-funciona">
-                  <Button size="lg" variant="outline">
-                    Ver como funciona
+                <a href="#loja-demo">
+                  <Button as="span" size="lg" variant="outline">
+                    Ver uma loja de demonstração
                   </Button>
                 </a>
               </div>
 
-              {/* No lugar de prova social inventada: três fatos verificáveis. */}
+              {/* No lugar de prova social inventada: três fatos verificáveis.
+                  O texto de cada fato vive no próprio <span>, não solto no
+                  <li>: solto, o JSX come o espaço entre o número e a palavra
+                  e a linha vira "0%de comissão" ao ser copiada ou lida por
+                  leitor de tela, mesmo parecendo certa na tela. */}
               <ul className={styles.heroFacts} data-reveal style={{ "--reveal-delay": "290ms" } as React.CSSProperties}>
                 <li>
                   <span className={styles.factKey}>Pix</span>
-                  direto na sua conta
+                  <span className={styles.factText}>direto na sua conta</span>
                 </li>
                 <li>
                   <span className={styles.factKey}>0%</span>
-                  de comissão por venda
+                  <span className={styles.factText}>de comissão por venda</span>
                 </li>
                 <li>
                   <span className={styles.factKey}>R$ 30</span>
-                  por mês para começar
+                  <span className={styles.factText}>por mês para começar</span>
                 </li>
               </ul>
             </div>
@@ -287,11 +222,29 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* ===================== 2. PRODUTO ===================== */}
+        {/* ============ 2. A LOJA DO CLIENTE — a prova ============ */}
+        <section id="loja-demo" className={styles.sectionAlt}>
+          <div className={styles.sectionHead} data-reveal>
+            <p className={styles.sectionLabel}>Demonstração</p>
+            <h2 className={styles.sectionTitle}>Como a sua loja fica para quem compra</h2>
+            <p className={styles.sectionLead}>
+              As telas que a CaraffaStore monta sozinha a partir dos seus produtos. A loja é fictícia; a interface é
+              a real.
+            </p>
+            <p className={styles.demoUrl}>
+              <IconLink />
+              <span className={styles.mono}>{storeUrlExample}</span>
+            </p>
+          </div>
+
+          <StorefrontDemo />
+        </section>
+
+        {/* ===================== 3. RECURSOS ===================== */}
         <section id="recursos" className={styles.section}>
           <div className={styles.sectionHead} data-reveal>
             <p className={styles.sectionLabel}>Recursos</p>
-            <h2 className={styles.sectionTitle}>Tudo que a loja precisa para funcionar sozinha</h2>
+            <h2 className={styles.sectionTitle}>Tudo que a loja precisa para vender</h2>
             <p className={styles.sectionLead}>
               O que está listado aqui já está no ar. Nada é promessa de versão futura.
             </p>
@@ -328,14 +281,15 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* ===================== 3. BENEFÍCIO ===================== */}
+        {/* ===================== 4. SEM LETRA MIÚDA ===================== */}
         <section className={styles.bandSection}>
           <div className={styles.band}>
             <div className={styles.bandHead} data-reveal="left">
               <p className={styles.sectionLabel}>Sem letra miúda</p>
               <h2 className={styles.sectionTitle}>O que a CaraffaStore não faz</h2>
               <p className={styles.sectionLead}>
-                Quem vende pouco não pode ser surpreendido. Estas quatro coisas não acontecem aqui.
+                Sem taxa escondida e sem complicação: você sabe desde o começo quanto paga e o que acontece com cada
+                venda.
               </p>
             </div>
             <ul className={styles.bandList}>
@@ -349,7 +303,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* ============ 4. A QUEBRA — o momento da página ============ */}
+        {/* ============ 5. A QUEBRA — o momento da página ============ */}
         <section className={styles.blueMoment}>
           <div className={styles.blueGrid}>
             <div className={styles.blueText}>
@@ -369,7 +323,7 @@ export function LandingPage() {
                 style={{ "--reveal-delay": "140ms" } as React.CSSProperties}
               >
                 Crie a conta, cadastre os primeiros produtos e mande o link. Do outro lado, seu cliente escolhe, paga
-                no Pix e o pedido aparece no seu painel.
+                e o pedido aparece no seu painel.
               </p>
 
               <ul
@@ -378,13 +332,13 @@ export function LandingPage() {
                 style={{ "--reveal-delay": "210ms" } as React.CSSProperties}
               >
                 <li>
-                  <IconCheck /> Sem instalar nada
+                  <IconCheck /> Sem instalar nem manter nada
                 </li>
                 <li>
-                  <IconCheck /> Sem cartão para testar o painel
+                  <IconCheck /> Sem cartão de crédito: a mensalidade é por Pix
                 </li>
                 <li>
-                  <IconCheck /> Sem comissão por venda
+                  <IconCheck /> Sem fidelidade nem multa para sair
                 </li>
               </ul>
 
@@ -394,7 +348,7 @@ export function LandingPage() {
                 style={{ "--reveal-delay": "280ms" } as React.CSSProperties}
               >
                 <Link href="/signup">
-                  <Button size="lg" icon={<IconArrowRight />} iconPosition="end">
+                  <Button as="span" size="lg" icon={<IconArrowRight />} iconPosition="end">
                     Criar minha loja
                   </Button>
                 </Link>
@@ -410,7 +364,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* ============ 5. APROFUNDAMENTO + HUMANIDADE ============ */}
+        {/* ============ 6. COMO FUNCIONA ============ */}
         <section id="como-funciona" className={styles.section}>
           <div className={styles.sectionHead} data-reveal>
             <p className={styles.sectionLabel}>Como funciona</p>
@@ -442,76 +396,21 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* ===================== 6. PLANOS ===================== */}
+        {/* ===================== 7. PLANOS ===================== */}
         <section id="planos" className={styles.sectionAlt}>
           <div className={styles.sectionHead} data-reveal>
             <p className={styles.sectionLabel}>Planos</p>
-            <h2 className={styles.sectionTitle}>Escolha o tamanho da sua operação</h2>
-            <p className={styles.sectionLead}>
-              Mensalidade fixa, sem comissão sobre vendas. Você escolhe o plano ao criar a loja.
-            </p>
+            <h2 className={styles.sectionTitle}>Escolha quanto quer de acompanhamento</h2>
+            {/* A frase "plataforma completa nos três" mora na nota abaixo dos
+                cards, não aqui: dizer nos dois lugares era a mesma
+                redundância que a V2 tinha eliminado do resto da página. */}
+            <p className={styles.sectionLead}>Mensalidade fixa, sem comissão sobre as vendas.</p>
           </div>
 
-          <div className={styles.plans}>
-            {PLANS.map((plan, index) => (
-              <article
-                key={plan.code}
-                className={styles.plan}
-                data-featured={plan.featured || undefined}
-                data-reveal="lift"
-                style={{ "--reveal-delay": `${index * 90}ms` } as React.CSSProperties}
-              >
-                {plan.featured && <span className={styles.planBadge}>Recomendado</span>}
-                {/* Nível — o mesmo motivo do símbolo da marca. Ordena os planos
-                    sem afirmar nenhum recurso que ainda não exista. */}
-                <span className={styles.planLevel} aria-hidden="true">
-                  <span data-on={plan.tier >= 1 || undefined} />
-                  <span data-on={plan.tier >= 2 || undefined} />
-                  <span data-on={plan.tier >= 3 || undefined} />
-                </span>
-                <h3 className={styles.planName}>{plan.name}</h3>
-                <p className={styles.planPrice}>
-                  <span className={styles.planCurrency}>R$</span>
-                  {plan.price}
-                  <span className={styles.planPeriod}>/mês</span>
-                </p>
-                <p className={styles.planFit}>{plan.fit}</p>
-                <p className={styles.planForWho}>{plan.forWho}</p>
-
-                {plan.features.length > 0 && (
-                  <ul className={styles.planFeatures}>
-                    {plan.features.map((feature) => (
-                      <li key={feature}>
-                        <IconCheck />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                <Link href="/signup" className={styles.planCta}>
-                  <Button fullWidth size="lg" variant={plan.featured ? "primary" : "outline"}>
-                    Começar com {plan.name}
-                  </Button>
-                </Link>
-              </article>
-            ))}
-          </div>
-
-          <div className={styles.included} data-reveal>
-            <p className={styles.includedTitle}>Todos os planos incluem</p>
-            <ul className={styles.includedList}>
-              {INCLUDED.map((item) => (
-                <li key={item}>
-                  <IconCheck />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <PricingPlans />
         </section>
 
-        {/* ===================== 7. DÚVIDAS ===================== */}
+        {/* ===================== 8. DÚVIDAS ===================== */}
         <section id="faq" className={styles.section}>
           <div className={styles.sectionHead} data-reveal>
             <p className={styles.sectionLabel}>Dúvidas</p>
@@ -537,10 +436,15 @@ export function LandingPage() {
               </details>
             ))}
           </div>
+
+          <p className={styles.faqFooter} data-reveal>
+            As condições completas estão nos <Link href="/termos">Termos de Uso</Link> e na{" "}
+            <Link href="/privacidade">Política de Privacidade</Link>, em português claro.
+          </p>
         </section>
       </main>
 
-      {/* ===================== 8. FECHAMENTO ===================== */}
+      {/* ===================== 9. FECHAMENTO ===================== */}
       <footer className={styles.footer}>
         <div className={styles.closer} data-reveal>
           <CaraffaMark className={styles.closerMark} />
@@ -549,7 +453,7 @@ export function LandingPage() {
             <p>Leva menos tempo do que montar uma vitrine.</p>
           </div>
           <Link href="/signup" className={styles.closerCta}>
-            <Button size="lg" icon={<IconArrowRight />} iconPosition="end">
+            <Button as="span" size="lg" icon={<IconArrowRight />} iconPosition="end">
               Criar minha loja
             </Button>
           </Link>
@@ -564,6 +468,7 @@ export function LandingPage() {
           <nav className={styles.footerNav} aria-label="Rodapé">
             <div>
               <p className={styles.footerHeading}>Produto</p>
+              <a href="#loja-demo">Ver a loja</a>
               <a href="#recursos">Recursos</a>
               <a href="#como-funciona">Como funciona</a>
               <a href="#planos">Planos</a>

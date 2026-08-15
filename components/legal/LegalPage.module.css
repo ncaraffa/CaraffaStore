@@ -1,0 +1,389 @@
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--cs-white);
+}
+
+/* ============================================================
+   Cabeçalho
+   ============================================================ */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: var(--cs-z-sticky);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--cs-line);
+}
+
+.headerInner {
+  max-width: var(--cs-container);
+  margin: 0 auto;
+  padding: var(--cs-space-4) var(--cs-space-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cs-space-4);
+}
+
+.headerLogo {
+  text-decoration: none;
+  color: inherit;
+}
+
+.headerBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2.75rem;
+  padding: 0 var(--cs-space-3);
+  margin-right: calc(var(--cs-space-3) * -1);
+  font-size: var(--cs-text-sm);
+  font-weight: 600;
+  color: var(--cs-ink-body);
+  text-decoration: none;
+  border-radius: var(--cs-radius-md);
+  transition: color var(--cs-duration-fast) var(--cs-ease);
+}
+
+.headerBack svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.headerBack:hover {
+  color: var(--cs-blue-600);
+}
+
+/* ============================================================
+   Abertura
+   ============================================================ */
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--cs-container);
+  margin: 0 auto;
+  padding: var(--cs-space-12) var(--cs-space-6) var(--cs-space-20);
+}
+
+.intro {
+  max-width: 44rem;
+  padding-bottom: var(--cs-space-8);
+  border-bottom: 1px solid var(--cs-line);
+}
+
+.label {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  color: var(--cs-blue-600);
+  margin-bottom: var(--cs-space-3);
+}
+
+.title {
+  font-size: var(--cs-text-h1);
+  letter-spacing: var(--cs-tracking-display);
+}
+
+.summary {
+  margin-top: var(--cs-space-4);
+  font-size: var(--cs-text-lg);
+  color: var(--cs-ink-body);
+  line-height: var(--cs-leading-body);
+}
+
+.updated {
+  margin-top: var(--cs-space-5);
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
+}
+
+/* ============================================================
+   Corpo — sumário + conteúdo
+   ============================================================ */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--cs-space-10);
+  margin-top: var(--cs-space-10);
+  align-items: start;
+}
+
+@media (min-width: 960px) {
+  .layout {
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: var(--cs-space-16);
+  }
+
+  .toc {
+    position: sticky;
+    top: 6rem;
+  }
+}
+
+.toc {
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  background: var(--cs-surface);
+  padding: var(--cs-space-5);
+}
+
+.tocTitle {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+  margin-bottom: var(--cs-space-3);
+}
+
+.tocList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tocList a {
+  display: flex;
+  gap: 0.625rem;
+  align-items: baseline;
+  padding: 0.4375rem 0;
+  font-size: var(--cs-text-sm);
+  line-height: 1.4;
+  color: var(--cs-ink-body);
+  text-decoration: none;
+  transition: color var(--cs-duration-fast) var(--cs-ease);
+}
+
+.tocList a:hover {
+  color: var(--cs-blue-600);
+}
+
+.tocIndex {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  color: var(--cs-ink-faint);
+  flex: none;
+}
+
+.content {
+  min-width: 0;
+  max-width: 44rem;
+}
+
+.section + .section {
+  margin-top: var(--cs-space-10);
+}
+
+.section {
+  scroll-margin-top: 6rem;
+}
+
+.sectionTitle {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  font-size: 1.375rem;
+  letter-spacing: var(--cs-tracking-tight);
+  margin-bottom: var(--cs-space-4);
+}
+
+.sectionIndex {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-sm);
+  font-weight: 500;
+  color: var(--cs-blue-600);
+  flex: none;
+}
+
+.sectionBody {
+  color: var(--cs-ink-body);
+  line-height: var(--cs-leading-body);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-4);
+}
+
+.sectionBody ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-3);
+}
+
+.sectionBody li {
+  position: relative;
+  padding-left: 1.375rem;
+}
+
+.sectionBody li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6875rem;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--cs-blue-300);
+}
+
+.sectionBody strong {
+  color: var(--cs-ink);
+  font-weight: 600;
+}
+
+.sectionBody code {
+  font-family: var(--cs-font-mono);
+  font-size: 0.875em;
+  padding: 0.1em 0.35em;
+  border-radius: var(--cs-radius-xs);
+  background: var(--cs-surface-sunken);
+  color: var(--cs-ink);
+}
+
+/* Nota destacada: usada onde o documento precisa ser explícito sobre uma
+   limitação real do serviço. Tom informativo, nunca de alerta — a
+   informação é honesta, não assustadora. */
+.note {
+  border: 1px solid var(--cs-blue-100);
+  border-left: 3px solid var(--cs-blue-600);
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-blue-50);
+  padding: var(--cs-space-4) var(--cs-space-5);
+  color: var(--cs-ink-body);
+}
+
+/* ============================================================
+   Contato
+   ============================================================ */
+.contact {
+  display: flex;
+  gap: var(--cs-space-4);
+  align-items: flex-start;
+  margin-top: var(--cs-space-12);
+  padding: var(--cs-space-6);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-xl);
+  background: var(--cs-surface);
+}
+
+.contactIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  color: var(--cs-blue-600);
+}
+
+.contactIcon svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.contactTitle {
+  font-weight: 600;
+  color: var(--cs-ink);
+}
+
+.contactBody {
+  margin-top: 0.25rem;
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-body);
+  overflow-wrap: anywhere;
+}
+
+/* ============================================================
+   Rodapé
+   ============================================================ */
+.footer {
+  border-top: 1px solid var(--cs-line);
+  background: var(--cs-surface);
+}
+
+.footerInner {
+  max-width: var(--cs-container);
+  margin: 0 auto;
+  padding: var(--cs-space-8) var(--cs-space-6);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cs-space-4) var(--cs-space-6);
+}
+
+.footerNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cs-space-5);
+}
+
+.footerNav a {
+  font-size: var(--cs-text-sm);
+  font-weight: 500;
+  color: var(--cs-ink-body);
+  text-decoration: none;
+}
+
+.footerNav a:hover {
+  color: var(--cs-blue-600);
+}
+
+.footerCopy {
+  margin-left: auto;
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
+}
+
+/* ============================================================
+   Mobile
+   ============================================================ */
+@media (max-width: 640px) {
+  .headerInner {
+    padding: var(--cs-space-3) var(--cs-space-5);
+  }
+
+  .main {
+    padding: var(--cs-space-8) var(--cs-space-5) var(--cs-space-16);
+  }
+
+  .layout {
+    margin-top: var(--cs-space-8);
+    gap: var(--cs-space-8);
+  }
+
+  .toc {
+    padding: var(--cs-space-4);
+  }
+
+  .sectionTitle {
+    font-size: 1.1875rem;
+  }
+
+  .contact {
+    padding: var(--cs-space-5);
+    flex-direction: column;
+    gap: var(--cs-space-3);
+  }
+
+  .footerInner {
+    padding: var(--cs-space-6) var(--cs-space-5);
+  }
+
+  .footerCopy {
+    margin-left: 0;
+    width: 100%;
+  }
+}

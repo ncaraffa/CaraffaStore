@@ -73,7 +73,7 @@
   --cs-space-20: 5rem;
   --cs-space-24: 6rem;
   /* Respiro vertical entre seções de página pública — fluido. */
-  --cs-section-y: clamp(4.5rem, 3rem + 6vw, 8rem);
+  --cs-section-y: clamp(3.75rem, 2.5rem + 4.5vw, 6.5rem);
 
   /* ---------- Raio (5 degraus, nunca improvisado) ---------------- */
   --cs-radius-xs: 0.25rem;

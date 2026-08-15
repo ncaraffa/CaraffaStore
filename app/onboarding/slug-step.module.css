@@ -17,9 +17,28 @@
 }
 
 .previewPath {
+  display: flex;
+  min-width: 0;
   font-family: var(--cs-font-mono);
   font-size: var(--cs-text-sm);
   color: var(--cs-blue-800);
+}
+
+/* Encolhe primeiro e some com reticências: o endereço do servidor é o
+   contexto, não a informação que o lojista está conferindo. */
+.previewHost {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cs-blue-700);
+  opacity: 0.75;
+}
+
+.previewSlug {
+  flex: 1 1 auto;
+  min-width: 5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

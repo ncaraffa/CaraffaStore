@@ -77,11 +77,11 @@ export function ProductForm({
         </Field>
 
         <Field
-          label="Endereço (slug)"
+          label="Endereço do produto"
           htmlFor="slug"
           required
           error={state.fieldErrors?.slug}
-          info="O endereço único desse produto dentro da sua loja, usado no link que você compartilha (ex.: /produto/nome-do-produto). É gerado automaticamente a partir do nome, mas pode editar."
+          info="O endereço deste produto dentro da sua loja, usado no link que você compartilha (ex.: /produto/nome-do-produto). É gerado a partir do nome, mas você pode editar."
         >
           <Input
             id="slug"

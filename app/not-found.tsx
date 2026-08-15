@@ -10,7 +10,7 @@ export default function NotFound() {
       title="Página não encontrada"
       actions={
         <Link href="/">
-          <Button>Voltar ao início</Button>
+          <Button as="span">Voltar ao início</Button>
         </Link>
       }
     >

@@ -70,7 +70,7 @@ export default async function ProductsPage({
         </div>
         {canManage && (
           <Link href={`/dashboard/products/new?store=${store.slug}`}>
-            <Button icon={<IconPlus />}>Novo produto</Button>
+            <Button as="span" icon={<IconPlus />}>Novo produto</Button>
           </Link>
         )}
       </div>
@@ -125,7 +125,7 @@ export default async function ProductsPage({
             canManage &&
             !q && (
               <Link href={`/dashboard/products/new?store=${store.slug}`}>
-                <Button icon={<IconPlus />}>Criar primeiro produto</Button>
+                <Button as="span" icon={<IconPlus />}>Criar primeiro produto</Button>
               </Link>
             )
           }
@@ -172,7 +172,7 @@ export default async function ProductsPage({
                       {canManage && (
                         <td className={styles.thActions}>
                           <Link href={`/dashboard/products/${product.id}/edit?store=${store.slug}`}>
-                            <Button variant="ghost" size="sm">
+                            <Button as="span" variant="ghost" size="sm">
                               Editar
                             </Button>
                           </Link>

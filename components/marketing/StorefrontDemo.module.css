@@ -1,0 +1,688 @@
+/* ============================================================
+   Demonstração da loja pública
+
+   As medidas internas das telas são propositalmente menores que as
+   da loja real: o conteúdo é o mesmo, mas encolhido para caber numa
+   moldura. Tudo aqui é estático — nenhum estado, nenhum listener.
+   ============================================================ */
+
+.demo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-8);
+}
+
+/* ============================================================
+   Moldura de navegador
+   ============================================================ */
+.browser {
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-xl);
+  background: var(--cs-white);
+  box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
+  overflow: hidden;
+}
+
+.browserBar {
+  display: flex;
+  align-items: center;
+  gap: var(--cs-space-4);
+  padding: 0.625rem var(--cs-space-4);
+  background: var(--cs-surface);
+  border-bottom: 1px solid var(--cs-line);
+}
+
+.dots {
+  display: inline-flex;
+  gap: 0.375rem;
+  flex: none;
+}
+
+.dots i {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--cs-line-strong);
+}
+
+.urlBar {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3125rem 0.75rem;
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.browserViewport {
+  background: var(--cs-white);
+}
+
+/* ============================================================
+   Molduras de celular
+   ============================================================ */
+.phones {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cs-space-8);
+}
+
+.phoneItem {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-4);
+  min-width: 0;
+}
+
+.phone {
+  border: 1px solid var(--cs-line-strong);
+  border-radius: 1.75rem;
+  padding: 0.5rem;
+  background: var(--cs-white);
+  box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
+}
+
+.phoneViewport {
+  border-radius: 1.375rem;
+  overflow: hidden;
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+}
+
+.caption {
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-body);
+  line-height: var(--cs-leading-body);
+}
+
+.captionStep {
+  display: block;
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  color: var(--cs-blue-600);
+  margin-bottom: 0.25rem;
+}
+
+/* ============================================================
+   Tela — casca comum
+   ============================================================ */
+.screen {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8125rem;
+}
+
+.storeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cs-space-3);
+  padding: 0.75rem var(--cs-space-4);
+  border-bottom: 1px solid var(--cs-line);
+  background: var(--cs-white);
+}
+
+/* Mesma decisão da loja real: o nome da loja é do lojista, em Inter e
+   peso alto — não na fonte display da CaraffaStore. */
+.storeName {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--cs-ink);
+}
+
+.backLink {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cs-ink-body);
+}
+
+.cartBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--cs-radius-full);
+  border: 1px solid var(--cs-line);
+  color: var(--cs-ink-body);
+}
+
+.cartBadge svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+.cartCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.25rem;
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-blue-600);
+  color: #fff;
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.screenBody {
+  padding: var(--cs-space-4);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================================
+   Tela 1 — catálogo
+   ============================================================ */
+.intro {
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--cs-line);
+}
+
+.introLabel {
+  font-family: var(--cs-font-mono);
+  font-size: 0.5625rem;
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+  margin-bottom: 0.25rem;
+}
+
+.introTitle {
+  font-family: var(--cs-font-display);
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: var(--cs-tracking-tight);
+  color: var(--cs-ink);
+  line-height: 1.15;
+}
+
+.introMeta {
+  margin-top: 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--cs-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.searchRow {
+  margin-bottom: 0.625rem;
+}
+
+.searchField {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  max-width: 16rem;
+  padding: 0.4375rem 0.625rem;
+  border: 1px solid var(--cs-line-strong);
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-white);
+  color: var(--cs-ink-muted);
+  font-size: 0.75rem;
+}
+
+.searchField svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3125rem;
+  margin-bottom: var(--cs-space-4);
+}
+
+.chip {
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--cs-radius-full);
+  border: 1px solid var(--cs-line);
+  background: var(--cs-white);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--cs-ink-body);
+}
+
+.chip[data-active] {
+  background: var(--cs-ink);
+  border-color: var(--cs-ink);
+  color: #fff;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4375rem;
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  padding: 0.5rem 0.5rem 0.5625rem;
+  background: var(--cs-white);
+  box-shadow: var(--cs-shadow-xs);
+  min-width: 0;
+}
+
+.cardImage {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--cs-radius-md);
+  overflow: hidden;
+  background: var(--cs-surface);
+  margin-bottom: 0.0625rem;
+}
+
+.art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.soldOut {
+  position: absolute;
+  top: 0.25rem;
+  left: 0.25rem;
+  padding: 0.0625rem 0.3125rem;
+  border-radius: var(--cs-radius-xs);
+  background: var(--cs-warning-bg);
+  border: 1px solid var(--cs-warning-border);
+  color: var(--cs-warning-text);
+  font-size: 0.5625rem;
+  font-weight: 700;
+}
+
+.cardTitle {
+  font-size: 0.71875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: var(--cs-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  /* Duas linhas reservadas: com títulos de tamanhos diferentes, os
+     preços das quatro colunas ficam na mesma altura. */
+  min-height: 1.9375rem;
+}
+
+/* O preço é a informação que o olho procura na vitrine — sobe de peso e
+   de tamanho em relação ao título. */
+.cardPrice {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--cs-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.cardAction {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: auto;
+  padding-top: 0.125rem;
+}
+
+.qty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.625rem;
+  border: 1px solid var(--cs-line-strong);
+  border-radius: var(--cs-radius-sm);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--cs-ink);
+  flex: none;
+}
+
+.addButton {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem 0.25rem;
+  border-radius: var(--cs-radius-sm);
+  background: linear-gradient(180deg, var(--cs-blue-500), var(--cs-blue-600));
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 10px -6px rgba(27, 77, 255, 0.7);
+}
+
+.cardSoldOutAction {
+  margin-top: auto;
+  padding: 0.3125rem 0.5rem;
+  border-radius: var(--cs-radius-sm);
+  background: var(--cs-warning-bg);
+  border: 1px solid var(--cs-warning-border);
+  color: var(--cs-warning-text);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Nas larguras estreitas o catálogo respeita a mesma regra da loja
+   real: menos colunas, nunca cards espremidos. */
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .screenBody {
+    padding: var(--cs-space-3);
+  }
+
+  .introTitle {
+    font-size: 1.1875rem;
+  }
+}
+
+/* ============================================================
+   Tela 2 — checkout
+   ============================================================ */
+.pageTitle {
+  font-family: var(--cs-font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: var(--cs-tracking-tight);
+  color: var(--cs-ink);
+  margin-bottom: 0.625rem;
+}
+
+.summaryBar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-line);
+  margin-bottom: var(--cs-space-4);
+}
+
+.summaryCount {
+  font-size: 0.75rem;
+  color: var(--cs-ink-muted);
+}
+
+.summaryTotal {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--cs-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.formLabel {
+  font-family: var(--cs-font-mono);
+  font-size: 0.5625rem;
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+  margin-bottom: 0.5rem;
+}
+
+.field {
+  margin-bottom: 0.625rem;
+}
+
+.fieldLabel {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--cs-ink);
+  margin-bottom: 0.1875rem;
+}
+
+.fieldBox {
+  display: block;
+  padding: 0.4375rem 0.625rem;
+  border: 1px solid var(--cs-line-strong);
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-white);
+  font-size: 0.75rem;
+  color: var(--cs-ink-body);
+}
+
+.fulfillment {
+  display: flex;
+  gap: 0.375rem;
+  margin-bottom: var(--cs-space-4);
+}
+
+.fulfillmentOption {
+  flex: 1;
+  text-align: center;
+  padding: 0.4375rem;
+  border: 1px solid var(--cs-line-strong);
+  border-radius: var(--cs-radius-md);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cs-ink-body);
+}
+
+.fulfillmentOption[data-active] {
+  border-color: var(--cs-blue-600);
+  background: var(--cs-blue-50);
+  color: var(--cs-blue-700);
+}
+
+.primaryButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5625rem;
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-blue-600);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  box-shadow: var(--cs-glow-blue);
+}
+
+.primaryButton svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.trustLine {
+  margin-top: 0.625rem;
+  text-align: center;
+  font-size: 0.625rem;
+  color: var(--cs-ink-muted);
+}
+
+/* ============================================================
+   Tela 3 — Pix
+   ============================================================ */
+.payCard {
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+  background: var(--cs-white);
+  box-shadow: var(--cs-shadow-sm);
+  overflow: hidden;
+}
+
+.payStatus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  background: var(--cs-warning-bg);
+  border-bottom: 1px solid var(--cs-warning-border);
+  color: var(--cs-warning-text);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.payStatus svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.payAmountBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.75rem 0.75rem 0.625rem;
+  border-bottom: 1px dashed var(--cs-line-strong);
+  margin: 0 0.75rem;
+}
+
+.payAmountLabel {
+  font-size: 0.625rem;
+  color: var(--cs-ink-muted);
+}
+
+.payAmount {
+  font-family: var(--cs-font-display);
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--cs-ink);
+  letter-spacing: var(--cs-tracking-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.payCode {
+  font-family: var(--cs-font-mono);
+  font-size: 0.625rem;
+  color: var(--cs-ink-muted);
+}
+
+.qrFrame {
+  display: flex;
+  justify-content: center;
+  padding: 0.75rem;
+}
+
+.qr {
+  width: 7rem;
+  height: 7rem;
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-sm);
+  padding: 0.25rem;
+  background: #fff;
+}
+
+.expires {
+  text-align: center;
+  font-size: 0.6875rem;
+  color: var(--cs-ink-muted);
+  margin-bottom: 0.75rem;
+}
+
+.expires strong {
+  font-family: var(--cs-font-mono);
+  color: var(--cs-ink);
+}
+
+.copyLabel {
+  padding: 0 0.75rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--cs-ink);
+  margin-bottom: 0.25rem;
+}
+
+.copyField {
+  display: block;
+  margin: 0 0.75rem 0.5rem;
+  padding: 0.4375rem 0.625rem;
+  border: 1px solid var(--cs-line-strong);
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-surface);
+  font-family: var(--cs-font-mono);
+  font-size: 0.625rem;
+  color: var(--cs-ink-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.payCard .primaryButton {
+  margin: 0 0.75rem 0.75rem;
+}
+
+.confirmedToast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--cs-radius-md);
+  background: var(--cs-success-bg);
+  border: 1px solid var(--cs-success-border);
+  color: var(--cs-success-text);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+
+.confirmedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--cs-success);
+  color: #fff;
+}
+
+.confirmedIcon svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* ============================================================
+   Estreito — as duas telas de celular viram um trilho que rola
+   ============================================================ */
+@media (max-width: 760px) {
+  .phones {
+    display: flex;
+    gap: var(--cs-space-5);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    /* A calha lateral da seção volta como padding, para o primeiro
+       cartão nascer alinhado ao texto e o último não colar na borda. */
+    margin-inline: calc(var(--cs-space-5) * -1);
+    padding-inline: var(--cs-space-5);
+    padding-bottom: 0.5rem;
+    scrollbar-width: none;
+  }
+
+  .phones::-webkit-scrollbar {
+    display: none;
+  }
+
+  .phoneItem {
+    flex: 0 0 min(19rem, 82%);
+    scroll-snap-align: start;
+  }
+}
