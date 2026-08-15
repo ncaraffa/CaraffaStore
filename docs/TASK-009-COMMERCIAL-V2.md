@@ -25,27 +25,40 @@ Verificado no código antes de qualquer alteração:
 - **Demonstração da loja** (`components/marketing/StorefrontDemo.*`): reprodução fiel
   das telas reais de `/loja/[slug]` — catálogo, checkout e Pix — em moldura de
   navegador + trilho de celulares. Sem logo nem capa, porque o produto não os tem.
-- **Planos** (`components/marketing/PlanPicker.*`): deixaram de ser três cartões
-  comparativos e viraram um seletor de faixa sobre um único produto completo.
-  Importa `PLATFORM_PLANS` de `lib/billing/plans.ts` — landing, onboarding e
-  cobrança não podem mais divergir.
+- **Planos** (`components/marketing/PricingPlans.*`): três cartões cuja diferença
+  é o **nível de acompanhamento humano**, não recurso de software. Importa
+  `PLATFORM_PLANS` de `lib/billing/plans.ts` — landing, onboarding e cobrança não
+  podem divergir.
 - **Termos e Privacidade**: casca visual própria (`components/legal/LegalPage.*`),
   com sumário e data de atualização. Removida a linguagem de "minuta/piloto" e
   corrigido o texto que ainda descrevia ativação manual.
-- **Copy**: −20,6% de palavras na landing, linguagem de desenvolvedor removida
-  ("isolamento imposto no banco de dados", "credenciais") e claims ajustados à
-  realidade (ver relatório da task).
+- **Copy**: linguagem de desenvolvedor removida ("isolamento imposto no banco de
+  dados", "credenciais"), redundância cortada (FAQ 8→6, bento 6→4, "não faz"
+  4→3) e claims ajustados à realidade (ver relatório da task).
 - **Domínio e contato** (`lib/config/site.ts`): `NEXT_PUBLIC_SITE_URL` e
   `NEXT_PUBLIC_CONTACT_EMAIL`, ambos opcionais e com o valor atual como padrão.
 - **Acessibilidade**: `<Button as="span">` elimina `<button>` dentro de `<a>` nos
   18 pontos onde isso existia.
 
+## Diferenciação dos planos — compromisso comercial, não código
+
+Os planos anunciam níveis de **atendimento e acompanhamento** (suporte
+prioritário, ajuda na configuração, revisão da loja). Isso é deliberado e não
+tem contrapartida no sistema:
+
+- nenhum entitlement, quota ou gating por `plan_code` foi criado — o backend
+  segue exatamente como na `master`;
+- nada no código verifica ou entrega esses serviços: **quem os cumpre é o
+  operador**. São promessas comerciais que precisam ser honradas manualmente;
+- por isso nenhum bullet de Crescimento ou Profissional cita funcionalidade de
+  software — só atendimento. Um bullet de recurso ali seria falso.
+
 ## Fora de escopo — recomendações para tasks futuras (backend)
 
-1. **Diferenciação real de planos.** Enquanto não existir entitlement por
-   `plan_code`, a apresentação honesta é a única possível. Uma task de backend
-   precisaria definir e implementar quotas/recursos antes de a landing poder
-   anunciá-los.
+1. **Diferenciação funcional de planos.** Se um dia os planos precisarem
+   diferir no produto (e não só no atendimento), isso exige uma task de backend
+   que defina e implemente quotas/recursos por `plan_code` antes de a landing
+   poder anunciá-los.
 2. **Renovação mensal.** Não há cobrança recorrente nem suspensão por vencimento.
    Hoje os Termos dizem isso abertamente; automatizar exige backend.
 3. **Política de senha (15 caracteres).** Mantida intacta. Só a explicação visual

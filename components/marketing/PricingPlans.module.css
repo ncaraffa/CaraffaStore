@@ -1,0 +1,267 @@
+.wrap {
+  max-width: var(--cs-container);
+  margin-inline: auto;
+}
+
+/* ============================================================
+   Grade
+   Altura igual nos três: o Essencial tem seis itens e os outros
+   quatro, então `start` deixava o card recomendado MAIS BAIXO que
+   os vizinhos — o oposto do que ele precisa comunicar. Com
+   `stretch`, o destaque vem de borda, sombra, selo, preço maior e
+   botão sólido, e a base dos cards fica alinhada.
+   ============================================================ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--cs-space-5);
+  align-items: stretch;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: var(--cs-space-6);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-2xl);
+  background: var(--cs-white);
+  box-shadow: var(--cs-shadow-sm), var(--cs-sheen);
+  transition:
+    box-shadow var(--cs-duration-slow) var(--cs-ease-out),
+    border-color var(--cs-duration-slow) var(--cs-ease-out),
+    transform var(--cs-duration-slow) var(--cs-ease-out);
+}
+
+/* O recomendado se distingue por peso e elevação, não por cor de
+   fundo berrante: continua uma superfície branca da mesma família. */
+.card[data-featured] {
+  border-color: var(--cs-blue-200);
+  box-shadow: var(--cs-shadow-lg), var(--cs-sheen);
+  padding-block: var(--cs-space-8);
+}
+
+@media (hover: hover) {
+  .card:hover {
+    border-color: var(--cs-blue-200);
+    box-shadow: var(--cs-shadow-md), var(--cs-sheen);
+    transform: translateY(-2px);
+  }
+
+  .card[data-featured]:hover {
+    box-shadow: var(--cs-shadow-xl), var(--cs-sheen);
+  }
+}
+
+.badge {
+  position: absolute;
+  top: 0;
+  left: var(--cs-space-6);
+  transform: translateY(-50%);
+  padding: 0.3125rem 0.75rem;
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-blue-600);
+  color: #fff;
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  box-shadow: var(--cs-glow-blue);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Cabeçalho do card
+   ============================================================ */
+.head {
+  padding-bottom: var(--cs-space-5);
+  margin-bottom: var(--cs-space-5);
+  border-bottom: 1px solid var(--cs-line);
+}
+
+.level {
+  display: flex;
+  gap: 0.1875rem;
+  align-items: flex-end;
+  height: 0.875rem;
+  margin-bottom: var(--cs-space-4);
+}
+
+.level span {
+  width: 0.4375rem;
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-line-strong);
+}
+
+.level span:nth-child(1) {
+  height: 0.4375rem;
+}
+
+.level span:nth-child(2) {
+  height: 0.65625rem;
+}
+
+.level span:nth-child(3) {
+  height: 0.875rem;
+}
+
+.level span[data-on] {
+  background: var(--cs-blue-600);
+}
+
+.name {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--cs-ink);
+}
+
+.price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.1875rem;
+  margin-top: var(--cs-space-3);
+  font-family: var(--cs-font-display);
+  color: var(--cs-ink);
+  letter-spacing: var(--cs-tracking-display);
+}
+
+.currency {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--cs-ink-muted);
+}
+
+.priceValue {
+  font-size: 2.75rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.card[data-featured] .priceValue {
+  font-size: 3.25rem;
+}
+
+.period {
+  font-family: var(--cs-font-sans);
+  font-size: var(--cs-text-sm);
+  font-weight: 500;
+  color: var(--cs-ink-muted);
+  letter-spacing: 0;
+}
+
+.fit {
+  margin-top: var(--cs-space-3);
+  font-size: var(--cs-text-sm);
+  line-height: 1.5;
+  color: var(--cs-ink-body);
+  min-height: 2.625rem;
+}
+
+/* ============================================================
+   Ação e lista
+   O CTA vem ANTES da lista: quem já decidiu pelo preço não
+   precisa atravessar seis bullets para achar o botão.
+   ============================================================ */
+.cta {
+  display: block;
+  text-decoration: none;
+  margin-bottom: var(--cs-space-5);
+}
+
+.listTitle {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  letter-spacing: var(--cs-tracking-label);
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+  margin-bottom: var(--cs-space-3);
+}
+
+.bullets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.bullets li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: var(--cs-text-sm);
+  line-height: 1.45;
+  color: var(--cs-ink-body);
+}
+
+.bullets svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  margin-top: 0.1875rem;
+  color: var(--cs-blue-600);
+}
+
+/* ============================================================
+   Nota de rodapé — discreta, mas legível
+   ============================================================ */
+.footnote {
+  max-width: 46rem;
+  margin: var(--cs-space-8) auto 0;
+  text-align: center;
+  font-size: var(--cs-text-sm);
+  line-height: 1.6;
+  color: var(--cs-ink-muted);
+  text-wrap: balance;
+}
+
+/* ============================================================
+   Tablet — o recomendado sobe para o topo
+   ============================================================ */
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--cs-space-6);
+    max-width: 30rem;
+    margin-inline: auto;
+  }
+
+  .card[data-featured] {
+    order: -1;
+    padding-block: var(--cs-space-6);
+  }
+
+  .card[data-featured] .priceValue {
+    font-size: 2.75rem;
+  }
+
+  /* Empilhados, os cards já têm a mesma largura: a altura reservada
+     para a frase de encaixe só criaria buraco. */
+  .fit {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .card {
+    padding: var(--cs-space-5);
+  }
+
+  .card[data-featured] {
+    padding-block: var(--cs-space-5);
+  }
+
+  .badge {
+    left: var(--cs-space-5);
+  }
+
+  .footnote {
+    margin-top: var(--cs-space-6);
+    text-align: left;
+  }
+}

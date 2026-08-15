@@ -55,7 +55,7 @@ export function SlugStep({ progress }: { progress: OnboardingRow }) {
         required
         error={state.fieldErrors?.slug}
         hint="Só letras minúsculas, números e hífen — a gente ajusta sozinho o que estiver fora do formato. Dá para trocar até concluir o cadastro; depois disso o endereço fica fixo."
-        info={`O endereço único da sua loja na internet — é o link que você vai mandar pros seus clientes no WhatsApp, no Instagram e onde mais quiser. Ex.: ${storeUrlExample}.`}
+        info={`O trecho final do link da sua loja — é o endereço que você vai mandar pros seus clientes no WhatsApp, no Instagram e onde mais quiser. Ex.: ${storeUrlExample}.`}
       >
         <Input
           id="slug"

@@ -5,7 +5,7 @@ import { HeroScene } from "./HeroScene";
 import { StoreScene } from "./StoreScene";
 import { ConversationScene } from "./ConversationScene";
 import { StorefrontDemo } from "./StorefrontDemo";
-import { PlanPicker } from "./PlanPicker";
+import { PricingPlans } from "./PricingPlans";
 import { RevealRoot } from "./RevealRoot";
 import { getStoreUrlExample } from "@/lib/config/site";
 import {
@@ -46,7 +46,7 @@ const BENTO = [
     key: "catalogo",
     icon: <IconLink />,
     title: "Um link, sua loja inteira",
-    body: "Endereço próprio para mandar no WhatsApp ou pôr na bio, com categorias e busca para o cliente achar o que quer.",
+    body: "Um link exclusivo para mandar no WhatsApp ou pôr na bio, com categorias e busca para o cliente achar o que quer.",
   },
   {
     key: "pix",
@@ -288,7 +288,8 @@ export function LandingPage() {
               <p className={styles.sectionLabel}>Sem letra miúda</p>
               <h2 className={styles.sectionTitle}>O que a CaraffaStore não faz</h2>
               <p className={styles.sectionLead}>
-                Quem vende pouco não pode ser surpreendido. Estas três coisas não acontecem aqui.
+                Sem taxa escondida e sem complicação: você sabe desde o começo quanto paga e o que acontece com cada
+                venda.
               </p>
             </div>
             <ul className={styles.bandList}>
@@ -399,25 +400,14 @@ export function LandingPage() {
         <section id="planos" className={styles.sectionAlt}>
           <div className={styles.sectionHead} data-reveal>
             <p className={styles.sectionLabel}>Planos</p>
-            <h2 className={styles.sectionTitle}>Um produto completo, três faixas de preço</h2>
-            <p className={styles.sectionLead}>
-              A plataforma inteira em qualquer faixa, sem limite de produtos, fotos ou pedidos. Você escolhe a faixa
-              que corresponde ao tamanho da sua operação.
-            </p>
+            <h2 className={styles.sectionTitle}>Escolha quanto quer de acompanhamento</h2>
+            {/* A frase "plataforma completa nos três" mora na nota abaixo dos
+                cards, não aqui: dizer nos dois lugares era a mesma
+                redundância que a V2 tinha eliminado do resto da página. */}
+            <p className={styles.sectionLead}>Mensalidade fixa, sem comissão sobre as vendas.</p>
           </div>
 
-          <div className={styles.planPanel} data-reveal="lift">
-            <PlanPicker />
-          </div>
-
-          <p className={styles.planHonesty} data-reveal>
-            <IconShield />
-            <span>
-              <strong>Por que três preços se os recursos são os mesmos?</strong> Porque preferimos dizer isso a
-              inventar limitação no plano mais barato para empurrar o mais caro. Se um dia uma faixa ganhar recurso
-              exclusivo, ele estará escrito aqui — depois de existir, nunca antes.
-            </span>
-          </p>
+          <PricingPlans />
         </section>
 
         {/* ===================== 8. DÚVIDAS ===================== */}

@@ -15,12 +15,10 @@
  * natureza (aparecem na página) e precisam existir também em Client
  * Components. Nunca coloque segredo aqui.
  */
+import { getSiteUrl as resolveSiteUrl } from "@/lib/auth/site-url";
 
 /** E-mail de contato hoje confirmado no projeto. Não invente outro. */
 const DEFAULT_CONTACT_EMAIL = "caraffastore@gmail.com";
-
-/** Mesmo default de lib/auth/site-url.ts, para dev local sem env. */
-const DEFAULT_SITE_URL = "http://127.0.0.1:3000";
 
 /**
  * E-mail exibido em Termos, Privacidade e suporte. Trocar para
@@ -33,25 +31,37 @@ export function getContactEmail(): string {
 }
 
 /**
- * URL absoluta do site, para metadata/OpenGraph/canonical. Espelha
- * `lib/auth/site-url.ts` (que é a fonte para redirects do Supabase Auth)
- * — as duas leem a MESMA variável, então nunca divergem.
+ * URL absoluta do site, para metadata/OpenGraph/canonical.
+ *
+ * Reexporta `lib/auth/site-url.ts` de propósito, em vez de repetir a
+ * leitura da variável e o fallback de dev: aquele módulo é a fonte dos
+ * redirects do Supabase Auth, e duas implementações do mesmo endereço
+ * são exatamente o tipo de coisa que diverge silenciosamente. Também é o
+ * que mantém o literal de host local em UM arquivo só — o que
+ * `scripts/release-check.ts` verifica.
+ *
+ * Função explícita em vez de `export { getSiteUrl } from ...`: o
+ * re-export não traz o nome para o escopo do módulo, e `getSiteHost()`
+ * logo abaixo precisa chamá-lo.
  */
 export function getSiteUrl(): string {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  return configured && configured.length > 0 ? configured : DEFAULT_SITE_URL;
+  return resolveSiteUrl();
 }
 
 /**
- * Host sem protocolo, do jeito que um lojista leria ("caraffastore.com.br"),
- * usado nos exemplos de endereço de loja. Deriva do site URL em vez de
- * repetir o domínio como literal em cada tela.
+ * Host sem protocolo, do jeito que um lojista leria, usado nos exemplos
+ * de endereço de loja. Deriva do site URL em vez de repetir o domínio
+ * como literal em cada tela.
+ *
+ * Se o valor configurado não for uma URL válida, o fallback só remove o
+ * esquema do que veio — nunca inventa um domínio que não existe.
  */
 export function getSiteHost(): string {
+  const raw = getSiteUrl();
   try {
-    return new URL(getSiteUrl()).host;
+    return new URL(raw).host;
   } catch {
-    return "caraffastore.com.br";
+    return raw.replace(/^[a-z]+:\/\//i, "").replace(/\/.*$/, "");
   }
 }
 

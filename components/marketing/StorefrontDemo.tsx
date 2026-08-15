@@ -24,50 +24,118 @@ import styles from "./StorefrontDemo.module.css";
    fingindo ser uma loja real.
    ============================================================ */
 
-const PRODUCTS = [
-  { name: "Café em grãos · Cerrado 500g", price: "R$ 42,00", art: "bag" as const },
-  { name: "Moedor manual em inox", price: "R$ 129,90", art: "grinder" as const },
-  { name: "Coador de pano tradicional", price: "R$ 24,50", art: "filter" as const },
-  { name: "Caneca de cerâmica 300ml", price: "R$ 38,00", art: "mug" as const, soldOut: true },
+type ArtKind = "bag" | "grinder" | "dripper" | "mug";
+
+const PRODUCTS: { name: string; price: string; art: ArtKind; soldOut?: boolean }[] = [
+  { name: "Café em grãos · Cerrado 500 g", price: "R$ 42,00", art: "bag" },
+  { name: "Coador de pano com suporte", price: "R$ 24,50", art: "dripper" },
+  { name: "Caneca de cerâmica 300 ml", price: "R$ 38,00", art: "mug" },
+  { name: "Moedor manual em inox", price: "R$ 129,90", art: "grinder", soldOut: true },
 ];
 
-function ProductArt({ kind }: { kind: "bag" | "grinder" | "filter" | "mug" }) {
+/**
+ * "Fotos" dos produtos, desenhadas aqui mesmo.
+ *
+ * Nenhuma imagem é baixada — nem foto de banco de imagens fingindo ser
+ * uma loja real, nem asset externo. São vetores originais, com fundo
+ * quente próprio por produto, sombra de contato e volume em degradê:
+ * o suficiente para a vitrine parecer uma loja que alguém teria, sem
+ * fingir fotografia.
+ *
+ * Cada `kind` traz o próprio par de cores de fundo, então quatro cards
+ * lado a lado não viram quatro retângulos bege iguais.
+ */
+const ART_BACKGROUND: Record<ArtKind, [string, string]> = {
+  bag: ["#f6efe6", "#e9dccb"],
+  dripper: ["#f2f0ea", "#e2ded2"],
+  mug: ["#eef2fa", "#dde5f4"],
+  grinder: ["#f1f0ee", "#dfdedb"],
+};
+
+function ProductArt({ kind }: { kind: ArtKind }) {
+  const [from, to] = ART_BACKGROUND[kind];
+  // Sufixo por produto: os quatro SVGs convivem na mesma página e ids
+  // repetidos fariam um herdar o degradê do outro.
+  const gid = `cs-art-${kind}`;
+
   return (
     <svg viewBox="0 0 120 120" className={styles.art} aria-hidden="true" focusable="false">
-      <rect width="120" height="120" fill="#f1ece6" />
+      <defs>
+        <linearGradient id={`${gid}-bg`} x1="0" y1="0" x2="0.4" y2="1">
+          <stop offset="0" stopColor={from} />
+          <stop offset="1" stopColor={to} />
+        </linearGradient>
+        <linearGradient id={`${gid}-body`} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor="#ffffff" stopOpacity="0.28" />
+          <stop offset="0.45" stopColor="#ffffff" stopOpacity="0" />
+          <stop offset="1" stopColor="#000000" stopOpacity="0.14" />
+        </linearGradient>
+      </defs>
+
+      <rect width="120" height="120" fill={`url(#${gid}-bg)`} />
+      {/* Sombra de contato: assenta o objeto na superfície. */}
+      <ellipse cx="60" cy="99" rx="30" ry="5.5" fill="#4a3a2a" opacity="0.14" />
+
       {kind === "bag" && (
-        <>
-          <path d="M40 34h40l6 56a8 8 0 0 1-8 9H42a8 8 0 0 1-8-9l6-56Z" fill="#4a3628" />
-          <path d="M40 34h40l1.4 13H38.6L40 34Z" fill="#33251b" />
-          <rect x="46" y="58" width="28" height="4" rx="2" fill="#d8c3a5" />
-          <rect x="46" y="68" width="18" height="4" rx="2" fill="#8d7358" />
-          <path d="M44 26h32l-4 8H48l-4-8Z" fill="#6b503b" />
-        </>
+        <g>
+          {/* Fole lateral, corpo e topo dobrado com selo. */}
+          <path d="M41 36h38l4.5 52a9 9 0 0 1-9 9.8H45.5a9 9 0 0 1-9-9.8L41 36Z" fill="#4b3524" />
+          <path d="M41 36h38l4.5 52a9 9 0 0 1-9 9.8H60V36Z" fill="#3d2b1d" />
+          <path d="M41 36h38l4.5 52a9 9 0 0 1-9 9.8H45.5a9 9 0 0 1-9-9.8L41 36Z" fill={`url(#${gid}-body)`} />
+          <path d="M45 25h30a3 3 0 0 1 3 3v8H42v-8a3 3 0 0 1 3-3Z" fill="#5d432e" />
+          <rect x="52" y="21" width="16" height="6" rx="3" fill="#8c6b4a" />
+          {/* Etiqueta de papel com a linha de nível da marca. */}
+          <rect x="47" y="52" width="26" height="30" rx="3" fill="#f4ece0" />
+          <rect x="51" y="58" width="18" height="3" rx="1.5" fill="#4b3524" />
+          <rect x="51" y="65" width="12" height="2.5" rx="1.25" fill="#8c6b4a" />
+          <rect x="51" y="73" width="18" height="3" rx="1.5" fill="#d9c4a6" />
+          <rect x="51" y="73" width="11" height="3" rx="1.5" fill="#1b4dff" opacity="0.75" />
+        </g>
       )}
-      {kind === "grinder" && (
-        <>
-          <rect x="40" y="52" width="40" height="42" rx="6" fill="#b9bec6" />
-          <rect x="40" y="52" width="40" height="10" rx="5" fill="#8f959e" />
-          <rect x="44" y="70" width="32" height="18" rx="4" fill="#6f4b32" />
-          <rect x="57" y="24" width="6" height="30" rx="3" fill="#8f959e" />
-          <rect x="52" y="20" width="26" height="6" rx="3" fill="#5c626b" />
-        </>
+
+      {kind === "dripper" && (
+        <g>
+          {/* Jarra de vidro embaixo, suporte de madeira e coador de pano. */}
+          <path d="M42 70h36v14a12 12 0 0 1-12 12H54a12 12 0 0 1-12-12V70Z" fill="#dfe6f0" opacity="0.85" />
+          <path d="M42 78h36v6a12 12 0 0 1-12 12H54a12 12 0 0 1-12-12v-6Z" fill="#6b4a2f" opacity="0.55" />
+          <rect x="40" y="66" width="40" height="5" rx="2.5" fill="#8c6b4a" />
+          <path d="M36 40h48l-9 22a4 4 0 0 1-3.6 2.3H48.6A4 4 0 0 1 45 62L36 40Z" fill="#f7f3ea" />
+          <path d="M36 40h48l-9 22a4 4 0 0 1-3.6 2.3H60V40Z" fill="#e7e0d2" />
+          <path d="M36 40h48l-2.2 5.4H38.2L36 40Z" fill="#c9bda9" />
+          <path d="M36 40h48l-9 22a4 4 0 0 1-3.6 2.3H48.6A4 4 0 0 1 45 62L36 40Z" fill={`url(#${gid}-body)`} />
+          {/* Fio de café caindo. */}
+          <rect x="58.5" y="64" width="3" height="9" rx="1.5" fill="#6b4a2f" opacity="0.6" />
+        </g>
       )}
-      {kind === "filter" && (
-        <>
-          <path d="M38 44h44l-14 30H52L38 44Z" fill="#efe7dc" />
-          <path d="M38 44h44l-3 7H41l-3-7Z" fill="#d9cec0" />
-          <rect x="57" y="74" width="6" height="18" rx="3" fill="#8d7358" />
-          <ellipse cx="60" cy="94" rx="16" ry="5" fill="#c9bcab" />
-        </>
-      )}
+
       {kind === "mug" && (
-        <>
-          <path d="M38 42h38v34a14 14 0 0 1-14 14H52a14 14 0 0 1-14-14V42Z" fill="#ffffff" />
-          <path d="M38 42h38v9H38z" fill="#1b4dff" opacity="0.75" />
-          <path d="M76 52h8a10 10 0 0 1 0 20h-8" fill="none" stroke="#ffffff" strokeWidth="7" />
-          <path d="M76 52h8a10 10 0 0 1 0 20h-8" fill="none" stroke="#dcd3c8" strokeWidth="3" />
-        </>
+        <g>
+          {/* Vapor — três traços leves, o único movimento da composição. */}
+          <path d="M50 28c3-4-3-7 0-11M60 26c3-4-3-7 0-11M70 28c3-4-3-7 0-11" stroke="#98a6bd" strokeWidth="2.4" strokeLinecap="round" fill="none" opacity="0.55" />
+          <path d="M76 56h7a11 11 0 0 1 0 22h-7" fill="none" stroke="#e3e9f4" strokeWidth="9" strokeLinecap="round" />
+          <path d="M76 56h7a11 11 0 0 1 0 22h-7" fill="none" stroke="#c5d1e6" strokeWidth="3" strokeLinecap="round" />
+          <path d="M36 44h42v33a17 17 0 0 1-17 17H53a17 17 0 0 1-17-17V44Z" fill="#ffffff" />
+          <path d="M36 44h42v9H36z" fill="#1b4dff" opacity="0.82" />
+          <path d="M36 44h42v33a17 17 0 0 1-17 17H53a17 17 0 0 1-17-17V44Z" fill={`url(#${gid}-body)`} />
+          <ellipse cx="57" cy="44" rx="21" ry="4.4" fill="#f0f4fc" />
+          <ellipse cx="57" cy="44" rx="16" ry="3" fill="#3a2a1c" opacity="0.75" />
+        </g>
+      )}
+
+      {kind === "grinder" && (
+        <g>
+          {/* Manivela, corpo em inox e coletor de madeira. */}
+          <path d="M60 20v9" stroke="#8a9099" strokeWidth="3.4" strokeLinecap="round" />
+          <path d="M60 22h16a4 4 0 0 1 4 4v3" stroke="#8a9099" strokeWidth="3.4" strokeLinecap="round" fill="none" />
+          <rect x="75" y="28" width="10" height="7" rx="3.5" fill="#6b4a2f" />
+          <path d="M46 34h28a4 4 0 0 1 4 4v6H42v-6a4 4 0 0 1 4-4Z" fill="#aeb5bf" />
+          <rect x="42" y="44" width="36" height="26" rx="4" fill="#c3c9d2" />
+          <rect x="42" y="44" width="36" height="26" rx="4" fill={`url(#${gid}-body)`} />
+          <rect x="45" y="53" width="30" height="3" rx="1.5" fill="#8a9099" opacity="0.5" />
+          <path d="M44 72h32a4 4 0 0 1 4 4v14a6 6 0 0 1-6 6H46a6 6 0 0 1-6-6V76a4 4 0 0 1 4-4Z" fill="#7a5637" />
+          <path d="M44 72h32a4 4 0 0 1 4 4v14a6 6 0 0 1-6 6H60V72Z" fill="#66462c" />
+          <rect x="52" y="80" width="16" height="3.4" rx="1.7" fill="#e6d6c0" opacity="0.55" />
+        </g>
       )}
     </svg>
   );
@@ -276,7 +344,7 @@ export function StorefrontDemo() {
   return (
     <div className={styles.demo}>
       {/* Moldura de navegador: dá o contexto de "isso é uma página na
-          internet, com endereço próprio" sem precisar dizer isso em texto. */}
+          internet, com link só dela" sem precisar dizer isso em texto. */}
       <div className={styles.browser} data-reveal="lift">
         <div className={styles.browserBar}>
           <span className={styles.dots} aria-hidden="true">
