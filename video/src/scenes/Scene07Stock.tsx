@@ -1,89 +1,104 @@
 import React from "react";
-import { AbsoluteFill, useCurrentFrame } from "remotion";
-import { color, font, radius, shadow } from "../lib/theme";
-import { EASE_OUT, progress, rise } from "../lib/timing";
+import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
+import { color, font } from "../lib/theme";
+import { EASE_OUT, progress } from "../lib/timing";
 import { BrowserFrame } from "../components/Device";
 import { ProductsStockScreen } from "../components/DashboardScreens";
-import { MonoLabel } from "../components/ui";
+import { CameraFrame } from "../components/Stage";
+
+const W = 1240;
+const H = 700;
+
+/**
+ * Célula de estoque da linha do Café Especial, em coordenadas locais da
+ * moldura. É para cá que a câmera vai.
+ */
+const STOCK_CELL = { x: 700, y: 300 };
 
 /**
  * Cena 7 — o estoque conversa com a venda.
  *
- * A cena mais curta do filme, porque a ideia é curta: um número trocou
- * sozinho. O 12 sobe e sai, o 11 entra por baixo — sem seta, sem
- * legenda "estoque atualizado automaticamente", sem gráfico. Se o
- * espectador viu o pedido entrar na cena anterior e vê o número cair
- * aqui, a ligação já está feita.
+ * Era a cena mais fraca do filme: o número trocava, mas media 15px num
+ * quadro de 1920 — 3px num celular. Ninguém ia perceber o que era para
+ * ser o fecho do argumento.
  *
- * Um zoom lento aproxima a coluna de estoque para que a troca aconteça
- * onde o olho já está.
+ * Agora a câmera fecha de verdade na linha do produto (fator ~1,9). A
+ * moldura sangra pelos quatro lados, o que lê como aproximação e não
+ * como corte errado, e a linha do Café Especial fica sozinha no centro
+ * do quadro no momento em que o 12 vira 11.
+ *
+ * A microcopy aparece uma vez, embaixo, e some com a cena: a leitura
+ * pretendida é "pedido pago → estoque baixou", e isso precisa de uma
+ * linha de texto, não de um painel de explicação.
  */
 export const Scene07Stock: React.FC = () => {
   const frame = useCurrentFrame();
 
-  const flip = progress(frame, 1.1, 0.55, EASE_OUT);
+  const enter = progress(frame, 0, 0.45, EASE_OUT);
 
-  // Zoom discreto em direção à coluna de estoque (à direita do centro).
-  // 1.05, não 1.09: com o zoom maior a moldura crescia para cima e
-  // encostava no rótulo da cena.
-  const zoom = 1 + progress(frame, 0.3, 2.4, EASE_OUT) * 0.05;
-  const shiftX = -progress(frame, 0.3, 2.4, EASE_OUT) * 90;
+  // Aproximação contínua: começa no mesmo enquadramento da cena 6 (para
+  // o corte parecer continuação do painel) e fecha na linha.
+  const push = progress(frame, 0.15, 1.4, EASE_OUT);
+  const scale = 1.3 + push * 0.62;
+
+  const focusX = interpolate(push, [0, 1], [730, STOCK_CELL.x], { extrapolateRight: "clamp" });
+  const focusY = interpolate(push, [0, 1], [400, STOCK_CELL.y], { extrapolateRight: "clamp" });
+
+  // A troca acontece já em close, não durante a aproximação.
+  const flip = progress(frame, 1.35, 0.5, EASE_OUT);
+
+  const captionIn = progress(frame, 1.55, 0.45);
+  const captionOut = 1 - progress(frame, 2.7, 0.3);
+  const caption = Math.min(captionIn, captionOut);
 
   return (
-    <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-      <div style={{ position: "relative", ...rise(frame, 0, 0.45, 18) }}>
-        <div style={{ transform: `translateX(${shiftX}px) scale(${zoom})` }}>
-          <BrowserFrame url="caraffastore.com.br/dashboard/products" width={1240} height={800}>
-            <ProductsStockScreen stockFlip={flip} />
-          </BrowserFrame>
-        </div>
+    <AbsoluteFill>
+      <CameraFrame width={W} height={H} scale={scale} focus={{ x: focusX, y: focusY }} style={{ opacity: enter }}>
+        <BrowserFrame url="caraffastore.com.br/dashboard/products" width={W} height={H}>
+          <ProductsStockScreen stockFlip={flip} />
+        </BrowserFrame>
+      </CameraFrame>
 
+      {/* Microcopy única da cena, ancorada ao quadro. */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 72,
+          display: "flex",
+          justifyContent: "center",
+          opacity: caption,
+          transform: `translateY(${(1 - caption) * 14}px)`,
+        }}
+      >
         <div
           style={{
-            position: "absolute",
-            top: -62,
-            left: 4,
-            display: "flex",
+            display: "inline-flex",
             alignItems: "center",
-            gap: 12,
-            ...rise(frame, 0.05, 0.45, 10),
-          }}
-        >
-          <span style={{ width: 8, height: 8, borderRadius: 999, background: color.blue600 }} />
-          <MonoLabel size={14}>E o estoque acompanha</MonoLabel>
-        </div>
-
-        {/* Selo de baixa: entra junto com a troca do número e some com a
-            cena. É a única "explicação" da cena, e ela cabe em duas
-            palavras. */}
-        <div
-          style={{
-            position: "absolute",
-            right: -30,
-            top: 470,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "12px 18px",
-            borderRadius: radius.full,
+            gap: 16,
+            padding: "18px 30px",
+            borderRadius: 999,
             background: color.white,
             border: `1px solid ${color.blue200}`,
-            boxShadow: shadow.lg,
-            opacity: progress(frame, 1.25, 0.4),
-            transform: `translateY(${(1 - progress(frame, 1.25, 0.4)) * 10}px)`,
+            boxShadow: "0 8px 16px -4px rgba(12, 27, 51, 0.07), 0 36px 80px -20px rgba(12, 27, 51, 0.22)",
           }}
         >
           <span
             style={{
               fontFamily: font.mono,
-              fontSize: 15,
+              fontSize: 24,
               fontWeight: 600,
               color: color.blue700,
+              letterSpacing: "-0.02em",
             }}
           >
             −1
           </span>
-          <span style={{ fontFamily: font.sans, fontSize: 15, color: color.inkBody }}>baixa automática</span>
+          <span style={{ width: 1, height: 24, background: color.line }} />
+          <span style={{ fontFamily: font.sans, fontSize: 23, color: color.inkBody }}>
+            Estoque atualizado automaticamente
+          </span>
         </div>
       </div>
     </AbsoluteFill>

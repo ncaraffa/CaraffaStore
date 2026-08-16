@@ -298,7 +298,9 @@ const BASE_ORDERS: OrderRow[] = [
 export const OrdersScreen: React.FC<{
   newOrder: number;
   toast: number;
-}> = ({ newOrder, toast }) => (
+  /** Realce temporário da linha nova: 1 no auge, 0 quando já apagou. */
+  highlight?: number;
+}> = ({ newOrder, toast, highlight = 0 }) => (
   <DashboardShell active="Pedidos" breadcrumb="Pedidos">
     <div style={{ position: "relative" }}>
       <PageTitle title="Pedidos" subtitle="Acompanhe vendas, pagamentos e status de preparo." />
@@ -381,16 +383,31 @@ export const OrdersScreen: React.FC<{
         >
           <div
             style={{
+              position: "relative",
               display: "grid",
               gridTemplateColumns: "120px 1fr 130px 150px 140px",
               alignItems: "center",
               padding: "0 18px",
               height: 62,
               borderBottom: `1px solid ${color.line}`,
-              background: `rgba(240, 245, 255, ${1 - newOrder * 0.55})`,
+              // Fundo azul-claro que apaga sozinho — o mesmo recurso que
+              // qualquer painel usa para "isto acabou de chegar".
+              background: `rgba(222, 233, 255, ${Math.max(newOrder * 0.35, highlight * 0.85)})`,
               transform: `translateY(${(1 - newOrder) * -14}px)`,
             }}
           >
+            {/* Faixa de destaque à esquerda, some junto com o fundo. */}
+            <span
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 4,
+                background: color.blue600,
+                opacity: highlight,
+              }}
+            />
             <span style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 500, color: color.ink }}>1042</span>
             <span style={{ fontFamily: font.sans, fontSize: 14, color: color.inkBody }}>Marina Alves</span>
             <span

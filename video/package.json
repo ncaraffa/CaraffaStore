@@ -5,11 +5,18 @@
   "description": "Product film da CaraffaStore (Remotion). Projeto isolado: nada aqui entra no bundle da aplicação.",
   "scripts": {
     "studio": "remotion studio",
-    "render:master": "remotion render ProductFilm out/caraffastore-product-film-master.mp4 --codec=h264 --crf=16",
-    "render:web": "remotion render ProductFilm out/caraffastore-product-film-web.mp4 --codec=h264 --crf=26",
-    "render:webm": "remotion render ProductFilm out/caraffastore-product-film.webm --codec=vp9 --crf=34",
-    "render:poster": "remotion still ProductFilm out/caraffastore-product-film-poster.png --frame=60",
-    "render:all": "npm run render:master && npm run render:web && npm run render:webm && npm run render:poster"
+    "render:desktop:master": "remotion render CaraffaStoreProductFilmDesktop out/caraffastore-product-film-desktop-master.mp4 --codec=h264 --crf=16 --muted",
+    "render:desktop:web": "remotion render CaraffaStoreProductFilmDesktop out/caraffastore-product-film-desktop-web.mp4 --codec=h264 --crf=27 --muted",
+    "render:desktop:webm": "remotion render CaraffaStoreProductFilmDesktop out/caraffastore-product-film-desktop.webm --codec=vp9 --crf=34 --muted",
+    "render:desktop:poster": "remotion still CaraffaStoreProductFilmDesktop out/caraffastore-product-film-desktop-poster.jpeg --frame=0 --image-format=jpeg --jpeg-quality=90",
+    "render:mobile:master": "remotion render CaraffaStoreProductFilmMobile out/caraffastore-product-film-mobile-master.mp4 --codec=h264 --crf=16 --muted",
+    "render:mobile:web": "remotion render CaraffaStoreProductFilmMobile out/caraffastore-product-film-mobile-web.mp4 --codec=h264 --crf=27 --muted",
+    "render:mobile:webm": "remotion render CaraffaStoreProductFilmMobile out/caraffastore-product-film-mobile.webm --codec=vp9 --crf=34 --muted",
+    "render:mobile:poster": "remotion still CaraffaStoreProductFilmMobile out/caraffastore-product-film-mobile-poster.jpeg --frame=0 --image-format=jpeg --jpeg-quality=90",
+    "render:desktop": "npm run render:desktop:master && npm run render:desktop:web && npm run render:desktop:webm && npm run render:desktop:poster",
+    "render:mobile": "npm run render:mobile:master && npm run render:mobile:web && npm run render:mobile:webm && npm run render:mobile:poster",
+    "render:all": "npm run render:desktop && npm run render:mobile",
+    "preview": "node preview/serve.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.410",

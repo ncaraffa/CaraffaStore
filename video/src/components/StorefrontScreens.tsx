@@ -458,7 +458,16 @@ export const QrCode: React.FC<{ size: number; reveal?: number }> = ({ size, reve
 export const PixScreen: React.FC<{
   reveal: number;
   approved?: number;
-}> = ({ reveal, approved = 0 }) => {
+  /**
+   * Recorte para o quadro vertical: esconde o bloco "Pix Copia e Cola".
+   *
+   * Não é uma tela diferente — é a MESMA tela enquadrada até a linha de
+   * expiração. Na caixa do filme vertical o card inteiro não cabe, e
+   * deixar o rodapé entrando cortado no meio de uma frase lê como
+   * defeito. O QR e o valor, que são o assunto da cena, ficam inteiros.
+   */
+  compact?: boolean;
+}> = ({ reveal, approved = 0, compact = false }) => {
   const isApproved = approved > 0;
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: color.white }}>
@@ -597,12 +606,12 @@ export const PixScreen: React.FC<{
                   fontFamily: font.sans,
                   fontSize: 13,
                   color: color.inkMuted,
-                  marginBottom: 12,
+                  marginBottom: compact ? 18 : 12,
                 }}
               >
                 Expira em <span style={{ fontFamily: font.mono, color: color.ink }}>14:52</span>
               </div>
-              <div style={{ padding: "0 16px 16px" }}>
+              <div style={{ padding: "0 16px 16px", display: compact ? "none" : "block" }}>
                 <div
                   style={{
                     height: 38,
@@ -630,7 +639,7 @@ export const PixScreen: React.FC<{
           )}
 
           {isApproved && (
-            <div style={{ padding: "0 16px 18px", opacity: approved }}>
+            <div style={{ padding: "0 16px 18px", opacity: approved, display: compact ? "none" : "block" }}>
               <div
                 style={{
                   padding: "12px 14px",

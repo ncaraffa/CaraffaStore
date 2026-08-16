@@ -16,21 +16,39 @@ npm install
 npm run studio        # editor visual, com scrub na timeline
 ```
 
+## Duas composições
+
+| Composição | Formato | Onde entra |
+| --- | --- | --- |
+| `CaraffaStoreProductFilmDesktop` | 1920×1080 (16:9) | bloco largo da landing no desktop |
+| `CaraffaStoreProductFilmMobile` | 1080×1350 (4:5) | mesmo bloco no celular |
+
+As duas têm o **mesmo roteiro, os mesmos dados e o mesmo relógio** (900
+frames, 30 fps). O que muda é o enquadramento — a vertical **não é um corte**
+da horizontal. O motivo está medido em `src/components/MobileStage.tsx`: um
+celular de 390px exibindo um vídeo de 1080px reduz tudo por 0,36, então a
+interface real de 14px sairia com 5px. A versão vertical monta as telas na
+largura de um celular e amplia o bloco por 2,4.
+
 ## Renderizar
 
 ```bash
 cd video
-npm run render:all    # master, web, webm e poster
+npm run render:all       # desktop + mobile
+npm run render:desktop   # só 16:9
+npm run render:mobile    # só 4:5
 ```
 
-Ou individualmente:
-
-| Comando | Saída |
+| Saída | Codec |
 | --- | --- |
-| `npm run render:master` | `out/caraffastore-product-film-master.mp4` — H.264 CRF 16 |
-| `npm run render:web` | `out/caraffastore-product-film-web.mp4` — H.264 CRF 27 |
-| `npm run render:webm` | `out/caraffastore-product-film.webm` — VP9 CRF 34 |
-| `npm run render:poster` | `out/caraffastore-product-film-poster.png` |
+| `*-desktop-master.mp4` / `*-mobile-master.mp4` | H.264 CRF 16 |
+| `*-desktop-web.mp4` / `*-mobile-web.mp4` | H.264 CRF 27 |
+| `*-desktop.webm` / `*-mobile.webm` | VP9 CRF 34 |
+| `*-desktop-poster.jpeg` / `*-mobile-poster.jpeg` | frame 0, qualidade 90 |
+
+Todos os renders usam `--muted`: o Remotion adiciona uma trilha AAC silenciosa
+por padrão, e ela sozinha pesava ~1,2 MB num filme que é explicitamente sem
+áudio.
 
 `out/` é ignorado pelo Git: são binários grandes e reproduzíveis por comando.
 Quando o vídeo for de fato para a landing, o arquivo escolhido é copiado para
@@ -40,11 +58,12 @@ Quando o vídeo for de fato para a landing, o arquivo escolhido é copiado para
 
 ```bash
 cd video
-node preview/serve.mjs   # http://localhost:4321
+npm run preview   # http://localhost:4321
 ```
 
-A página reproduz o filme com `autoplay muted loop playsInline`, exatamente
-como ficaria na landing, e permite alternar entre as três versões renderizadas.
+A página tem três abas — **Desktop 16:9**, **Mobile 4:5** e **Mobile numa tela
+de 390px** — e permite alternar entre master, web e webm em cada uma. Tudo
+reproduz com `autoplay muted loop playsInline`, como ficaria na landing.
 
 ## Estrutura
 
@@ -56,8 +75,14 @@ src/
     theme.ts               tokens copiados de app/globals.css
     timing.ts              curvas de easing e helpers de entrada
     fonts.ts               as três fontes do site, carregadas localmente
-  components/              molduras, telas reproduzidas, cursor, marca, arte
-  scenes/                  uma cena por arquivo, na ordem do roteiro
+  ProductFilmMobile.tsx    a mesma timeline, no enquadramento vertical
+  components/
+    Stage.tsx              câmera do 16:9 (escala + foco em um ponto da tela)
+    MobileStage.tsx        a régua do vertical: base de celular x 2,4
+    MobileScreens.tsx      telas no layout mobile que a aplicação já serve
+    ...                    molduras, cursor, marca, arte de produto
+  scenes/                  cenas do 16:9, uma por arquivo
+  scenes/mobile/           as mesmas cenas, recompostas para 4:5
 preview/                   página e servidor estático só para revisão
 ```
 
