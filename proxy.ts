@@ -84,5 +84,14 @@ export const config = {
   // `icon`/`apple-icon`: convenção do App Router (app/icon.tsx) — gera
   // uma rota SEM extensão de arquivo (/icon, /icon?<hash>), então não
   // cai no padrão de extensão abaixo como favicon.ico caía.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon|apple-icon|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  //
+  // `mp4`/`webm` entram na lista pelo mesmo motivo das imagens: são
+  // arquivos estáticos de `public/`, sem semântica de sessão. Sem eles
+  // aqui, o filme da landing respondia 307 para visitante anônimo — o
+  // middleware mandava o arquivo para /login, e o vídeo simplesmente
+  // não tocava para quem ainda não tem conta, que é justamente quem a
+  // landing precisa convencer.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon|apple-icon|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm)$).*)",
+  ],
 };
