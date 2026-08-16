@@ -5,6 +5,7 @@ import { HeroScene } from "./HeroScene";
 import { StoreScene } from "./StoreScene";
 import { ConversationScene } from "./ConversationScene";
 import { StorefrontDemo } from "./StorefrontDemo";
+import { ProductFilm } from "./ProductFilm";
 import { PricingPlans } from "./PricingPlans";
 import { RevealRoot } from "./RevealRoot";
 import { getStoreUrlExample } from "@/lib/config/site";
@@ -235,6 +236,14 @@ export function LandingPage() {
               <IconLink />
               <span className={styles.mono}>{storeUrlExample}</span>
             </p>
+          </div>
+
+          {/* O filme abre a seção: em 30 segundos ele conta a história
+              inteira — publicar, vender, receber, ver o pedido. Os
+              mockups estáticos abaixo continuam servindo para quem quer
+              parar e olhar a tela com calma. */}
+          <div className={styles.filmSlot} data-reveal="lift">
+            <ProductFilm />
           </div>
 
           <StorefrontDemo />

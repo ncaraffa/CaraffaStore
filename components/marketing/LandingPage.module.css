@@ -436,6 +436,11 @@
   }
 }
 
+/* Espaço do filme de produto, no topo da seção de demonstração. */
+.filmSlot {
+  margin-bottom: clamp(2.5rem, 1.5rem + 3vw, 4rem);
+}
+
 /* ============================================================
    Bento de recursos
    Mobile-first e sem span órfão: um `span N` maior que o número
