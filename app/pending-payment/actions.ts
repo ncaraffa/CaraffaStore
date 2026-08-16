@@ -19,6 +19,14 @@ export interface BillingChargeState {
  * nunca aceita storeId do formulário: sempre resolvido de novo por
  * requireStoreStatus (sessão + RLS), exatamente como toda outra Server
  * Action protegida deste app.
+ *
+ * TASK-010: reaproveitada por duas telas — /pending-payment (primeira
+ * cobrança da loja) e /suspended quando a suspensão é por billing_overdue
+ * (pagar de novo reativa, ver billing_charge_apply_provider_state). Por
+ * isso aceita os dois status aqui; a granularidade fina — suspended só
+ * quando suspension_reason=billing_overdue, nunca platform_admin — é
+ * responsabilidade de billing_charge_upsert_creating (store_not_billable
+ * barra qualquer outro caso), não desta guarda de rota.
  */
 export async function createBillingChargeAction(_prev: BillingChargeState, formData: FormData): Promise<BillingChargeState> {
   const parsed = billingChargeSchema.safeParse({
@@ -36,7 +44,7 @@ export async function createBillingChargeAction(_prev: BillingChargeState, formD
 
   const storeSlug = String(formData.get("storeSlug") ?? "") || undefined;
   const supabase = await createServerSupabaseClient();
-  const { store } = await requireStoreStatus(supabase, "pending_payment", storeSlug);
+  const { store } = await requireStoreStatus(supabase, ["pending_payment", "suspended"], storeSlug);
 
   try {
     await createPlatformBillingCharge({

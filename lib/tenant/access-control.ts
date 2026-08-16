@@ -62,16 +62,26 @@ export interface StoreAccess {
  * Alterar a URL/slug/parâmetro nunca muda o resultado: o status vem
  * sempre de uma consulta fresca ao banco (RLS + `auth.uid()` ×
  * `store_members`), nunca de nada que o cliente afirme.
+ *
+ * `requiredStatus` aceita mais de um status (TASK-010) para Server
+ * Actions compartilhadas por duas telas de status diferente — hoje só
+ * createBillingChargeAction (app/pending-payment/actions.ts), que serve
+ * tanto /pending-payment (pending_payment) quanto /suspended quando a
+ * suspensão é por billing_overdue (["pending_payment", "suspended"]). A
+ * granularidade fina (ex.: suspended só quando suspension_reason=
+ * billing_overdue, nunca platform_admin) não vive aqui — fica a cargo da
+ * própria RPC (billing_charge_upsert_creating), defesa em profundidade.
  */
 export async function requireStoreStatus(
   supabase: Client,
-  requiredStatus: StoreStatus,
+  requiredStatus: StoreStatus | StoreStatus[],
   requestedSlug?: string,
 ): Promise<StoreAccess> {
   const session = await requireVerifiedSession(supabase);
   const access = await resolveAuthorizedAccess(supabase, session.userId, requestedSlug);
 
-  if (access.store.status !== requiredStatus) {
+  const allowed = Array.isArray(requiredStatus) ? requiredStatus : [requiredStatus];
+  if (!allowed.includes(access.store.status)) {
     redirect(storeStatusRedirectPath(access.store.status, access.store.slug));
   }
 

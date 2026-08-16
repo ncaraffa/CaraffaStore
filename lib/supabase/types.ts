@@ -58,7 +58,10 @@ export type AuditAction =
   | "store_activated_by_billing"
   | "billing_subscription_renewed"
   | "store_suspended_by_platform_admin"
-  | "store_reactivated_by_platform_admin";
+  | "store_reactivated_by_platform_admin"
+  | "store_suspended_by_billing_overdue"
+  | "store_reactivated_by_billing";
+export type StoreSuspensionReason = "platform_admin" | "billing_overdue";
 export type ProductStatus = "draft" | "published" | "archived";
 export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "completed" | "cancelled";
 export type FulfillmentMethod = "pickup" | "delivery";
@@ -86,6 +89,7 @@ export interface Database {
           status: StoreStatus;
           whatsapp: string | null;
           pre_suspension_status: StoreStatus | null;
+          suspension_reason: StoreSuspensionReason | null;
           created_at: string;
         };
         Insert: {
@@ -95,6 +99,7 @@ export interface Database {
           status?: StoreStatus;
           whatsapp?: string | null;
           pre_suspension_status?: StoreStatus | null;
+          suspension_reason?: StoreSuspensionReason | null;
           created_at?: string;
         };
         Update: {
@@ -104,6 +109,7 @@ export interface Database {
           status?: StoreStatus;
           whatsapp?: string | null;
           pre_suspension_status?: StoreStatus | null;
+          suspension_reason?: StoreSuspensionReason | null;
           created_at?: string;
         };
         Relationships: [];
@@ -1319,6 +1325,7 @@ export interface Database {
           name: string;
           status: StoreStatus;
           pre_suspension_status: StoreStatus | null;
+          suspension_reason: StoreSuspensionReason | null;
           whatsapp: string | null;
           plan_code: PlanCode | null;
           store_created_at: string;
@@ -1334,6 +1341,10 @@ export interface Database {
       platform_admin_set_store_status: {
         Args: { p_store_id: string; p_action: "suspend" | "reactivate" };
         Returns: Database["public"]["Tables"]["stores"]["Row"];
+      };
+      billing_suspend_overdue_stores: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["stores"]["Row"][];
       };
     };
   };

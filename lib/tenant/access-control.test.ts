@@ -174,6 +174,28 @@ describe("requireStoreStatus — guards de estado (BUG-T2-001, qa/reports/TASK-0
     expect(redirectMock).not.toHaveBeenCalled();
   });
 
+  it("requiredStatus como array (TASK-010): status presente na lista é permitido, sem redirecionar", async () => {
+    resolveMembershipSituationMock.mockResolvedValue({
+      kind: "one",
+      store: { id: "s1", slug: "loja-x", name: "Loja X", status: "suspended" },
+      role: "owner",
+    });
+    const result = await requireStoreStatus(supabase(), ["pending_payment", "suspended"]);
+    expect(result.store.status).toBe("suspended");
+    expect(redirectMock).not.toHaveBeenCalled();
+  });
+
+  it("requiredStatus como array: status fora da lista continua bloqueado, redireciona pro destino real", async () => {
+    resolveMembershipSituationMock.mockResolvedValue({
+      kind: "one",
+      store: { id: "s1", slug: "loja-x", name: "Loja X", status: "active" },
+      role: "owner",
+    });
+    await expect(requireStoreStatus(supabase(), ["pending_payment", "suspended"])).rejects.toThrow(
+      "REDIRECT:/dashboard?store=loja-x",
+    );
+  });
+
   it("?store= válido mas status errado: bloqueado mesmo com membership real (alterar a URL não muda o estado autorizado)", async () => {
     resolveAuthorizedStoreMock.mockResolvedValue({ storeId: "s1", storeSlug: "loja-x", role: "owner" });
     getStoreBySlugMock.mockResolvedValue({

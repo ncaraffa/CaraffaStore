@@ -196,6 +196,13 @@ export default async function AdminPage({
                               volta como {STATUS_LABEL[store.pre_suspension_status].toLowerCase()}
                             </span>
                           )}
+                          {store.status === "suspended" && (
+                            <span className={styles.subLabel}>
+                              {store.suspension_reason === "billing_overdue"
+                                ? "por atraso — reativa sozinha ao pagar"
+                                : "suspensa manualmente"}
+                            </span>
+                          )}
                         </td>
 
                         <td>
