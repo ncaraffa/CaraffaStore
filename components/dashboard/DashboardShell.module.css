@@ -274,7 +274,12 @@
   bottom: 0;
   z-index: var(--cs-z-sticky);
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* Colunas derivadas da quantidade real de itens (era `repeat(5, ...)`
+     fixo, que jogava a 6ª aba — Assinatura, TASK-011 — para uma segunda
+     linha sobreposta ao conteúdo). Assim a barra acompanha qualquer
+     mudança futura em dashboardNavItems sem edição de CSS. */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -304,6 +309,20 @@
   font-size: 0.625rem;
   font-weight: 600;
   letter-spacing: -0.005em;
+  /* Com 6 abas, os rótulos mais longos ("Pagamentos", "Categorias")
+     encostam na borda da célula em telas de 360-375px. Truncar é melhor
+     que deixar quebrar em duas linhas e desalinhar a altura das abas —
+     o ícone e o estado ativo continuam identificando a seção. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 380px) {
+  .mobileTab span {
+    font-size: 0.5625rem;
+  }
 }
 
 .mobileTab[data-active] {

@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, BillingChargeStatus, PixDocType } from "@/lib/supabase/types";
+import type { Database, BillingChargeStatus, PixDocType, PlanCode } from "@/lib/supabase/types";
 import { createPaymentsServiceClient } from "@/lib/payments/service-only/client";
 import { getPlatformPaymentCredentials } from "@/lib/payments/service-only/platform-credentials";
 import { getPixPaymentGateway } from "@/lib/payments/gateway";
@@ -32,12 +32,22 @@ export interface BillingChargeParams {
   payerEmail: string;
   payerDocType: PixDocType;
   payerDocNumber: string;
+  /**
+   * TASK-011 — plano escolhido para ESTA cobrança (renovação com
+   * upgrade/downgrade). Ausente = mantém o plano vigente da loja. Nunca
+   * carrega preço: `billing_charge_upsert_creating` deriva o valor de
+   * `platform_plan_price_cents` no banco a partir deste código, e um
+   * código fora de (30, 50, 80) vira `invalid_plan_code`. A troca só
+   * passa a valer em `store_plans` quando o pagamento é aprovado.
+   */
+  planCode?: PlanCode | null;
 }
 
 export interface BillingChargeResult {
   id: string;
   status: BillingChargeStatus;
-  planCode: number;
+  /** Sempre 30/50/80 — a coluna tem check constraint fechada (0008_saas_billing.sql), então o tipo estreito é fiel ao banco e evita cast em quem consome (getPlatformPlan). */
+  planCode: PlanCode;
   amountCents: number;
   qrCode: string | null;
   qrCodeBase64: string | null;
@@ -103,6 +113,7 @@ export async function createPlatformBillingCharge(params: BillingChargeParams): 
     p_payer_email: params.payerEmail,
     p_payer_doc_type: params.payerDocType,
     p_payer_doc_last4: params.payerDocNumber.slice(-4),
+    p_plan_code: params.planCode ?? null,
   });
 
   if (upsertError || !charge) {

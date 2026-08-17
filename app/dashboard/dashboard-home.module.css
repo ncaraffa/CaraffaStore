@@ -7,6 +7,14 @@
   margin-bottom: var(--cs-space-6);
 }
 
+/* Aviso de vencimento da assinatura — fica entre o cabeçalho e a faixa
+   de números, não dentro do cartão "precisa de atenção": aquele cartão
+   trata de operação da loja (Pix, estoque), este trata de a loja
+   continuar existindo. */
+.subscriptionNotice {
+  margin-bottom: var(--cs-space-6);
+}
+
 .title {
   font-size: var(--cs-text-h2);
   letter-spacing: var(--cs-tracking-tight);

@@ -60,7 +60,8 @@ export type AuditAction =
   | "store_suspended_by_platform_admin"
   | "store_reactivated_by_platform_admin"
   | "store_suspended_by_billing_overdue"
-  | "store_reactivated_by_billing";
+  | "store_reactivated_by_billing"
+  | "plan_changed_by_billing";
 export type StoreSuspensionReason = "platform_admin" | "billing_overdue";
 export type ProductStatus = "draft" | "published" | "archived";
 export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "completed" | "cancelled";
@@ -1247,6 +1248,8 @@ export interface Database {
           p_payer_email: string;
           p_payer_doc_type: PixDocType;
           p_payer_doc_last4: string;
+          /** TASK-011: plano escolhido para ESTA cobrança (renovação com troca). Ausente = mantém o plano vigente. Só passa a valer em store_plans quando a cobrança é aprovada. */
+          p_plan_code?: PlanCode | null;
         };
         Returns: Database["public"]["Tables"]["billing_charges"]["Row"];
       };
@@ -1311,6 +1314,17 @@ export interface Database {
           period_start: string;
           period_end: string;
           created_at: string;
+        }[];
+      };
+      billing_get_subscription: {
+        Args: { p_store_id: string };
+        Returns: {
+          current_plan_code: PlanCode | null;
+          subscribed_at: string | null;
+          current_period_start: string | null;
+          current_period_end: string | null;
+          last_approved_plan_code: PlanCode | null;
+          last_approved_amount_cents: number | null;
         }[];
       };
       is_platform_admin: {
