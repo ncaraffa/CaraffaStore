@@ -55,7 +55,7 @@ describe("createPlatformBillingCharge", () => {
    *   e o preço segue derivado no banco a partir dele. Sem troca de plano,
    *   segue indo explicitamente `null` (nunca um palpite do cliente).
    */
-  it("sem troca de plano: manda p_plan_code null e NUNCA amount_cents — servidor deriva o valor sozinho", async () => {
+  it("sem troca de plano: manda p_plan_key null e NUNCA amount_cents — servidor deriva o valor sozinho", async () => {
     serviceClientMock.rpc.mockResolvedValueOnce({ data: { ...CREATING_CHARGE, status: "pending" }, error: null });
 
     const { createPlatformBillingCharge } = await import("./orchestration");
@@ -71,11 +71,11 @@ describe("createPlatformBillingCharge", () => {
       expect.objectContaining({ p_store_id: "store-1", p_payer_email: "a@b.com", p_payer_doc_type: "CPF", p_payer_doc_last4: "8901" }),
     );
     const args = serviceClientMock.rpc.mock.calls[0]?.[1];
-    expect(args.p_plan_code).toBeNull();
+    expect(args.p_plan_key).toBeNull();
     expect(args).not.toHaveProperty("p_amount_cents");
   });
 
-  it("renovação com troca de plano: repassa só o CÓDIGO do plano escolhido, nunca um valor", async () => {
+  it("renovação com troca de plano: repassa só a IDENTIDADE do plano (plan_key), nunca um valor", async () => {
     serviceClientMock.rpc.mockResolvedValueOnce({ data: { ...CREATING_CHARGE, status: "pending" }, error: null });
 
     const { createPlatformBillingCharge } = await import("./orchestration");
@@ -88,7 +88,11 @@ describe("createPlatformBillingCharge", () => {
     });
 
     const args = serviceClientMock.rpc.mock.calls[0]?.[1];
-    expect(args.p_plan_code).toBe(80);
+    // TASK-012: a identidade que viaja é plan_key. O 80 legado enviado
+    // pela tela antiga é traduzido contra o catálogo na fronteira — e o
+    // preço continua sem sair do banco.
+    expect(args.p_plan_key).toBe("professional");
+    expect(args).not.toHaveProperty("p_plan_code");
     expect(args).not.toHaveProperty("p_amount_cents");
     expect(args).not.toHaveProperty("p_price");
     expect(args).not.toHaveProperty("p_amount");

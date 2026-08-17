@@ -7,6 +7,8 @@ export type OnboardingStep =
   | "plan"
   | "review"
   | "completed";
+export type PlanKey = "essential" | "growth" | "professional";
+
 export type PlanCode = 30 | 50 | 80;
 export type AuditAction =
   | "email_verification_completed"
@@ -1248,8 +1250,8 @@ export interface Database {
           p_payer_email: string;
           p_payer_doc_type: PixDocType;
           p_payer_doc_last4: string;
-          /** TASK-011: plano escolhido para ESTA cobrança (renovação com troca). Ausente = mantém o plano vigente. Só passa a valer em store_plans quando a cobrança é aprovada. */
-          p_plan_code?: PlanCode | null;
+          /** TASK-012: plano escolhido para ESTA cobrança (renovação com troca), por plan_key. Ausente = mantém o plano vigente da ASSINATURA. Só passa a valer em workspace_subscriptions quando a cobrança é aprovada. */
+          p_plan_key?: PlanKey | null;
         };
         Returns: Database["public"]["Tables"]["billing_charges"]["Row"];
       };

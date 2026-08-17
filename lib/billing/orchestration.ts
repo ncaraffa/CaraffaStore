@@ -2,6 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, BillingChargeStatus, PixDocType, PlanCode } from "@/lib/supabase/types";
+import { planKeyFromLegacyCode } from "@/lib/billing/plans";
 import { createPaymentsServiceClient } from "@/lib/payments/service-only/client";
 import { getPlatformPaymentCredentials } from "@/lib/payments/service-only/platform-credentials";
 import { getPixPaymentGateway } from "@/lib/payments/gateway";
@@ -81,7 +82,7 @@ function mapRpcErrorToBillingCode(message: string | undefined): string {
   const text = message ?? "";
   if (text.includes("store_not_billable")) return "store_not_billable";
   if (text.includes("plan_not_selected")) return "plan_not_selected";
-  if (text.includes("invalid_plan_code")) return "invalid_plan_code";
+  if (text.includes("invalid_plan_code") || text.includes("invalid_plan")) return "invalid_plan_code";
   if (text.includes("invalid_payer_document")) return "invalid_payer_document";
   if (text.includes("invalid_payer_email")) return "invalid_payer_email";
   if (text.includes("store_not_found")) return "store_not_found";
@@ -113,7 +114,11 @@ export async function createPlatformBillingCharge(params: BillingChargeParams): 
     p_payer_email: params.payerEmail,
     p_payer_doc_type: params.payerDocType,
     p_payer_doc_last4: params.payerDocNumber.slice(-4),
-    p_plan_code: params.planCode ?? null,
+    // TASK-012: a RPC passa a falar plan_key. As telas legadas ainda
+    // enviam plan_code numérico, então a tradução acontece AQUI, na
+    // fronteira — e contra o catálogo, nunca por aritmética de preço.
+    // Um código desconhecido vira null e o banco responde plan_not_selected.
+    p_plan_key: params.planCode != null ? planKeyFromLegacyCode(params.planCode) : null,
   });
 
   if (upsertError || !charge) {
