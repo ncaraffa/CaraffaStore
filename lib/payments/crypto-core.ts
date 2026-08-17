@@ -16,6 +16,24 @@ const ALGORITHM = "aes-256-gcm";
 const KEY_BYTES = 32;
 const IV_BYTES = 12;
 
+/**
+ * Tamanho da authentication tag do GCM, em bytes (128 bits — o máximo e o
+ * único valor que usamos).
+ *
+ * Fixar isto explicitamente nos dois lados é uma exigência de segurança,
+ * não estética. Sem a opção `authTagLength`, `createDecipheriv` aceita
+ * QUALQUER tamanho de tag válido para GCM (4, 8, 12, 13, 14, 15 ou 16
+ * bytes) — quem controlasse o valor gravado poderia trocar a tag de 16
+ * bytes por uma de 4 e reduzir a força da verificação de 2^128 para 2^32,
+ * o que torna forjar um ciphertext viável. Passando o tamanho esperado, o
+ * Node recusa de saída qualquer tag que não tenha exatamente 16 bytes.
+ *
+ * Compatível com o que já está gravado: 16 bytes sempre foi o padrão do
+ * Node no `getAuthTag()`, então todo valor existente no banco já tem uma
+ * tag desse tamanho e continua sendo lido sem migração.
+ */
+const AUTH_TAG_BYTES = 16;
+
 export function getEncryptionKeyFromEnv(raw: string | undefined): Buffer {
   if (!raw || raw.trim().length === 0) {
     throw new Error(
@@ -42,7 +60,7 @@ export function getEncryptionKeyFromEnv(raw: string | undefined): Buffer {
 /** Formato: `<iv base64>:<authTag base64>:<ciphertext base64>`. IV aleatório a cada chamada. */
 export function encryptWithKey(plaintext: string, key: Buffer): string {
   const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv(ALGORITHM, key, iv);
+  const cipher = createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_BYTES });
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const authTag = cipher.getAuthTag();
   return [iv.toString("base64"), authTag.toString("base64"), ciphertext.toString("base64")].join(":");
@@ -58,7 +76,18 @@ export function decryptWithKey(encoded: string, key: Buffer): string {
   const authTag = Buffer.from(tagB64, "base64");
   const ciphertext = Buffer.from(ciphertextB64, "base64");
 
-  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  // Conferidos antes de chegar ao `node:crypto`: um IV de tamanho
+  // diferente muda o modo como o GCM deriva o contador, e uma tag mais
+  // curta enfraqueceria a verificação (ver AUTH_TAG_BYTES). Recusar aqui
+  // dá erro claro em vez de depender do comportamento interno do Node.
+  if (iv.length !== IV_BYTES) {
+    throw new Error("Valor criptografado malformado: IV com tamanho inesperado.");
+  }
+  if (authTag.length !== AUTH_TAG_BYTES) {
+    throw new Error("Valor criptografado malformado: authentication tag com tamanho inesperado.");
+  }
+
+  const decipher = createDecipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_BYTES });
   decipher.setAuthTag(authTag);
   const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   return plaintext.toString("utf8");
