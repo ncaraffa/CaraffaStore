@@ -4,11 +4,13 @@ import type { Database } from "@/lib/supabase/types";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireStoreStatus } from "@/lib/tenant/access-control";
 import { getDashboardSummary } from "@/lib/dashboard/service";
+import { getSubscriptionStatus, OVERDUE_GRACE_DAYS } from "@/lib/billing/subscription";
 import { getPaymentSettings, PaymentSettingsError, type PaymentSettingsView } from "@/lib/payments/settings-service";
 import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/orders/messages";
 import { formatPriceCents } from "@/lib/catalog/format";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -74,9 +76,10 @@ export default async function DashboardPage({
    */
   const canManagePayments = role === "owner" || role === "admin";
 
-  const [summary, paymentSettings] = await Promise.all([
+  const [summary, paymentSettings, subscription] = await Promise.all([
     getDashboardSummary(supabase, store.id),
     canManagePayments ? fetchPaymentSettingsSafely(supabase, store.id) : Promise.resolve(null),
+    getSubscriptionStatus(supabase, store.id),
   ]);
 
   const pixReady = paymentSettings ? paymentSettings.isConfigured && paymentSettings.isEnabled : false;
@@ -98,6 +101,30 @@ export default async function DashboardPage({
           Ver catálogo público
         </a>
       </div>
+
+      {/* Aviso de vencimento acima de tudo, inclusive dos números: é a
+          única coisa desta tela que, ignorada, tira a loja do ar. Some
+          sozinho assim que a renovação é aprovada — não é um banner fixo
+          de marketing, é um prazo real. */}
+      {subscription?.isExpiringSoon && (
+        <div className={styles.subscriptionNotice}>
+          <Alert tone="warning" title="Sua assinatura expira em breve">
+            {subscription.daysRemaining === 1
+              ? "Sua assinatura vence amanhã."
+              : `Faltam ${subscription.daysRemaining} dias para o vencimento.`}{" "}
+            <Link href={`/dashboard/assinatura?store=${store.slug}`}>Renovar agora</Link>
+          </Alert>
+        </div>
+      )}
+
+      {subscription?.isExpired && (
+        <div className={styles.subscriptionNotice}>
+          <Alert tone="danger" title="Sua assinatura venceu">
+            A loja é bloqueada automaticamente {OVERDUE_GRACE_DAYS} dias após o vencimento.{" "}
+            <Link href={`/dashboard/assinatura?store=${store.slug}`}>Renovar agora</Link>
+          </Alert>
+        </div>
+      )}
 
       {/* Faixa de destaque — três números reais, o de receita pesa mais
           porque é a pergunta que o lojista faz primeiro ao abrir o painel. */}

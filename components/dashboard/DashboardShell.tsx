@@ -10,6 +10,7 @@ import {
   IconBox,
   IconReceipt,
   IconCreditCard,
+  IconLayers,
   IconLogout,
   IconExternalLink,
   IconChevronDown,
@@ -23,6 +24,7 @@ const NAV_ICONS: Record<DashboardNavKey, ReactNode> = {
   produtos: <IconBox />,
   pedidos: <IconReceipt />,
   pagamentos: <IconCreditCard />,
+  assinatura: <IconLayers />,
 };
 
 const STATUS_LABEL: Record<StoreStatus, { label: string; tone: BadgeTone }> = {

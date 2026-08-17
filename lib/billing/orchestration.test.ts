@@ -40,7 +40,22 @@ describe("createPlatformBillingCharge", () => {
     getPlatformPaymentCredentialsMock.mockReturnValue(CREDENTIALS);
   });
 
-  it("nunca envia plan_code/amount_cents ao RPC de criação — servidor deriva sozinho", async () => {
+  /**
+   * TASK-011 mudou UMA das duas asserções originais deste teste, de
+   * propósito e sem afrouxar a garantia que importa:
+   *
+   * - `p_amount_cents` nunca ser enviado continua valendo integralmente —
+   *   é a garantia de dinheiro: o valor sai de platform_plan_price_cents
+   *   no banco, jamais de algo que trafegou pelo navegador.
+   * - `p_plan_code` nunca ser enviado era um PROXY dessa garantia, válido
+   *   enquanto o plano era obrigatoriamente o já gravado em store_plans.
+   *   Com a renovação com troca de plano, o código do plano passou a ser
+   *   uma escolha legítima do lojista — mas continua sendo só um CÓDIGO,
+   *   validado contra a lista fechada (30/50/80) no Zod e de novo na RPC,
+   *   e o preço segue derivado no banco a partir dele. Sem troca de plano,
+   *   segue indo explicitamente `null` (nunca um palpite do cliente).
+   */
+  it("sem troca de plano: manda p_plan_code null e NUNCA amount_cents — servidor deriva o valor sozinho", async () => {
     serviceClientMock.rpc.mockResolvedValueOnce({ data: { ...CREATING_CHARGE, status: "pending" }, error: null });
 
     const { createPlatformBillingCharge } = await import("./orchestration");
@@ -56,8 +71,27 @@ describe("createPlatformBillingCharge", () => {
       expect.objectContaining({ p_store_id: "store-1", p_payer_email: "a@b.com", p_payer_doc_type: "CPF", p_payer_doc_last4: "8901" }),
     );
     const args = serviceClientMock.rpc.mock.calls[0]?.[1];
-    expect(args).not.toHaveProperty("p_plan_code");
+    expect(args.p_plan_code).toBeNull();
     expect(args).not.toHaveProperty("p_amount_cents");
+  });
+
+  it("renovação com troca de plano: repassa só o CÓDIGO do plano escolhido, nunca um valor", async () => {
+    serviceClientMock.rpc.mockResolvedValueOnce({ data: { ...CREATING_CHARGE, status: "pending" }, error: null });
+
+    const { createPlatformBillingCharge } = await import("./orchestration");
+    await createPlatformBillingCharge({
+      storeId: "store-1",
+      payerEmail: "a@b.com",
+      payerDocType: "CPF",
+      payerDocNumber: "12345678901",
+      planCode: 80,
+    });
+
+    const args = serviceClientMock.rpc.mock.calls[0]?.[1];
+    expect(args.p_plan_code).toBe(80);
+    expect(args).not.toHaveProperty("p_amount_cents");
+    expect(args).not.toHaveProperty("p_price");
+    expect(args).not.toHaveProperty("p_amount");
   });
 
   it("cobrança reaproveitada (status já pending) nunca chama o gateway de novo", async () => {
