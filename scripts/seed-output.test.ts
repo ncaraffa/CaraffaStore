@@ -11,10 +11,19 @@ import { logSeedFailure, logSeedSummary } from "./seed-output";
  * aparece nela — não apenas que a documentação evita certas palavras.
  */
 
+/**
+ * Valores-sentinela: existem só para serem procurados na saída capturada
+ * (`expect(output).not.toContain(...)`), nunca são assinados, decodificados
+ * nem passados para o Supabase. Por isso NÃO têm forma de JWT: antes eles
+ * começavam com o header `eyJhbGciOi...` real de um JWT, o que fazia
+ * scanners de segredo (Gitleaks/Semgrep `detected-jwt-token`) marcarem este
+ * arquivo em toda varredura, sem que o formato acrescentasse nada ao teste.
+ * Strings opacas e obviamente falsas cumprem o mesmo papel e não voltam
+ * como falso positivo.
+ */
 const KNOWN_DEV_PASSWORD = "dev-local-only-not-a-real-secret-123!";
-const FAKE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake-anon-key-for-test";
-const FAKE_SERVICE_ROLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake-service-role-key-for-test";
+const FAKE_ANON_KEY = "not-a-real-anon-key-sentinel-for-test-only";
+const FAKE_SERVICE_ROLE_KEY = "not-a-real-service-role-key-sentinel-for-test-only";
 
 const FORBIDDEN_PATTERNS = [
   /password/i,
