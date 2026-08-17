@@ -74,6 +74,13 @@ export default function SignupPage() {
           <Button type="submit" size="lg" fullWidth loading={pending}>
             Criar conta
           </Button>
+
+          {/* Dito ANTES de enviar, não só depois: a demora é real (alguns
+              minutos), e quem não sabe disso reenvia várias vezes, bate no
+              rate limit e acha que o cadastro quebrou. */}
+          <p className={styles.deliveryNote}>
+            O e-mail de confirmação pode levar alguns minutos para chegar. Se não encontrar, confira a caixa de spam.
+          </p>
         </form>
       )}
 

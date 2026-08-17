@@ -26,6 +26,17 @@
   margin-bottom: var(--cs-space-5);
 }
 
+/* Nota de expectativa sob o botão de criar conta — informativa, então
+   discreta (mesmo peso do subtítulo). Um Alert aqui gritaria "problema"
+   antes de existir problema algum. */
+.deliveryNote {
+  margin-top: var(--cs-space-4);
+  font-size: var(--cs-text-xs);
+  line-height: 1.5;
+  color: var(--cs-ink-muted);
+  text-align: center;
+}
+
 .subtitle {
   color: var(--cs-ink-muted);
   font-size: var(--cs-text-sm);

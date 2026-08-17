@@ -30,7 +30,8 @@ export default async function VerifyPage() {
       <h1>Confirme seu e-mail</h1>
       <p className={styles.subtitle}>
         Enviamos um link de confirmação para <strong>{user.email}</strong>. Verifique sua caixa de entrada (e o
-        spam) antes de continuar.
+        spam) antes de continuar. <strong>O e-mail pode levar alguns minutos para chegar</strong> — vale esperar
+        antes de pedir um novo envio.
       </p>
       <ResendForm />
       <div style={{ marginTop: "1.25rem" }}>
