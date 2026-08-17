@@ -507,16 +507,8 @@ export const M8Close: React.FC = () => {
           </PrimaryButton>
         </div>
 
-        <div
-          style={{
-            marginTop: 34,
-            fontFamily: font.mono,
-            fontSize: 24,
-            color: color.inkMuted,
-            ...rise(frame, 0.78, 16),
-          }}
-        >
-          caraffastore.com.br
+        <div style={{ marginTop: 34, ...rise(frame, 0.78, 16) }}>
+          <Logo scale={0.58} />
         </div>
       </div>
     </AbsoluteFill>

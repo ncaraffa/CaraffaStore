@@ -67,19 +67,10 @@ export const Scene08Close: React.FC = () => {
           </div>
         </div>
 
-        {/* Endereço do site em mono, discreto — o último dado literal do
-            filme, no mesmo papel tipográfico que o resto do produto usa
-            para dado literal. */}
-        <div
-          style={{
-            marginTop: 26,
-            fontFamily: font.mono,
-            fontSize: 16,
-            color: color.inkMuted,
-            ...line(0.8),
-          }}
-        >
-          caraffastore.com.br
+        {/* Selo pequeno da marca no rodapé, sem endereço de site — a loja
+            ainda não tem domínio próprio. */}
+        <div style={{ marginTop: 26, ...line(0.8) }}>
+          <Logo scale={0.42} />
         </div>
       </div>
     </AbsoluteFill>
