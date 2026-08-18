@@ -23,7 +23,7 @@ MIGRATIONS_DIR="supabase/migrations"
 STASH_DIR="$(mktemp -d)"
 PSQL="docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -v ON_ERROR_STOP=1"
 
-NEW_MIGRATIONS="0012_plan_entitlements.sql 0013_workspace_subscription.sql 0014_quota_enforcement.sql 0015_workspace_team.sql 0016_app_sessions.sql 0017_app_session_by_store.sql 0018_session_fail_closed.sql 0019_coupons.sql 0020_coupon_lifecycle.sql 0021_revoke_default_table_grants.sql 0022_fix_workspace_members_rls_recursion.sql"
+NEW_MIGRATIONS="0012_plan_entitlements.sql 0013_workspace_subscription.sql 0014_quota_enforcement.sql 0015_workspace_team.sql 0016_app_sessions.sql 0017_app_session_by_store.sql 0018_session_fail_closed.sql 0019_coupons.sql 0020_coupon_lifecycle.sql 0021_revoke_default_table_grants.sql 0022_fix_workspace_members_rls_recursion.sql 0023_no_session_resurrection.sql"
 
 restore_migrations() {
   for f in $NEW_MIGRATIONS; do
@@ -33,7 +33,7 @@ restore_migrations() {
 }
 trap restore_migrations EXIT
 
-echo "==> Movendo 0012..0022 para fora (simula estado pós-0011)"
+echo "==> Movendo 0012..0023 para fora (simula estado pós-0011)"
 for f in $NEW_MIGRATIONS; do mv "$MIGRATIONS_DIR/$f" "$STASH_DIR/"; done
 
 echo "==> supabase db reset (aplica 0001..0011)"
@@ -84,7 +84,7 @@ SQL
 CHARGE_BEFORE=$($PSQL -q -t -A -c "select amount_cents || '|' || status || '|' || approved_at from public.billing_charges where external_reference='ext-upgrade-1';")
 echo "    cobrança histórica antes do upgrade: $CHARGE_BEFORE"
 
-echo "==> Devolvendo 0012..0022 e aplicando migration up (SEM reset)"
+echo "==> Devolvendo 0012..0023 e aplicando migration up (SEM reset)"
 for f in $NEW_MIGRATIONS; do mv "$STASH_DIR/$f" "$MIGRATIONS_DIR/"; done
 npx supabase migration up --local >/dev/null
 

@@ -271,6 +271,44 @@ else
   bad "Mailpit sem mensagens — não deu para testar recuperação"
 fi
 
+# ------------------------------------------------------------
+echo
+echo "== 8. Sessão revogada NÃO ressuscita ao recarregar (regressão 0023) =="
+# O upsert de app_session_start fazia `revoked_at = null` no ON CONFLICT,
+# então o browser revogado voltava a ter sessão só carregando uma página.
+# Só aparecia quando a revogada era a ÚNICA sessão — com outra ativa, o
+# ramo de conflito retornava antes.
+$PSQL >/dev/null <<SQL
+delete from public.app_sessions where workspace_id = '${WS}';
+update public.workspace_subscriptions set plan_key='essential' where workspace_id='${WS}';
+SQL
+R_TOK=$(login "$EMAIL" | access_of)
+rpc "$R_TOK" app_session_start_for_store "{\"p_store_id\":\"${STORE}\",\"p_user_agent_label\":\"Ressurreicao\"}" >/dev/null
+ATIVAS=$($PSQL -c "select count(*) from public.app_sessions where workspace_id='${WS}' and revoked_at is null;")
+[ "$ATIVAS" = "1" ] && ok "sessão aberta antes do teste" || bad "esperava 1 sessão, got ${ATIVAS}"
+
+# revoga por DECISÃO (takeover) e deixa como única
+$PSQL -c "update public.app_sessions set revoked_at=now(), revoked_reason='takeover' where workspace_id='${WS}';" >/dev/null
+
+# o mesmo JWT tenta reabrir: tem que ser NEGADO, não ressuscitado
+RES=$(rpc "$R_TOK" app_session_start_for_store "{\"p_store_id\":\"${STORE}\",\"p_user_agent_label\":\"Ressurreicao\"}")
+echo "$RES" | grep -q "session_revoked" && ok "reabrir sessão revogada devolve session_revoked"                                         || bad "sessão revogada foi reaberta: $RES"
+ATIVAS=$($PSQL -c "select count(*) from public.app_sessions where workspace_id='${WS}' and revoked_at is null;")
+[ "$ATIVAS" = "0" ] && ok "continua 0 sessões ativas (sem ressurreição)" || bad "${ATIVAS} ativa(s) após tentativa"
+probe_all "$R_TOK" "após tentativa de ressurreição" reject
+
+# ------------------------------------------------------------
+echo
+echo "== 9. Lease vencido (stale) PODE ser reocupado pelo mesmo browser =="
+# Contraponto: 'stale' é abandono, não punição. Se o mesmo browser volta
+# com token válido, tem que seguir trabalhando — senão um almoço longo
+# viraria logout.
+$PSQL >/dev/null <<SQL
+update public.app_sessions set revoked_reason='stale' where workspace_id='${WS}';
+SQL
+RES=$(rpc "$R_TOK" app_session_start_for_store "{\"p_store_id\":\"${STORE}\",\"p_user_agent_label\":\"Voltou\"}")
+echo "$RES" | grep -q '"conflict":false' && ok "sessão stale reocupada pelo mesmo browser" || bad "stale não pôde voltar: $RES"
+
 $PSQL -c "drop table if exists public._fc_fixture;" >/dev/null
 
 echo

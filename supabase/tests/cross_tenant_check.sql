@@ -234,6 +234,57 @@ end;
 $t$;
 rollback to savepoint sessao;
 
+-- ============================================================
+-- ANON: storefront publico continua publico, resto negado
+-- ============================================================
+--
+-- Contrapeso ao endurecimento de RLS: ao fechar as tabelas novas, o
+-- catalogo publico NAO pode ter sido fechado junto. E o comprador anon
+-- precisa continuar conseguindo aplicar cupom (coupon_preview e
+-- SECURITY DEFINER justamente por isso).
+savepoint anon_check;
+set local role anon;
+select set_config('request.jwt.claims', '', true);
+
+do $t$
+declare v integer; t text; v_neg integer := 0;
+begin
+  -- catalogo publico: o produto publicado de loja ativa E visivel
+  select count(*) into v from public.products
+    where store_id = current_setting('app.a_store')::uuid and status = 'published';
+  if v <> 1 then raise exception 'FAIL: catalogo publico quebrou para anon (%)', v; end if;
+
+  -- rascunho nunca
+  select count(*) into v from public.products
+    where store_id = current_setting('app.a_store')::uuid and status = 'draft';
+  if v <> 0 then raise exception 'FAIL: rascunho visivel para anon'; end if;
+
+  -- catalogo comercial de planos e publico (landing mostra preco)
+  select count(*) into v from public.platform_plans;
+  if v <> 3 then raise exception 'FAIL: planos invisiveis para anon'; end if;
+
+  -- tabelas privadas: negadas por GRANT (erro) ou por RLS (zero linhas)
+  foreach t in array array['coupons','app_sessions','workspace_members','workspace_subscriptions',
+                           'workspaces','workspace_invitations','coupon_redemptions'] loop
+    begin
+      execute format('select count(*) from public.%I', t) into v;
+      if v <> 0 then raise exception 'FAIL: anon leu % linha(s) de %', v, t; end if;
+      v_neg := v_neg + 1;
+    exception when insufficient_privilege then
+      v_neg := v_neg + 1;
+    end;
+  end loop;
+  if v_neg <> 7 then raise exception 'FAIL: cobertura anon incompleta (%)', v_neg; end if;
+
+  -- e o comprador ainda aplica cupom
+  select count(*) into v from public.coupon_preview('xt-a', 'NATAL10', 20000) p where p.valid;
+  if v <> 1 then raise exception 'FAIL: anon nao consegue mais aplicar cupom'; end if;
+
+  raise notice 'PASS - anon: catalogo publico legivel, rascunho negado, 7 tabelas privadas negadas, coupon_preview funcionando';
+end;
+$t$;
+rollback to savepoint anon_check;
+
 do $t$ begin raise notice 'OK: isolamento cross-tenant conferido'; end; $t$;
 
 rollback;

@@ -102,6 +102,12 @@ export async function requireStoreStatus(
   if (outcome === "conflict") {
     redirect(`/sessao-ativa?store=${access.store.slug}`);
   }
+  // Sessão revogada por decisão (takeover, remoção da equipe, downgrade).
+  // Não ressuscita — o caminho é autenticar de novo. A tela de login
+  // explica o motivo em vez de mostrar um erro técnico.
+  if (outcome === "revoked") {
+    redirect("/login?sessao=encerrada");
+  }
 
   return access;
 }
@@ -117,7 +123,7 @@ export async function requireStoreStatus(
  * continua sendo decidida pelo banco. Barrar aqui seria transformar um
  * erro de infraestrutura em logout.
  */
-async function ensureAppSession(supabase: Client, storeId: string): Promise<"ok" | "conflict"> {
+async function ensureAppSession(supabase: Client, storeId: string): Promise<"ok" | "conflict" | "revoked"> {
   // UMA chamada por request: a resolução loja -> workspace acontece
   // dentro do banco (app_session_start_for_store). Fazer um SELECT aqui
   // só para devolver o workspace na chamada seguinte dobraria o custo do
@@ -128,7 +134,9 @@ async function ensureAppSession(supabase: Client, storeId: string): Promise<"ok"
     userAgentLabel: browserLabel(headerList.get("user-agent")),
   });
 
-  return result.status === "conflict" ? "conflict" : "ok";
+  if (result.status === "conflict") return "conflict";
+  if (result.status === "revoked") return "revoked";
+  return "ok";
 }
 
 /**

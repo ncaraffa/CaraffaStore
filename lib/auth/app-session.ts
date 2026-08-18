@@ -47,6 +47,12 @@ export interface SessionConflict {
 export type StartSessionResult =
   | { status: "active"; sessionId: string }
   | { status: "conflict"; conflict: SessionConflict }
+  /**
+   * A sessão deste browser foi revogada por decisão (takeover, logout em
+   * outro lugar, remoção da equipe, downgrade de plano). NÃO ressuscita:
+   * exige autenticação nova. Ver 0023.
+   */
+  | { status: "revoked" }
   | { status: "error"; code: string };
 
 /**
@@ -67,7 +73,8 @@ export async function startAppSession(
   });
 
   if (error) {
-    return { status: "error", code: extractCode(error.message) };
+    const code = extractCode(error.message);
+    return code === "session_revoked" ? { status: "revoked" } : { status: "error", code };
   }
 
   const row = data?.[0];
@@ -100,7 +107,10 @@ export async function startAppSessionForStore(
     p_takeover: params.takeover ?? false,
   });
 
-  if (error) return { status: "error", code: extractCode(error.message) };
+  if (error) {
+    const code = extractCode(error.message);
+    return code === "session_revoked" ? { status: "revoked" } : { status: "error", code };
+  }
 
   const row = data?.[0];
   if (!row) return { status: "error", code: "unknown_error" };
@@ -167,6 +177,7 @@ export function browserLabel(userAgent: string | null | undefined): string {
 }
 
 const KNOWN_CODES = [
+  "session_revoked",
   "auth_required",
   "insufficient_privilege",
   "workspace_not_found",
