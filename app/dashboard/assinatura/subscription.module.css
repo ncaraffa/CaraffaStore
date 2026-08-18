@@ -322,3 +322,23 @@
     align-items: flex-start;
   }
 }
+
+/* TASK-012 — indicadores de uso do plano. Empilha no celular; nunca
+   força scroll horizontal. */
+.usageGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+@media (min-width: 40rem) {
+  .usageGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.usageLink {
+  font-weight: 600;
+  white-space: nowrap;
+}

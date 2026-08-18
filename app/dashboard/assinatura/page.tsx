@@ -10,6 +10,8 @@ import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { BillingStatusClient } from "@/app/pending-payment/billing-status-client";
+import { QuotaMeter } from "@/components/dashboard/QuotaMeter";
+import { getStoreQuotaUsage } from "@/lib/billing/entitlements";
 import { RenewPanel } from "./renew-panel";
 import styles from "./subscription.module.css";
 
@@ -73,6 +75,8 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
   const isPlanChange = Boolean(
     pendingPlan && finalSubscription?.currentPlanCode && pendingPlan.code !== finalSubscription.currentPlanCode,
   );
+
+  const usage = await getStoreQuotaUsage(supabase, store.id);
 
   return (
     <DashboardShell
@@ -154,6 +158,23 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
           </div>
         </dl>
       </Card>
+
+      {usage && (
+        <Card>
+          <h2 className={styles.sectionTitle}>Uso do plano</h2>
+          <div className={styles.usageGrid}>
+            <QuotaMeter label="Produtos" used={usage.products.used} limit={usage.products.limit} />
+            <QuotaMeter label="Lojas" used={usage.stores.used} limit={usage.stores.limit} />
+            <QuotaMeter label="Equipe" used={usage.team.used} limit={usage.team.limit} />
+          </div>
+          <p className={styles.sectionHint}>
+            Uma assinatura cobre todas as suas lojas.{" "}
+            <a href="/dashboard/lojas" className={styles.usageLink}>
+              Ver e gerenciar lojas
+            </a>
+          </p>
+        </Card>
+      )}
 
       {hasPixInFlight && charge ? (
         <section className={styles.pixSection}>

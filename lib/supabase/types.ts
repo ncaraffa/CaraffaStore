@@ -94,6 +94,8 @@ export interface Database {
           pre_suspension_status: StoreStatus | null;
           suspension_reason: StoreSuspensionReason | null;
           created_at: string;
+          /** TASK-012: workspace (conta de cobrança) dono da loja. NOT NULL no banco. */
+          workspace_id: string;
         };
         Insert: {
           id?: string;
@@ -1317,6 +1319,32 @@ export interface Database {
           period_end: string;
           created_at: string;
         }[];
+      };
+      store_quota_usage: {
+        Args: { p_store_id: string };
+        Returns: {
+          plan_key: PlanKey;
+          products_used: number;
+          products_limit: number;
+          images_per_product_limit: number;
+          stores_used: number;
+          stores_limit: number;
+          team_used: number;
+          team_limit: number;
+          coupons_enabled: boolean;
+        }[];
+      };
+      catalog_can_add_product_image: {
+        Args: { p_product_id: string };
+        Returns: { allowed: boolean; used: number; image_limit: number }[];
+      };
+      workspace_create_store: {
+        Args: { p_name: string; p_slug: string; p_whatsapp?: string | null };
+        Returns: Database["public"]["Tables"]["stores"]["Row"];
+      };
+      store_product_quota_count: {
+        Args: { p_store_id: string };
+        Returns: number;
       };
       billing_get_subscription: {
         Args: { p_store_id: string };
