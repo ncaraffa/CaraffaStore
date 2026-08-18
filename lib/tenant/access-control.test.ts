@@ -8,6 +8,12 @@ vi.mock("next/navigation", () => ({
   redirect: (location: string) => redirectMock(location),
 }));
 
+// TASK-012: o bootstrap da sessão lê o User-Agent para rotular o
+// dispositivo. Nada aqui identifica hardware — é só um rótulo legível.
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ "user-agent": "Mozilla/5.0 (Windows NT 10.0) Chrome/120.0 Safari/537.36" }),
+}));
+
 const isCurrentSessionRecoveryMock = vi.fn().mockResolvedValue(false);
 vi.mock("@/lib/tenant/recovery-session", () => ({
   isCurrentSessionRecovery: (...args: unknown[]) => isCurrentSessionRecoveryMock(...args),
@@ -38,12 +44,23 @@ const { requireOnboardingAccess, requireStoreStatus, requireVerifiedSession } = 
   "./access-control"
 );
 
+/**
+ * TASK-012: requireStoreStatus passa a abrir/renovar a sessão da
+ * CaraffaStore (app_session_start_for_store) além de resolver a loja.
+ * O mock devolve o caso normal — sessão aberta, sem conflito. O caminho
+ * de conflito tem teste próprio abaixo.
+ */
+const rpcMock = vi.fn().mockResolvedValue({
+  data: [{ session_id: "sess-1", conflict: false, other_label: null, other_last_seen: null }],
+  error: null,
+});
+
 function fakeSupabase(user: { id: string; email_confirmed_at: string | null } | null) {
   return {
     auth: {
       getUser: vi.fn().mockResolvedValue({ data: { user } }),
     },
-     
+    rpc: rpcMock,
   } as any;
 }
 
@@ -51,6 +68,10 @@ const VERIFIED_USER = { id: "user-1", email_confirmed_at: "2026-08-03T00:00:00.0
 
 beforeEach(() => {
   redirectMock.mockClear();
+  rpcMock.mockClear().mockResolvedValue({
+    data: [{ session_id: "sess-1", conflict: false, other_label: null, other_last_seen: null }],
+    error: null,
+  });
   isCurrentSessionRecoveryMock.mockReset().mockResolvedValue(false);
   resolveMembershipSituationMock.mockReset();
   resolveAuthorizedStoreMock.mockReset();
@@ -241,5 +262,65 @@ describe("requireOnboardingAccess", () => {
     await expect(requireOnboardingAccess(supabase())).rejects.toThrow(
       "REDIRECT:/pending-payment?store=loja-x",
     );
+  });
+});
+
+describe("requireStoreStatus — bootstrap da sessão da CaraffaStore (TASK-012)", () => {
+  const supabase = () => fakeSupabase(VERIFIED_USER);
+
+  const ACTIVE_STORE = {
+    kind: "one" as const,
+    store: { id: "s1", slug: "loja-x", name: "Loja X", status: "active" },
+    role: "owner" as const,
+  };
+
+  /**
+   * O bootstrap tem que custar UMA chamada por request — este é o
+   * caminho por onde passa toda tela administrativa. A versão anterior
+   * fazia um SELECT em stores só para descobrir o workspace e então
+   * chamava a RPC; o banco resolve isso sozinho.
+   */
+  it("abre a sessão em UMA chamada, resolvendo o workspace no banco", async () => {
+    resolveMembershipSituationMock.mockResolvedValue(ACTIVE_STORE);
+    await requireStoreStatus(supabase(), "active");
+
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+    expect(rpcMock).toHaveBeenCalledWith(
+      "app_session_start_for_store",
+      expect.objectContaining({ p_store_id: "s1", p_takeover: false }),
+    );
+  });
+
+  it("manda para a tela de conflito quando o plano só permite uma sessão", async () => {
+    resolveMembershipSituationMock.mockResolvedValue(ACTIVE_STORE);
+    rpcMock.mockResolvedValue({
+      data: [{ session_id: null, conflict: true, other_label: "Safari (iPhone/iPad)", other_last_seen: null }],
+      error: null,
+    });
+
+    await expect(requireStoreStatus(supabase(), "active")).rejects.toThrow(
+      "REDIRECT:/sessao-ativa?store=loja-x",
+    );
+  });
+
+  /**
+   * Uma falha transitória ao registrar a sessão NÃO pode virar logout: a
+   * autorização real continua sendo do banco. Bloquear aqui
+   * transformaria um erro de infraestrutura em perda de acesso.
+   */
+  it("não bloqueia o acesso se o registro da sessão falhar", async () => {
+    resolveMembershipSituationMock.mockResolvedValue(ACTIVE_STORE);
+    rpcMock.mockResolvedValue({ data: null, error: { message: "network glitch" } });
+
+    const result = await requireStoreStatus(supabase(), "active");
+    expect(result.store.slug).toBe("loja-x");
+    expect(redirectMock).not.toHaveBeenCalled();
+  });
+
+  it("nunca envia takeover implícito — takeover é sempre escolha explícita do usuário", async () => {
+    resolveMembershipSituationMock.mockResolvedValue(ACTIVE_STORE);
+    await requireStoreStatus(supabase(), "active");
+    const args = rpcMock.mock.calls[0]?.[1] as { p_takeover: boolean };
+    expect(args.p_takeover).toBe(false);
   });
 });

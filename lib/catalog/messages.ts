@@ -18,7 +18,13 @@ const MESSAGES: Record<string, string> = {
   product_not_found: "Produto não encontrado.",
   image_not_found: "Imagem não encontrada.",
   image_store_mismatch: "Imagem não pertence a este produto.",
-  max_images_reached: "Limite de 5 imagens por produto atingido.",
+  // TASK-012: o limite deixou de ser 5 fixo e passou a depender do
+  // plano. O texto genérico aqui é só o fallback — a UI que conhece o
+  // plano vigente mostra quotaNotice("images", planKey), com o número
+  // real e o convite de upgrade (lib/billing/quota-messages.ts).
+  max_images_reached: "Limite de fotos por produto atingido no seu plano.",
+  max_products_reached: "Limite de produtos do seu plano atingido.",
+  subscription_not_found: "Não foi possível identificar sua assinatura. Fale com o suporte.",
   stock_would_be_negative: "Estoque insuficiente para este ajuste.",
 };
 

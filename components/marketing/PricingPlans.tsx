@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PLATFORM_PLANS, type PlatformPlan } from "@/lib/billing/plans";
+import { PLATFORM_PLANS, formatPlanPrice, type PlanKey, type PlatformPlan } from "@/lib/billing/plans";
 import { Button } from "@/components/ui/Button";
 import { IconCheck } from "@/components/ui/icons";
 import styles from "./PricingPlans.module.css";
@@ -7,74 +7,81 @@ import styles from "./PricingPlans.module.css";
 /* ============================================================
    Planos
 
-   O software é o MESMO nos três planos — e continua sendo, no
-   código e no banco: não existe entitlement, quota ou gating por
-   `plan_code` em lugar nenhum, e nada aqui cria um. O que
-   diferencia os planos é o nível de ACOMPANHAMENTO humano
-   (suporte, ajuda na configuração, revisão da loja): um
-   compromisso comercial do operador, não um recurso do sistema.
+   ATENÇÃO — isto mudou na TASK-012.
 
-   Por isso os bullets de Crescimento e Profissional nunca falam
-   em funcionalidade liberada — falam em atendimento. Um bullet
-   que prometa recurso de software seria mentira, porque nenhum
-   código o entregaria.
+   Até então os três planos eram funcionalmente idênticos e esta
+   tela dizia isso: "o software é o mesmo, o que muda é o
+   acompanhamento". Não é mais verdade. Agora existem entitlements
+   REAIS, aplicados no banco: produtos, fotos por produto, lojas,
+   usuários da equipe e cupons.
 
-   Preço e rótulo saem de lib/billing/plans.ts, a mesma fonte do
-   onboarding e da cobrança. `code` é o identificador técnico (o
-   Profissional é 80 por herança de banco, cobrando R$ 70): nunca
-   exiba `code` como preço.
+   Por isso os bullets voltaram a falar de recurso — porque agora
+   há recurso de verdade por trás de cada um.
+
+   Os NÚMEROS não são digitados aqui: saem de plan.entitlements,
+   a mesma fonte que o banco usa para recusar a criação do 76º
+   produto. Se um limite mudar em platform_plans, o card muda
+   junto — não existe chance de a landing prometer 75 e o backend
+   permitir outra coisa.
+
+   O preço também vem de plan.priceCents. Nunca escreva "R$ 30"
+   literal numa tela.
    ============================================================ */
 
 interface PlanCopy {
   /** Uma linha que diz para QUEM o plano é. */
   fit: string;
-  /** Título da lista — deixa a herança entre planos explícita. */
-  listTitle: string;
-  bullets: string[];
+  /** Bullets além dos limites numéricos — atendimento e recursos booleanos. */
+  extras: string[];
   cta: string;
 }
 
-const PLAN_COPY: Record<number, PlanCopy> = {
-  30: {
-    fit: "Para quem quer configurar e tocar a própria loja.",
-    listTitle: "Inclui",
-    bullets: [
-      "Acesso completo à plataforma",
-      "Cadastre seus produtos, fotos e categorias",
-      "Pedidos e estoque no painel, com baixa automática",
-      "Cobrança por Pix em cada pedido",
-      "Link exclusivo da sua loja para compartilhar",
-      "Suporte por e-mail",
-    ],
+const PLAN_COPY: Record<PlanKey, PlanCopy> = {
+  essential: {
+    fit: "Para começar a vender online.",
+    extras: ["Pedidos ilimitados", "Pix e controle de estoque"],
     cta: "Começar com Essencial",
   },
-  50: {
-    fit: "Para quem quer começar mais rápido, com acompanhamento.",
-    listTitle: "Tudo do Essencial, e mais",
-    bullets: [
-      "Suporte prioritário",
-      "Ajuda na configuração inicial da loja",
-      "Orientação para deixar catálogo e informações no ponto",
-      "Revisão da loja depois de configurada, antes de você divulgar",
-    ],
+  growth: {
+    fit: "Para quem quer vender mais e ter mais recursos.",
+    extras: ["Cupons de desconto", "Suporte prioritário", "Ajuda na configuração"],
     cta: "Escolher Crescimento",
   },
-  80: {
-    fit: "Para quem prefere implantação acompanhada de perto.",
-    listTitle: "Tudo do Crescimento, e mais",
-    bullets: [
-      "Atendimento com prioridade máxima",
-      "Acompanhamento próximo durante a implantação",
-      "Auxílio personalizado na organização inicial da loja",
-      "Revisão comercial e visual da sua loja e do catálogo",
-    ],
+  professional: {
+    fit: "Para operações maiores.",
+    extras: ["Cupons de desconto", "Acompanhamento na implantação"],
     cta: "Escolher Profissional",
   },
 };
 
+const nf = new Intl.NumberFormat("pt-BR");
+
+/**
+ * Os limites viram frase. Deliberadamente curto — o card é comercial,
+ * não uma tabela de especificação (a comparação completa fica logo
+ * abaixo, para quem quiser).
+ */
+function limitBullets(plan: PlatformPlan): string[] {
+  const e = plan.entitlements;
+  const bullets = [
+    plan.planKey === "professional"
+      ? `Até ${nf.format(e.maxProducts)} produtos por loja`
+      : `Até ${nf.format(e.maxProducts)} produtos`,
+    e.maxImagesPerProduct === 1 ? "1 foto por produto" : `Até ${e.maxImagesPerProduct} fotos por produto`,
+  ];
+
+  // Só vale a pena falar de lojas quando o plano oferece mais de uma —
+  // "1 loja" no Crescimento seria destaque para uma limitação.
+  if (e.maxStores > 1) bullets.push(`Até ${e.maxStores} lojas`);
+  else if (plan.planKey === "essential") bullets.push("1 loja");
+
+  bullets.push(e.maxTeamMembers === 1 ? "1 usuário" : `Até ${e.maxTeamMembers} usuários`);
+  return bullets;
+}
+
 function PlanCard({ plan }: { plan: PlatformPlan }) {
-  const copy = PLAN_COPY[plan.code];
-  if (!copy) return null;
+  const copy = PLAN_COPY[plan.planKey];
+  const bullets = [...limitBullets(plan), ...copy.extras];
 
   return (
     <article
@@ -94,8 +101,7 @@ function PlanCard({ plan }: { plan: PlatformPlan }) {
         </span>
         <h3 className={styles.name}>{plan.label}</h3>
         <p className={styles.price}>
-          <span className={styles.currency}>R$</span>
-          <span className={styles.priceValue}>{plan.price}</span>
+          <span className={styles.priceValue}>{formatPlanPrice(plan)}</span>
           <span className={styles.period}>/mês</span>
         </p>
         <p className={styles.fit}>{copy.fit}</p>
@@ -107,9 +113,8 @@ function PlanCard({ plan }: { plan: PlatformPlan }) {
         </Button>
       </Link>
 
-      <p className={styles.listTitle}>{copy.listTitle}</p>
       <ul className={styles.bullets}>
-        {copy.bullets.map((bullet) => (
+        {bullets.map((bullet) => (
           <li key={bullet}>
             <IconCheck />
             {bullet}
@@ -125,13 +130,20 @@ export function PricingPlans() {
     <div className={styles.wrap}>
       <div className={styles.grid}>
         {PLATFORM_PLANS.map((plan) => (
-          <PlanCard key={plan.code} plan={plan} />
+          <PlanCard key={plan.planKey} plan={plan} />
         ))}
       </div>
 
+      {/*
+        Duas afirmações que podemos fazer porque são verdade no código:
+        não existe limite de pedidos/clientes em nenhum plano, e a
+        CaraffaStore não retém percentual das vendas. NÃO dizemos "sem
+        taxas" — o Mercado Pago cobra as tarifas dele, e prometer o
+        contrário seria falso.
+      */}
       <p className={styles.footnote} data-reveal>
-        Todos os planos usam a plataforma completa — o que muda é o nível de acompanhamento. Sem fidelidade, e dá
-        para trocar de plano falando com a gente.
+        Pedidos e clientes ilimitados em todos os planos, e a CaraffaStore não cobra comissão sobre suas vendas
+        (as tarifas do Mercado Pago são à parte). Sem fidelidade — dá para trocar de plano quando quiser.
       </p>
     </div>
   );

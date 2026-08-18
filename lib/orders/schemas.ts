@@ -13,6 +13,14 @@ export const cartItemSchema = z.object({
  * óbvio; a função SQL continua sendo a fonte de verdade (nunca confia em
  * nada vindo só desta camada).
  */
+/**
+ * Código do cupom: aceito como texto livre e opcional. A normalização e
+ * TODA a validação (existência, janela, mínimo, limite, entitlement do
+ * plano) acontecem no banco — aqui só limitamos tamanho para não mandar
+ * um payload absurdo.
+ */
+export const couponCodeSchema = z.string().trim().max(64).optional();
+
 export const checkoutSchema = z
   .object({
     customerName: z.string().trim().min(2, "Informe seu nome.").max(120, "Nome muito longo."),
@@ -24,6 +32,7 @@ export const checkoutSchema = z
     customerNotes: z.string().trim().max(1000, "Observações muito longas.").optional().or(z.literal("")),
     idempotencyKey: z.string().uuid(),
     items: z.array(cartItemSchema).min(1, "Seu carrinho está vazio.").max(50, "Carrinho com itens demais."),
+    couponCode: couponCodeSchema,
   })
   .superRefine((data, ctx) => {
     if (data.fulfillmentMethod === "delivery" && !data.deliveryAddress) {

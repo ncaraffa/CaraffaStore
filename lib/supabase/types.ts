@@ -7,6 +7,8 @@ export type OnboardingStep =
   | "plan"
   | "review"
   | "completed";
+export type PlanKey = "essential" | "growth" | "professional";
+
 export type PlanCode = 30 | 50 | 80;
 export type AuditAction =
   | "email_verification_completed"
@@ -92,6 +94,8 @@ export interface Database {
           pre_suspension_status: StoreStatus | null;
           suspension_reason: StoreSuspensionReason | null;
           created_at: string;
+          /** TASK-012: workspace (conta de cobrança) dono da loja. NOT NULL no banco. */
+          workspace_id: string;
         };
         Insert: {
           id?: string;
@@ -128,6 +132,128 @@ export interface Database {
           user_id?: string;
           granted_at?: string;
         };
+        Relationships: [];
+      };
+      /**
+       * TASK-012 — ASSENTO/licença de equipe. Uma linha por PESSOA por
+       * workspace. Não confundir com store_members, que é a projeção de
+       * ACESSO (uma linha por pessoa POR LOJA).
+       */
+      coupons: {
+        Row: {
+          id: string;
+          store_id: string;
+          code: string;
+          normalized_code: string;
+          discount_type: "percentage" | "fixed_amount";
+          /** percentage: BASIS POINTS (1000 = 10%). fixed_amount: CENTAVOS. Sempre inteiro. */
+          discount_value: number;
+          minimum_order_cents: number | null;
+          maximum_discount_cents: number | null;
+          starts_at: string | null;
+          expires_at: string | null;
+          max_uses: number | null;
+          active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      coupon_redemptions: {
+        Row: {
+          id: string;
+          coupon_id: string;
+          store_id: string;
+          order_id: string;
+          status: "reserved" | "consumed" | "released";
+          discount_cents: number;
+          reserved_at: string;
+          consumed_at: string | null;
+          released_at: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      workspace_members: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          user_id: string;
+          role: "owner" | "member";
+          invited_by: string | null;
+          joined_at: string;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      workspace_invitations: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          email: string;
+          /** Só o SHA-256 — o token em claro nunca é persistido. */
+          token_hash: string;
+          role: "member";
+          invited_by: string | null;
+          status: "pending" | "accepted" | "revoked" | "expired";
+          expires_at: string;
+          accepted_at: string | null;
+          accepted_by: string | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      app_sessions: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          user_id: string;
+          supabase_session_hash: string;
+          enforces_single_session: boolean;
+          user_agent_label: string | null;
+          created_at: string;
+          last_seen_at: string;
+          expires_at: string;
+          revoked_at: string | null;
+          revoked_reason: "logout" | "takeover" | "member_removed" | "stale" | "plan_downgrade" | "admin" | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      workspace_subscriptions: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          plan_key: PlanKey;
+          status: "pending_payment" | "active" | "past_due" | "cancelled";
+          entitlement_version: number;
+          started_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      workspaces: {
+        Row: {
+          id: string;
+          owner_user_id: string;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
         Relationships: [];
       };
       store_members: {
@@ -452,7 +578,13 @@ export interface Database {
           customer_notes: string | null;
           status: OrderStatus;
           subtotal_cents: number;
+          /** TASK-012: desconto aplicado neste pedido. total = subtotal - discount, garantido por CHECK no banco. */
+          discount_cents: number;
           total_cents: number;
+          coupon_id: string | null;
+          coupon_code_snapshot: string | null;
+          coupon_discount_type_snapshot: "percentage" | "fixed_amount" | null;
+          coupon_discount_value_snapshot: number | null;
           created_at: string;
           updated_at: string;
           cancelled_at: string | null;
@@ -1112,6 +1244,49 @@ export interface Database {
         Args: { target_store_id: string };
         Returns: boolean;
       };
+      coupon_preview: {
+        Args: { p_store_slug: string; p_code: string; p_subtotal_cents: number };
+        Returns: {
+          valid: boolean;
+          reason: string | null;
+          code: string | null;
+          discount_cents: number;
+          minimum_order_cents: number | null;
+        }[];
+      };
+      coupon_list: {
+        Args: { p_store_id: string };
+        Returns: {
+          id: string;
+          code: string;
+          discount_type: "percentage" | "fixed_amount";
+          discount_value: number;
+          minimum_order_cents: number | null;
+          maximum_discount_cents: number | null;
+          starts_at: string | null;
+          expires_at: string | null;
+          max_uses: number | null;
+          used_count: number;
+          active: boolean;
+          created_at: string;
+        }[];
+      };
+      coupon_upsert: {
+        Args: {
+          p_store_id: string;
+          p_coupon_id: string | null;
+          p_code: string;
+          p_discount_type: "percentage" | "fixed_amount";
+          p_discount_value: number;
+          p_minimum_order_cents?: number | null;
+          p_maximum_discount_cents?: number | null;
+          p_starts_at?: string | null;
+          p_expires_at?: string | null;
+          p_max_uses?: number | null;
+          p_active?: boolean;
+        };
+        Returns: Database["public"]["Tables"]["coupons"]["Row"];
+      };
       create_order: {
         Args: {
           p_store_slug: string;
@@ -1122,6 +1297,8 @@ export interface Database {
           p_delivery_address: string | null;
           p_customer_notes: string | null;
           p_items: { product_id: string; quantity: number }[];
+          /** TASK-012: código do cupom como digitado. Normalização, validação e cálculo do desconto acontecem no banco. */
+          p_coupon_code?: string | null;
         };
         Returns: Database["public"]["Tables"]["orders"]["Row"];
       };
@@ -1248,8 +1425,8 @@ export interface Database {
           p_payer_email: string;
           p_payer_doc_type: PixDocType;
           p_payer_doc_last4: string;
-          /** TASK-011: plano escolhido para ESTA cobrança (renovação com troca). Ausente = mantém o plano vigente. Só passa a valer em store_plans quando a cobrança é aprovada. */
-          p_plan_code?: PlanCode | null;
+          /** TASK-012: plano escolhido para ESTA cobrança (renovação com troca), por plan_key. Ausente = mantém o plano vigente da ASSINATURA. Só passa a valer em workspace_subscriptions quando a cobrança é aprovada. */
+          p_plan_key?: PlanKey | null;
         };
         Returns: Database["public"]["Tables"]["billing_charges"]["Row"];
       };
@@ -1315,6 +1492,82 @@ export interface Database {
           period_end: string;
           created_at: string;
         }[];
+      };
+      app_session_start_for_store: {
+        Args: { p_store_id: string; p_user_agent_label?: string | null; p_takeover?: boolean };
+        Returns: {
+          session_id: string | null;
+          conflict: boolean;
+          other_label: string | null;
+          other_last_seen: string | null;
+        }[];
+      };
+      app_session_start: {
+        Args: { p_workspace_id: string; p_user_agent_label?: string | null; p_takeover?: boolean };
+        Returns: {
+          session_id: string | null;
+          conflict: boolean;
+          other_label: string | null;
+          other_last_seen: string | null;
+        }[];
+      };
+      app_session_heartbeat: { Args: Record<string, never>; Returns: boolean };
+      app_session_logout: { Args: Record<string, never>; Returns: undefined };
+      workspace_team: {
+        Args: { p_store_id: string };
+        Returns: {
+          user_id: string;
+          email: string;
+          display_name: string | null;
+          role: "owner" | "member";
+          joined_at: string;
+          is_self: boolean;
+        }[];
+      };
+      workspace_invite_member: {
+        Args: { p_email: string; p_token_hash: string };
+        Returns: { id: string; email: string; expires_at: string; status: string };
+      };
+      workspace_resend_invitation: {
+        Args: { p_email: string; p_token_hash: string };
+        Returns: { id: string; email: string; expires_at: string; status: string };
+      };
+      workspace_accept_invitation: {
+        Args: { p_token_hash: string };
+        Returns: { id: string; workspace_id: string; user_id: string; role: string };
+      };
+      workspace_revoke_invitation: { Args: { p_invitation_id: string }; Returns: undefined };
+      workspace_remove_member: { Args: { p_user_id: string }; Returns: undefined };
+      workspace_reserved_seats: { Args: { p_workspace_id: string }; Returns: number };
+      workspace_can_use_plan: {
+        Args: { p_workspace_id: string; p_plan_key: string };
+        Returns: { allowed: boolean; reason: string | null; current_value: number | null; target_limit: number | null }[];
+      };
+      store_quota_usage: {
+        Args: { p_store_id: string };
+        Returns: {
+          plan_key: PlanKey;
+          products_used: number;
+          products_limit: number;
+          images_per_product_limit: number;
+          stores_used: number;
+          stores_limit: number;
+          team_used: number;
+          team_limit: number;
+          coupons_enabled: boolean;
+        }[];
+      };
+      catalog_can_add_product_image: {
+        Args: { p_product_id: string };
+        Returns: { allowed: boolean; used: number; image_limit: number }[];
+      };
+      workspace_create_store: {
+        Args: { p_name: string; p_slug: string; p_whatsapp?: string | null };
+        Returns: Database["public"]["Tables"]["stores"]["Row"];
+      };
+      store_product_quota_count: {
+        Args: { p_store_id: string };
+        Returns: number;
       };
       billing_get_subscription: {
         Args: { p_store_id: string };

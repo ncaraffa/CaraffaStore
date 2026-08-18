@@ -7,6 +7,7 @@ import { ConversationScene } from "./ConversationScene";
 import { StorefrontDemo } from "./StorefrontDemo";
 import { ProductFilm } from "./ProductFilm";
 import { PricingPlans } from "./PricingPlans";
+import { PlanComparison } from "./PlanComparison";
 import { RevealRoot } from "./RevealRoot";
 import { getStoreUrlExample } from "@/lib/config/site";
 import {
@@ -417,6 +418,7 @@ export function LandingPage() {
           </div>
 
           <PricingPlans />
+          <PlanComparison />
         </section>
 
         {/* ===================== 8. DÚVIDAS ===================== */}

@@ -11,11 +11,22 @@ import {
   IconReceipt,
   IconCreditCard,
   IconLayers,
+  IconUsers,
+  IconTicket,
   IconLogout,
   IconExternalLink,
   IconChevronDown,
+  IconMenu,
+  IconClose,
 } from "@/components/ui/icons";
-import { dashboardNavItems, type DashboardNavKey } from "./nav-items";
+import {
+  dashboardMobilePrimary,
+  dashboardMobileSecondary,
+  dashboardNavItems,
+  isSecondaryKey,
+  type DashboardNavKey,
+} from "./nav-items";
+import { SessionHeartbeat } from "./SessionHeartbeat";
 import styles from "./DashboardShell.module.css";
 
 const NAV_ICONS: Record<DashboardNavKey, ReactNode> = {
@@ -24,6 +35,8 @@ const NAV_ICONS: Record<DashboardNavKey, ReactNode> = {
   produtos: <IconBox />,
   pedidos: <IconReceipt />,
   pagamentos: <IconCreditCard />,
+  marketing: <IconTicket />,
+  equipe: <IconUsers />,
   assinatura: <IconLayers />,
 };
 
@@ -53,10 +66,19 @@ interface DashboardShellProps {
  */
 export function DashboardShell({ storeName, storeSlug, storeStatus, active, breadcrumbs, children }: DashboardShellProps) {
   const items = dashboardNavItems(storeSlug);
+  const primary = dashboardMobilePrimary(storeSlug);
+  const secondary = dashboardMobileSecondary(storeSlug);
+  const moreIsActive = isSecondaryKey(active);
   const status = STATUS_LABEL[storeStatus];
 
   return (
     <div className={styles.shell}>
+      {/* TASK-012: mantém o lease da sessão vivo e encerra a sessão local
+          quando ela é revogada em outro lugar. Fica no shell porque toda
+          tela administrativa passa por aqui — não é segurança (o banco
+          recusa de qualquer forma), é para o lojista não operar uma tela
+          morta. */}
+      <SessionHeartbeat />
       <aside className={styles.sidebar}>
         <Link href={`/dashboard?store=${storeSlug}`} className={styles.brand} aria-label="Ir para o painel">
           <Logo size="md" />
@@ -132,8 +154,18 @@ export function DashboardShell({ storeName, storeSlug, storeStatus, active, brea
         </main>
       </div>
 
+      {/*
+        Barra inferior com TRÊS destinos do dia a dia + "Mais". Com os 8
+        itens do menu completo cada alvo teria ~11% da largura e o rótulo
+        truncaria — abaixo do confortável para o polegar.
+
+        "Mais" é um <details>: sheet acessível por teclado e leitor de
+        tela sem nenhum JavaScript, e que fecha ao navegar porque a
+        página recarrega. Quando a rota atual mora dentro dele, o próprio
+        "Mais" aparece ativo — a pessoa nunca fica sem saber onde está.
+      */}
       <nav className={styles.mobileTabs} aria-label="Navegação do painel">
-        {items.map((item) => (
+        {primary.map((item) => (
           <Link
             key={item.key}
             href={item.href}
@@ -145,6 +177,37 @@ export function DashboardShell({ storeName, storeSlug, storeStatus, active, brea
             <span>{item.label}</span>
           </Link>
         ))}
+
+        <details className={styles.moreDetails}>
+          <summary className={styles.mobileTab} data-active={moreIsActive || undefined}>
+            <IconMenu />
+            <span>Mais</span>
+          </summary>
+
+          <div className={styles.moreBackdrop} aria-hidden="true" />
+          <div className={styles.moreSheet} role="group" aria-label="Mais seções">
+            <div className={styles.moreHeader}>
+              <span className={styles.moreTitle}>Mais</span>
+              {/* Fechar é o próprio summary: um segundo toque no "Mais"
+                  fecha. Este rótulo existe para deixar isso óbvio. */}
+              <span className={styles.moreHint} aria-hidden="true">
+                <IconClose />
+              </span>
+            </div>
+            {secondary.map((item) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                className={styles.moreItem}
+                data-active={item.key === active || undefined}
+                aria-current={item.key === active ? "page" : undefined}
+              >
+                {NAV_ICONS[item.key]}
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </details>
       </nav>
     </div>
   );

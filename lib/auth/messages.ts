@@ -21,6 +21,15 @@ export const RECOVERY_REQUEST_MESSAGE =
 export const RESEND_VERIFICATION_MESSAGE =
   "Se sua conta ainda não estiver confirmada, reenviamos as instruções por e-mail. Aguarde alguns minutos antes de pedir de novo.";
 
+/**
+ * TASK-012 — a sessão administrativa foi encerrada por decisão
+ * (takeover de outro dispositivo, remoção da equipe, downgrade de
+ * plano). Não acusa ninguém e não afirma quem entrou: só diz que a conta
+ * passou a ser usada em outro lugar, que é o que de fato sabemos.
+ */
+export const SESSION_ENDED_MESSAGE =
+  "Sua sessão foi encerrada porque a conta entrou em outro dispositivo. Entre novamente para continuar.";
+
 export const RESET_LINK_INVALID_MESSAGE =
   "Este link de recuperação é inválido ou expirou. Solicite um novo.";
 

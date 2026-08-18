@@ -41,6 +41,8 @@ export interface PixCheckoutParams {
   payerDocType: PixDocType;
   payerDocNumber: string;
   items: { productId: string; quantity: number }[];
+  /** Código do cupom digitado pelo comprador. O desconto NUNCA vem daqui — quem calcula é o banco. */
+  couponCode?: string | null;
 }
 
 export interface PixCheckoutResult {
@@ -89,6 +91,7 @@ export async function createPixCheckout(supabase: Client, params: PixCheckoutPar
       deliveryAddress: params.deliveryAddress,
       customerNotes: params.customerNotes,
       items: params.items,
+      couponCode: params.couponCode ?? null,
     });
   } catch (error) {
     if (error instanceof OrderError) {

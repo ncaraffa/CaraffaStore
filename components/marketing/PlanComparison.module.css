@@ -1,0 +1,213 @@
+/* Comparação de planos.
+   Abaixo de 60rem: blocos empilhados. Acima: tabela.
+   Nenhuma das duas formas rola horizontalmente. */
+
+.wrap {
+  margin-top: 3rem;
+}
+
+.title {
+  margin: 0 0 1.5rem;
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  font-weight: 700;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- tabela (desktop) ---------- */
+
+.tableWrap {
+  display: none;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.planHead {
+  padding: 0.875rem 1rem;
+  text-align: center;
+  vertical-align: bottom;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.planHead[data-featured] {
+  background: var(--color-primary-soft, rgba(0, 82, 204, 0.06));
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+.planName {
+  display: block;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.planPrice {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.groupRow {
+  padding: 1.25rem 0 0.5rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.rowHead {
+  padding: 0.75rem 1rem 0.75rem 0;
+  text-align: left;
+  font-weight: 500;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.cell {
+  padding: 0.75rem 1rem;
+  text-align: center;
+  border-bottom: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.cell[data-featured] {
+  background: var(--color-primary-soft, rgba(0, 82, 204, 0.06));
+}
+
+.yes,
+.no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.yes {
+  color: var(--color-success-text, #1a7f45);
+}
+
+.no {
+  color: var(--color-text-muted);
+  opacity: 0.55;
+}
+
+/* ---------- blocos (mobile) ---------- */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.stackCard {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  background: var(--color-surface, #fff);
+  min-width: 0;
+}
+
+.stackCard[data-featured] {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.stackHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+.stackName {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.stackPrice {
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.stackGroup {
+  margin-top: 1rem;
+}
+
+.stackGroupTitle {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.stackList {
+  margin: 0;
+}
+
+.stackRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+  min-width: 0;
+}
+
+.stackRow:last-child {
+  border-bottom: none;
+}
+
+.stackLabel {
+  margin: 0;
+  font-size: 0.875rem;
+  min-width: 0;
+  /* Rótulo longo quebra em vez de empurrar o valor para fora. */
+  overflow-wrap: anywhere;
+}
+
+.stackValue {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* A troca. 60rem porque abaixo disso quatro colunas já ficam apertadas
+   mesmo em tablet — e não faz sentido esperar chegar a 375px. */
+@media (min-width: 60rem) {
+  .tableWrap {
+    display: block;
+  }
+  .stack {
+    display: none;
+  }
+}

@@ -1,0 +1,94 @@
+/* Conflito de sessão — tela de decisão, não de erro. Mobile primeiro. */
+
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 1.5rem 1rem;
+  max-width: 32rem;
+  margin: 0 auto;
+}
+
+.brand {
+  display: flex;
+  justify-content: center;
+}
+
+.title {
+  margin: 0 0 0.75rem;
+  font-size: 1.25rem;
+  line-height: 1.3;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.body,
+.detail,
+.hint,
+.upsell {
+  margin: 0 0 0.75rem;
+  line-height: 1.55;
+}
+
+.detail {
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  /* Rótulo longo nunca empurra o card no celular. */
+  overflow-wrap: anywhere;
+}
+
+.hint,
+.upsell {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.upsell {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.form {
+  margin: 1.25rem 0 0.75rem;
+}
+
+.primary,
+.secondary {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  /* Rótulo longo quebra em duas linhas em vez de estourar em 375px. */
+  white-space: normal;
+  line-height: 1.3;
+  padding: 0.75rem 1rem;
+}
+
+.primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary, #fff);
+  border: 1px solid transparent;
+}
+
+.primary:disabled {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.secondary {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  min-height: 44px;
+  font-weight: 500;
+}
+
+.logoutForm {
+  margin-top: 0.5rem;
+}

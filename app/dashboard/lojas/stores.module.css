@@ -1,0 +1,88 @@
+/* Lojas do workspace. Mobile primeiro: nada aqui pode estourar 375px. */
+
+.meter {
+  max-width: 22rem;
+}
+
+.hint,
+.sectionHint {
+  margin: 0.75rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-border);
+  min-width: 0;
+}
+
+.item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.itemMain {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.itemName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemSlug {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.noticeBody {
+  margin: 0.5rem 0 0;
+  line-height: 1.5;
+}
+
+.upgradeLink {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-weight: 600;
+  /* Alvo de toque confortável no celular. */
+  min-height: 44px;
+  line-height: 44px;
+}
+
+/* Em telas muito estreitas o badge desce em vez de espremer o nome. */
+@media (max-width: 22.5rem) {
+  .item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
