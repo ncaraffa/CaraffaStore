@@ -304,6 +304,90 @@ begin
 end;
 $t$;
 
+-- ============================================================
+-- Caso 11: ciclo de vida do convite e a RESERVA de assento
+-- ============================================================
+do $t$
+declare
+  v_ws uuid := current_setting('app.growth_ws')::uuid;
+  v_owner uuid := current_setting('app.growth_uid')::uuid;
+  v_inv public.workspace_invitations;
+  v_ok boolean;
+  v_before integer;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', v_owner)::text, true);
+
+  -- deixa o workspace com apenas o owner (1/3)
+  delete from public.workspace_members where workspace_id = v_ws and role = 'member';
+  update public.workspace_invitations set status='revoked' where workspace_id = v_ws and status='pending';
+  if public.workspace_reserved_seats(v_ws) <> 1 then
+    raise exception 'FAIL: esperava 1 assento reservado, got %', public.workspace_reserved_seats(v_ws);
+  end if;
+
+  -- 1 convite pendente -> 2/3 reservados
+  select * into v_inv from public.workspace_invite_member('c1@team.test', encode(digest('c1','sha256'),'hex'));
+  if public.workspace_reserved_seats(v_ws) <> 2 then
+    raise exception 'FAIL: convite pendente nao reservou (%)', public.workspace_reserved_seats(v_ws);
+  end if;
+  raise notice 'PASS - convite pendente reserva assento (owner + 1 pendente = 2/3)';
+
+  -- CANCELAR libera a vaga na hora e invalida o token
+  perform public.workspace_revoke_invitation(v_inv.id);
+  if public.workspace_reserved_seats(v_ws) <> 1 then
+    raise exception 'FAIL: cancelar nao liberou o assento';
+  end if;
+  v_ok := false;
+  begin
+    perform public.workspace_accept_invitation(encode(digest('c1','sha256'),'hex'));
+  exception when others then v_ok := true;
+  end;
+  if not v_ok then raise exception 'FAIL: token de convite cancelado ainda funciona'; end if;
+  raise notice 'PASS - cancelar libera assento na hora e invalida o token';
+
+  -- EXPIRADO deixa de reservar SEM depender de cron
+  select * into v_inv from public.workspace_invite_member('c2@team.test', encode(digest('c2','sha256'),'hex'));
+  v_before := public.workspace_reserved_seats(v_ws);
+  update public.workspace_invitations set expires_at = now() - interval '1 minute' where id = v_inv.id;
+  if public.workspace_reserved_seats(v_ws) <> v_before - 1 then
+    raise exception 'FAIL: convite vencido continua reservando (a vaga dependeria de um job)';
+  end if;
+  raise notice 'PASS - convite vencido deixa de reservar na propria leitura (sem cron)';
+
+  -- REENVIO nao cria segunda reserva
+  update public.workspace_invitations set expires_at = now() + interval '7 days' where id = v_inv.id;
+  v_before := public.workspace_reserved_seats(v_ws);
+  perform public.workspace_resend_invitation('c2@team.test', encode(digest('c2-novo','sha256'),'hex'));
+  if public.workspace_reserved_seats(v_ws) <> v_before then
+    raise exception 'FAIL: reenvio duplicou a reserva (% -> %)', v_before, public.workspace_reserved_seats(v_ws);
+  end if;
+  if (select count(*) from public.workspace_invitations
+      where workspace_id = v_ws and lower(email)='c2@team.test' and status='pending') <> 1 then
+    raise exception 'FAIL: reenvio criou uma segunda linha pendente';
+  end if;
+  raise notice 'PASS - reenvio mantem UMA reserva e UMA linha pendente';
+
+  -- token antigo morre no reenvio
+  v_ok := false;
+  begin
+    perform public.workspace_accept_invitation(encode(digest('c2','sha256'),'hex'));
+  exception when others then v_ok := true;
+  end;
+  if not v_ok then raise exception 'FAIL: token antigo ainda funciona apos reenvio'; end if;
+  raise notice 'PASS - o token anterior deixa de funcionar apos o reenvio';
+
+  -- DUPLICADO: mesmo e-mail nao gera segunda reserva
+  v_ok := false;
+  begin
+    perform public.workspace_invite_member('c2@team.test', encode(digest('c2-dup','sha256'),'hex'));
+  exception when others then
+    if sqlerrm <> 'invitation_already_pending' then raise; end if;
+    v_ok := true;
+  end;
+  if not v_ok then raise exception 'FAIL: mesmo e-mail gerou segunda reserva'; end if;
+  raise notice 'PASS - convite duplicado para o mesmo e-mail e recusado';
+end;
+$t$;
+
 do $t$ begin raise notice 'OK: TODOS os casos de equipe passaram'; end; $t$;
 
 rollback;

@@ -1320,6 +1320,47 @@ export interface Database {
           created_at: string;
         }[];
       };
+      app_session_start: {
+        Args: { p_workspace_id: string; p_user_agent_label?: string | null; p_takeover?: boolean };
+        Returns: {
+          session_id: string | null;
+          conflict: boolean;
+          other_label: string | null;
+          other_last_seen: string | null;
+        }[];
+      };
+      app_session_heartbeat: { Args: Record<string, never>; Returns: boolean };
+      app_session_logout: { Args: Record<string, never>; Returns: undefined };
+      workspace_team: {
+        Args: { p_store_id: string };
+        Returns: {
+          user_id: string;
+          email: string;
+          display_name: string | null;
+          role: "owner" | "member";
+          joined_at: string;
+          is_self: boolean;
+        }[];
+      };
+      workspace_invite_member: {
+        Args: { p_email: string; p_token_hash: string };
+        Returns: { id: string; email: string; expires_at: string; status: string };
+      };
+      workspace_resend_invitation: {
+        Args: { p_email: string; p_token_hash: string };
+        Returns: { id: string; email: string; expires_at: string; status: string };
+      };
+      workspace_accept_invitation: {
+        Args: { p_token_hash: string };
+        Returns: { id: string; workspace_id: string; user_id: string; role: string };
+      };
+      workspace_revoke_invitation: { Args: { p_invitation_id: string }; Returns: undefined };
+      workspace_remove_member: { Args: { p_user_id: string }; Returns: undefined };
+      workspace_reserved_seats: { Args: { p_workspace_id: string }; Returns: number };
+      workspace_can_use_plan: {
+        Args: { p_workspace_id: string; p_plan_key: string };
+        Returns: { allowed: boolean; reason: string | null; current_value: number | null; target_limit: number | null }[];
+      };
       store_quota_usage: {
         Args: { p_store_id: string };
         Returns: {

@@ -40,6 +40,11 @@ begin
     insert into public.workspace_subscriptions (workspace_id, plan_key, status, started_at)
       values (v_ws, v_plan, 'active', now());
 
+    -- TASK-012 commit 3: o owner precisa do ASSENTO no workspace, não só
+    -- do vínculo de loja — workspace_create_store autoriza por
+    -- workspace_members.
+    insert into public.workspace_members (workspace_id, user_id, role) values (v_ws, v_uid, 'owner');
+
     insert into public.stores (slug, name, status, workspace_id)
       values ('loja-' || v_plan, 'Loja ' || v_plan, 'active', v_ws) returning id into v_store;
     insert into public.store_members (store_id, user_id, role) values (v_store, v_uid, 'owner');

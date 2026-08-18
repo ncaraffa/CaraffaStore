@@ -23,7 +23,7 @@ MIGRATIONS_DIR="supabase/migrations"
 STASH_DIR="$(mktemp -d)"
 PSQL="docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -v ON_ERROR_STOP=1"
 
-NEW_MIGRATIONS="0012_plan_entitlements.sql 0013_workspace_subscription.sql 0014_quota_enforcement.sql 0015_workspace_team.sql"
+NEW_MIGRATIONS="0012_plan_entitlements.sql 0013_workspace_subscription.sql 0014_quota_enforcement.sql 0015_workspace_team.sql 0016_app_sessions.sql"
 
 restore_migrations() {
   for f in $NEW_MIGRATIONS; do
@@ -33,7 +33,7 @@ restore_migrations() {
 }
 trap restore_migrations EXIT
 
-echo "==> Movendo 0012..0015 para fora (simula estado pós-0011)"
+echo "==> Movendo 0012..0016 para fora (simula estado pós-0011)"
 for f in $NEW_MIGRATIONS; do mv "$MIGRATIONS_DIR/$f" "$STASH_DIR/"; done
 
 echo "==> supabase db reset (aplica 0001..0011)"
@@ -74,7 +74,7 @@ SQL
 CHARGE_BEFORE=$($PSQL -q -t -A -c "select amount_cents || '|' || status || '|' || approved_at from public.billing_charges where external_reference='ext-upgrade-1';")
 echo "    cobrança histórica antes do upgrade: $CHARGE_BEFORE"
 
-echo "==> Devolvendo 0012..0015 e aplicando migration up (SEM reset)"
+echo "==> Devolvendo 0012..0016 e aplicando migration up (SEM reset)"
 for f in $NEW_MIGRATIONS; do mv "$STASH_DIR/$f" "$MIGRATIONS_DIR/"; done
 npx supabase migration up --local >/dev/null
 
@@ -121,6 +121,22 @@ begin
   select count(*) into v from public.workspace_members where role = 'owner';
   if v <> 3 then raise exception 'FAIL: owners legados nao viraram owner do workspace'; end if;
   raise notice 'PASS - backfill de equipe: 1 assento por comerciante legado, todos owner';
+
+  -- Sessões: a tabela nasce vazia e NINGUÉM perde acesso por causa dela.
+  -- app_session_denied() nega apenas quem TEM linha revogada; os JWTs em
+  -- circulação no momento do deploy não têm linha nenhuma, então o
+  -- upgrade não vira logout global.
+  select count(*) into v from public.app_sessions;
+  if v <> 0 then raise exception 'FAIL: upgrade criou % sessoes do nada', v; end if;
+  if public.app_session_denied() then
+    raise exception 'FAIL: upgrade negaria acesso a quem ja estava logado (logout global)';
+  end if;
+  select max_concurrent_sessions into v from public.platform_plans where plan_key='essential';
+  if v <> 1 then raise exception 'FAIL: essential max_concurrent_sessions=%', v; end if;
+  if (select max_concurrent_sessions from public.platform_plans where plan_key='growth') is not null then
+    raise exception 'FAIL: growth ganhou limite de sessao (restricao inventada)';
+  end if;
+  raise notice 'PASS - app_sessions nao derruba quem ja estava logado; so o Essencial limita sessao';
 end;
 $t$;
 SQL
