@@ -23,9 +23,17 @@ const INITIAL: CouponPreviewState = { status: "idle" };
 export function CouponField({
   storeSlug,
   subtotalCents,
+  onDiscountChange,
 }: {
   storeSlug: string;
   subtotalCents: number;
+  /**
+   * Informa o desconto vigente ao carrinho, para o resumo mostrar o
+   * TOTAL e não o subtotal. Sem isto o comprador via "−R$ 20,00" logo
+   * acima de um valor grande de "R$ 200,00" — que é exatamente o
+   * engano que o resumo do checkout já tinha.
+   */
+  onDiscountChange?: (discountCents: number) => void;
 }) {
   const [state, formAction, pending] = useActionState(previewCouponAction, INITIAL);
   const formRef = useRef<HTMLFormElement>(null);
@@ -60,10 +68,12 @@ export function CouponField({
   useEffect(() => {
     if (state.status === "applied" && state.code) {
       writeAppliedCoupon(storeSlug, state.code);
+      onDiscountChange?.(state.discountCents ?? 0);
     } else if (state.status === "error") {
       writeAppliedCoupon(storeSlug, null);
+      onDiscountChange?.(0);
     }
-  }, [state.status, state.code, storeSlug]);
+  }, [state.status, state.code, state.discountCents, storeSlug, onDiscountChange]);
 
   const applied = state.status === "applied" && state.code;
 

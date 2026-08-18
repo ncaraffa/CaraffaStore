@@ -16,8 +16,16 @@ import {
   IconLogout,
   IconExternalLink,
   IconChevronDown,
+  IconMenu,
+  IconClose,
 } from "@/components/ui/icons";
-import { dashboardNavItems, type DashboardNavKey } from "./nav-items";
+import {
+  dashboardMobilePrimary,
+  dashboardMobileSecondary,
+  dashboardNavItems,
+  isSecondaryKey,
+  type DashboardNavKey,
+} from "./nav-items";
 import { SessionHeartbeat } from "./SessionHeartbeat";
 import styles from "./DashboardShell.module.css";
 
@@ -58,6 +66,9 @@ interface DashboardShellProps {
  */
 export function DashboardShell({ storeName, storeSlug, storeStatus, active, breadcrumbs, children }: DashboardShellProps) {
   const items = dashboardNavItems(storeSlug);
+  const primary = dashboardMobilePrimary(storeSlug);
+  const secondary = dashboardMobileSecondary(storeSlug);
+  const moreIsActive = isSecondaryKey(active);
   const status = STATUS_LABEL[storeStatus];
 
   return (
@@ -143,8 +154,18 @@ export function DashboardShell({ storeName, storeSlug, storeStatus, active, brea
         </main>
       </div>
 
+      {/*
+        Barra inferior com TRÊS destinos do dia a dia + "Mais". Com os 8
+        itens do menu completo cada alvo teria ~11% da largura e o rótulo
+        truncaria — abaixo do confortável para o polegar.
+
+        "Mais" é um <details>: sheet acessível por teclado e leitor de
+        tela sem nenhum JavaScript, e que fecha ao navegar porque a
+        página recarrega. Quando a rota atual mora dentro dele, o próprio
+        "Mais" aparece ativo — a pessoa nunca fica sem saber onde está.
+      */}
       <nav className={styles.mobileTabs} aria-label="Navegação do painel">
-        {items.map((item) => (
+        {primary.map((item) => (
           <Link
             key={item.key}
             href={item.href}
@@ -156,6 +177,37 @@ export function DashboardShell({ storeName, storeSlug, storeStatus, active, brea
             <span>{item.label}</span>
           </Link>
         ))}
+
+        <details className={styles.moreDetails}>
+          <summary className={styles.mobileTab} data-active={moreIsActive || undefined}>
+            <IconMenu />
+            <span>Mais</span>
+          </summary>
+
+          <div className={styles.moreBackdrop} aria-hidden="true" />
+          <div className={styles.moreSheet} role="group" aria-label="Mais seções">
+            <div className={styles.moreHeader}>
+              <span className={styles.moreTitle}>Mais</span>
+              {/* Fechar é o próprio summary: um segundo toque no "Mais"
+                  fecha. Este rótulo existe para deixar isso óbvio. */}
+              <span className={styles.moreHint} aria-hidden="true">
+                <IconClose />
+              </span>
+            </div>
+            {secondary.map((item) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                className={styles.moreItem}
+                data-active={item.key === active || undefined}
+                aria-current={item.key === active ? "page" : undefined}
+              >
+                {NAV_ICONS[item.key]}
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </details>
       </nav>
     </div>
   );

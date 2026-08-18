@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import Link from "next/link";
 import { useCart } from "@/lib/cart/use-cart";
 import { CouponField } from "./coupon-field";
@@ -12,6 +14,8 @@ import styles from "./cart.module.css";
 
 export function CartPageClient({ storeSlug, storeName }: { storeSlug: string; storeName: string }) {
   const { cart, setQuantity, removeItem, clear, subtotalCents } = useCart(storeSlug);
+  // Desconto vem da prévia do servidor, nunca de conta feita aqui.
+  const [discountCents, setDiscountCents] = useState(0);
 
   return (
     <>
@@ -91,14 +95,28 @@ export function CartPageClient({ storeSlug, storeName }: { storeSlug: string; st
 
             {/* O cupom fica ANTES da barra de checkout: o comprador vê o
                 desconto refletido no resumo antes de decidir avançar. */}
-            <CouponField storeSlug={storeSlug} subtotalCents={subtotalCents} />
+            <CouponField
+              storeSlug={storeSlug}
+              subtotalCents={subtotalCents}
+              onDiscountChange={setDiscountCents}
+            />
 
             {/* Barra fixa no celular: resumo e CTA sempre ao alcance do
                 polegar, sem precisar rolar até o fim da lista. */}
             <div className={styles.checkoutBar}>
               <div className={styles.summary}>
-                <span className={styles.subtotalLabel}>Subtotal</span>
-                <span className={styles.subtotal}>{formatPriceCents(subtotalCents)}</span>
+                {/* Com cupom aplicado o número em destaque é o TOTAL. Mostrar
+                    o subtotal ali, logo abaixo de "−R$ 20,00", faria o
+                    comprador ler R$200 quando vai pagar R$180. */}
+                {discountCents > 0 && (
+                  <span className={styles.summaryLine}>
+                    Subtotal {formatPriceCents(subtotalCents)} · desconto −{formatPriceCents(discountCents)}
+                  </span>
+                )}
+                <span className={styles.subtotalLabel}>{discountCents > 0 ? "Total" : "Subtotal"}</span>
+                <span className={styles.subtotal}>
+                  {formatPriceCents(Math.max(0, subtotalCents - discountCents))}
+                </span>
               </div>
               <Link href={`/loja/${storeSlug}/checkout`} className={styles.checkoutLink}>
                 <Button as="span" size="lg" fullWidth icon={<IconArrowRight />} iconPosition="end">

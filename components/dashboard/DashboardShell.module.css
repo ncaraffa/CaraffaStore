@@ -363,3 +363,118 @@
     display: none;
   }
 }
+
+/* ============================================================
+   TASK-012 — menu "Mais" da barra inferior (mobile)
+
+   A barra passou de 5 para 8 destinos. Em vez de comprimir tudo,
+   3 destinos do dia a dia ficam visíveis e o resto vai para um
+   <details> que abre como bottom sheet. Sem JavaScript: o próprio
+   elemento nativo dá teclado, foco e leitor de tela de graça.
+   ============================================================ */
+
+.moreDetails {
+  position: relative;
+  display: flex;
+}
+
+/* Remove o triângulo nativo em todos os motores. */
+.moreDetails > summary {
+  list-style: none;
+  cursor: pointer;
+  width: 100%;
+}
+.moreDetails > summary::-webkit-details-marker {
+  display: none;
+}
+.moreDetails > summary::marker {
+  content: "";
+}
+
+.moreBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  /* Abaixo do sheet e da própria barra, acima do conteúdo. */
+  z-index: calc(var(--cs-z-sticky) - 1);
+}
+
+.moreSheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  /* Encosta exatamente no topo da barra, respeitando a safe area do iOS. */
+  bottom: calc(3.25rem + env(safe-area-inset-bottom, 0px));
+  z-index: var(--cs-z-sticky);
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.75rem 0.75rem;
+  background: var(--cs-surface, #fff);
+  border-top: 1px solid var(--cs-border, rgba(15, 23, 42, 0.12));
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.12);
+  /* Lista longa nunca ultrapassa a viewport: rola dentro do sheet. */
+  max-height: min(60vh, 26rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.moreHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+
+.moreTitle {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cs-ink-faint);
+}
+
+.moreHint {
+  display: inline-flex;
+  color: var(--cs-ink-faint);
+}
+
+.moreItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  /* 48px: alvo de toque confortável, maior que o mínimo de 44. */
+  min-height: 48px;
+  padding: 0 0.5rem;
+  border-radius: 10px;
+  color: var(--cs-ink, inherit);
+  text-decoration: none;
+  font-size: 0.9375rem;
+}
+
+.moreItem[data-active] {
+  background: var(--cs-surface-muted, rgba(15, 23, 42, 0.05));
+  font-weight: 600;
+}
+
+.moreItem svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+/* O sheet é exclusivo do mobile — no desktop a sidebar já mostra tudo. */
+@media (min-width: 64rem) {
+  .moreDetails,
+  .moreSheet,
+  .moreBackdrop {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moreSheet {
+    transition: none;
+  }
+}
