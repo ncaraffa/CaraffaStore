@@ -318,6 +318,30 @@ echo "$RES" | grep -qi "insufficient_privilege" && ok "removido perde autorizaca
 REV=$($PSQL -c "select count(*) from public.app_sessions where user_id='${MUID}' and revoked_reason='member_removed';")
 [ "$REV" = "1" ] && ok "sessao do removido fica auditada como member_removed" || bad "sessao do removido nao revogada (${REV})"
 
+# ------------------------------------------------------------
+echo
+echo "== 14. PROFESSIONAL tambem aceita multiplas sessoes =="
+# Growth ja foi testado acima. Professional usa o mesmo
+# max_concurrent_sessions = NULL, mas confirmar explicitamente evita que
+# uma mudanca futura no catalogo aplique a regra do Essencial por engano.
+$PSQL >/dev/null <<SQL
+update public.workspace_subscriptions set plan_key='professional' where workspace_id='${WS}';
+select public.workspace_apply_session_policy('${WS}');
+delete from public.app_sessions where workspace_id='${WS}';
+SQL
+P1=$(login "$EMAIL"); P2=$(login "$EMAIL")
+rpc "$P1" app_session_start "{\"p_workspace_id\":\"${WS}\",\"p_user_agent_label\":\"Pro A\"}" >/dev/null
+RES=$(rpc "$P2" app_session_start "{\"p_workspace_id\":\"${WS}\",\"p_user_agent_label\":\"Pro B\"}")
+echo "$RES" | grep -q '"conflict":false' && ok "Professional: 2a sessao permitida sem takeover" || bad "Professional restringiu sessao: $RES"
+N=$($PSQL -c "select count(*) from public.app_sessions where workspace_id='${WS}' and revoked_at is null;")
+[ "$N" = "2" ] && ok "Professional mantem 2 sessoes ativas simultaneas" || bad "Professional ficou com ${N} sessoes"
+
+# as duas operam de verdade
+RES=$(rpc "$P1" store_quota_usage "{\"p_store_id\":\"${STORE}\"}")
+echo "$RES" | grep -q "plan_key" && ok "sessao Pro A opera" || bad "Pro A nao opera: $RES"
+RES=$(rpc "$P2" store_quota_usage "{\"p_store_id\":\"${STORE}\"}")
+echo "$RES" | grep -q "plan_key" && ok "sessao Pro B opera simultaneamente" || bad "Pro B nao opera: $RES"
+
 $PSQL -c "drop table if exists public._sess_fixture;" >/dev/null
 
 echo

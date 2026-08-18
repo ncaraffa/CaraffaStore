@@ -388,6 +388,68 @@ begin
 end;
 $t$;
 
+-- ============================================================
+-- Caso 12: reenviar convite VENCIDO nao estoura a reserva (0024)
+-- ============================================================
+--
+-- Convite vencido continua status='pending' (a expiracao e por data,
+-- para a vaga voltar sem cron) e por isso NAO reserva. Renovar a data
+-- faz voltar a reservar — e isso precisa reconferir o limite. Antes de
+-- 0024, reenviar num workspace 3/3 levava a reserva para 4/3.
+do $t$
+declare
+  v_ws uuid := current_setting('app.growth_ws')::uuid;
+  v_owner uuid := current_setting('app.growth_uid')::uuid;
+  v_uid uuid; i integer; v_before integer; v_ok boolean := false;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', v_owner)::text, true);
+
+  -- estado limpo: so o owner
+  delete from public.workspace_members where workspace_id = v_ws and role = 'member';
+  update public.workspace_invitations set status='revoked' where workspace_id = v_ws and status='pending';
+
+  -- enche ate 3/3 com membros reais
+  for i in 1..2 loop
+    v_uid := gen_random_uuid();
+    insert into auth.users (id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,created_at,updated_at)
+      values (v_uid,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',
+              'resend-full-'||i||'@team.test','x',now(),now(),now());
+    insert into public.workspace_members (workspace_id,user_id,role) values (v_ws,v_uid,'member');
+  end loop;
+
+  -- convite antigo, ja vencido: nao reserva
+  insert into public.workspace_invitations (workspace_id,email,token_hash,invited_by,expires_at,status)
+    values (v_ws,'vencido@team.test',repeat('e',64),v_owner, now() - interval '1 day','pending');
+
+  v_before := public.workspace_reserved_seats(v_ws);
+  if v_before <> 3 then raise exception 'FAIL: esperava 3 reservados, got %', v_before; end if;
+
+  -- reenviar tem que ser RECUSADO: renovar consumiria um 4o assento
+  begin
+    perform public.workspace_resend_invitation('vencido@team.test', repeat('f',64));
+  exception when others then
+    if sqlerrm <> 'max_team_members_reached' then raise; end if;
+    v_ok := true;
+  end;
+  if not v_ok then
+    raise exception 'FAIL: reenvio de convite vencido estourou a reserva (%)', public.workspace_reserved_seats(v_ws);
+  end if;
+  if public.workspace_reserved_seats(v_ws) <> 3 then
+    raise exception 'FAIL: reserva mudou apesar da recusa (%)', public.workspace_reserved_seats(v_ws);
+  end if;
+  raise notice 'PASS - reenvio de convite vencido em workspace cheio e recusado; reserva continua 3/3';
+
+  -- e com vaga, o reenvio funciona normalmente
+  delete from public.workspace_members where workspace_id = v_ws and role='member'
+    and user_id = (select user_id from public.workspace_members where workspace_id=v_ws and role='member' limit 1);
+  perform public.workspace_resend_invitation('vencido@team.test', repeat('f',64));
+  if public.workspace_reserved_seats(v_ws) <> 3 then
+    raise exception 'FAIL: reenvio com vaga deveria reservar de volta (%)', public.workspace_reserved_seats(v_ws);
+  end if;
+  raise notice 'PASS - com vaga, reenviar renova o convite e volta a reservar (3/3)';
+end;
+$t$;
+
 do $t$ begin raise notice 'OK: TODOS os casos de equipe passaram'; end; $t$;
 
 rollback;
