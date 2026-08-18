@@ -23,7 +23,7 @@ MIGRATIONS_DIR="supabase/migrations"
 STASH_DIR="$(mktemp -d)"
 PSQL="docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -v ON_ERROR_STOP=1"
 
-NEW_MIGRATIONS="0012_plan_entitlements.sql 0013_workspace_subscription.sql 0014_quota_enforcement.sql"
+NEW_MIGRATIONS="0012_plan_entitlements.sql 0013_workspace_subscription.sql 0014_quota_enforcement.sql 0015_workspace_team.sql"
 
 restore_migrations() {
   for f in $NEW_MIGRATIONS; do
@@ -33,7 +33,7 @@ restore_migrations() {
 }
 trap restore_migrations EXIT
 
-echo "==> Movendo 0012/0013/0014 para fora (simula estado pós-0011)"
+echo "==> Movendo 0012..0015 para fora (simula estado pós-0011)"
 for f in $NEW_MIGRATIONS; do mv "$MIGRATIONS_DIR/$f" "$STASH_DIR/"; done
 
 echo "==> supabase db reset (aplica 0001..0011)"
@@ -74,7 +74,7 @@ SQL
 CHARGE_BEFORE=$($PSQL -q -t -A -c "select amount_cents || '|' || status || '|' || approved_at from public.billing_charges where external_reference='ext-upgrade-1';")
 echo "    cobrança histórica antes do upgrade: $CHARGE_BEFORE"
 
-echo "==> Devolvendo 0012/0013/0014 e aplicando migration up (SEM reset)"
+echo "==> Devolvendo 0012..0015 e aplicando migration up (SEM reset)"
 for f in $NEW_MIGRATIONS; do mv "$STASH_DIR/$f" "$MIGRATIONS_DIR/"; done
 npx supabase migration up --local >/dev/null
 
@@ -114,6 +114,13 @@ begin
   select max_images_per_product into v from public.store_entitlements('aaaaaaaa-0000-4000-8000-000000000003');
   if v <> 10 then raise exception 'FAIL: professional max_images=%', v; end if;
   raise notice 'PASS - entitlements conferem com a tabela comercial';
+
+  -- backfill de equipe: cada owner legado vira UM assento, nunca vários
+  select count(*) into v from public.workspace_members;
+  if v <> 3 then raise exception 'FAIL: esperava 3 assentos (um por comerciante legado), got %', v; end if;
+  select count(*) into v from public.workspace_members where role = 'owner';
+  if v <> 3 then raise exception 'FAIL: owners legados nao viraram owner do workspace'; end if;
+  raise notice 'PASS - backfill de equipe: 1 assento por comerciante legado, todos owner';
 end;
 $t$;
 SQL
