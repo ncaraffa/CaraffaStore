@@ -12,6 +12,7 @@ import {
   IconCreditCard,
   IconLayers,
   IconUsers,
+  IconTicket,
   IconLogout,
   IconExternalLink,
   IconChevronDown,
@@ -26,6 +27,7 @@ const NAV_ICONS: Record<DashboardNavKey, ReactNode> = {
   produtos: <IconBox />,
   pedidos: <IconReceipt />,
   pagamentos: <IconCreditCard />,
+  marketing: <IconTicket />,
   equipe: <IconUsers />,
   assinatura: <IconLayers />,
 };

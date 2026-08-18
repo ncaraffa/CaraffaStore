@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCart } from "@/lib/cart/use-cart";
+import { CouponField } from "./coupon-field";
 import { formatPriceCents } from "@/lib/catalog/format";
 import { StorefrontHeader } from "@/components/storefront/StorefrontHeader";
 import { Button } from "@/components/ui/Button";
@@ -87,6 +88,10 @@ export function CartPageClient({ storeSlug, storeName }: { storeSlug: string; st
             <button type="button" className={styles.clearLink} onClick={clear}>
               Limpar carrinho
             </button>
+
+            {/* O cupom fica ANTES da barra de checkout: o comprador vê o
+                desconto refletido no resumo antes de decidir avançar. */}
+            <CouponField storeSlug={storeSlug} subtotalCents={subtotalCents} />
 
             {/* Barra fixa no celular: resumo e CTA sempre ao alcance do
                 polegar, sem precisar rolar até o fim da lista. */}

@@ -227,6 +227,20 @@ export default async function OrderDetailPage({
                 <span>Subtotal</span>
                 <span className={styles.numeric}>{formatPriceCents(order.subtotal_cents)}</span>
               </div>
+              {/* TASK-012 — snapshot do pedido, NUNCA o cupom atual: se o
+                  lojista mudar NATAL10 de 10% para 15% amanhã, este pedido
+                  continua mostrando exatamente o que foi cobrado. */}
+              {order.discount_cents > 0 && (
+                <div className={styles.totalRow}>
+                  <span>
+                    Desconto
+                    {order.coupon_code_snapshot && (
+                      <span className={styles.couponTag}> · {order.coupon_code_snapshot}</span>
+                    )}
+                  </span>
+                  <span className={styles.numeric}>−{formatPriceCents(order.discount_cents)}</span>
+                </div>
+              )}
               <div className={styles.totalRowFinal}>
                 <span>Total</span>
                 <span className={styles.numeric}>{formatPriceCents(order.total_cents)}</span>

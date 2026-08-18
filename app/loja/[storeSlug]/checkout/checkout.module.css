@@ -135,3 +135,12 @@
   height: 0.875rem;
   flex-shrink: 0;
 }
+
+/* TASK-012 — aviso de cupom no resumo do checkout. */
+.couponNote {
+  margin: 0.5rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}

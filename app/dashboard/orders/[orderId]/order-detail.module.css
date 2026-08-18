@@ -362,3 +362,16 @@
   font-size: 0.75rem;
   color: var(--cs-ink-muted);
 }
+
+.couponTag {
+  color: var(--color-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+}
+
+/* TASK-012 — codigo do cupom ao lado da linha de desconto. */
+.couponTag {
+  color: var(--color-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+}

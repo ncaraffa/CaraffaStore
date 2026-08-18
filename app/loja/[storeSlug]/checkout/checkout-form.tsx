@@ -1,10 +1,16 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart/use-cart";
 import { clearCart } from "@/lib/cart/storage";
+import {
+  getServerCouponSnapshot,
+  readAppliedCoupon,
+  subscribeToCoupon,
+  writeAppliedCoupon,
+} from "@/lib/cart/coupon-storage";
 import { formatPriceCents } from "@/lib/catalog/format";
 import { IDLE_ACTION_STATE } from "@/lib/auth/action-state";
 import { submitCheckoutAction, type CheckoutState } from "./actions";
@@ -24,6 +30,15 @@ export function CheckoutForm({ storeSlug, storeName }: { storeSlug: string; stor
   const { cart, subtotalCents } = useCart(storeSlug);
   const [state, formAction, pending] = useActionState(submitCheckoutAction, IDLE_ACTION_STATE as CheckoutState);
   const [fulfillment, setFulfillment] = useState<"pickup" | "delivery">("pickup");
+  // useSyncExternalStore em vez de useEffect+setState: mesma razão do
+  // useCart — localStorage é um store externo, e "hidratar" por efeito
+  // causa render em cascata além de divergir do snapshot do servidor.
+  // Só o CÓDIGO é lido; desconto e total continuam vindo do banco.
+  const couponCode = useSyncExternalStore(
+    useCallback((cb) => subscribeToCoupon(storeSlug, cb), [storeSlug]),
+    () => readAppliedCoupon(storeSlug),
+    getServerCouponSnapshot,
+  );
   // Gerada uma única vez por carregamento da página (uma "tentativa real
   // de checkout") — reenvios dentro desta mesma página (duplo clique,
   // retry após erro de rede) reusam a MESMA key, então o backend
@@ -34,6 +49,7 @@ export function CheckoutForm({ storeSlug, storeName }: { storeSlug: string; stor
   useEffect(() => {
     if (state.status === "success" && state.publicCode) {
       clearCart(storeSlug);
+      writeAppliedCoupon(storeSlug, null);
       router.push(`/loja/${storeSlug}/pedido/${state.publicCode}/pagamento`);
     }
   }, [state, storeSlug, router]);
@@ -64,14 +80,28 @@ export function CheckoutForm({ storeSlug, storeName }: { storeSlug: string; stor
           <span className={styles.summaryCount}>
             {itemCount} {itemCount === 1 ? "item" : "itens"}
           </span>
+          {/* TASK-012 — com cupom aplicado, este número é o SUBTOTAL, não
+              o valor a pagar: o desconto é calculado no banco no momento
+              do checkout. Rotular como "total" aqui mostraria R$200 para
+              quem vai pagar R$180. O valor final aparece no Pix. */}
           <span className={styles.summaryTotal}>{formatPriceCents(subtotalCents)}</span>
         </div>
+
+        {couponCode && (
+          <p className={styles.couponNote}>
+            Cupom <strong>{couponCode}</strong> aplicado — o desconto entra no valor final do Pix.
+          </p>
+        )}
 
         <Card>
           <form action={formAction} noValidate>
             <input type="hidden" name="storeSlug" value={storeSlug} />
             <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
             <input type="hidden" name="items" value={itemsJson} />
+            {/* Só o CÓDIGO viaja. Desconto e total são recalculados no
+                banco dentro de create_order — nada do que estiver aqui
+                influencia o valor cobrado. */}
+            <input type="hidden" name="couponCode" value={couponCode ?? ""} />
 
             {state.status === "error" && state.message && (
               <div className={styles.alertGap}>

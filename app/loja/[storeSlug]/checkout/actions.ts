@@ -39,6 +39,7 @@ export async function submitCheckoutAction(_prev: CheckoutState, formData: FormD
     customerNotes: String(formData.get("customerNotes") ?? ""),
     idempotencyKey: String(formData.get("idempotencyKey") ?? ""),
     items: itemsRaw,
+    couponCode: String(formData.get("couponCode") ?? ""),
   });
 
   if (!normalizedPhone) {
@@ -67,6 +68,10 @@ export async function submitCheckoutAction(_prev: CheckoutState, formData: FormD
       payerDocType: document.type,
       payerDocNumber: document.digits,
       items: parsed.data.items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+      // O cupom vai como texto. O desconto NUNCA é enviado pelo cliente:
+      // create_order revalida e recalcula tudo no banco, e a cobrança do
+      // Mercado Pago usa o total resultante.
+      couponCode: parsed.data.couponCode || null,
     });
 
     const cookieStore = await cookies();

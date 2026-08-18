@@ -439,6 +439,92 @@ begin
 end;
 $t$;
 
+-- ============================================================
+-- Caso 15: falha na criação do Pix libera a reserva
+-- ============================================================
+--
+-- Cenário do requisito 24: pedido criado, cupom reservado, e a chamada
+-- ao Mercado Pago falha. pix_payment_mark_creation_failed cancela o
+-- pedido — e a trigger tem que devolver a vaga, senão uma indisponi-
+-- bilidade do provedor consumiria utilizações do cupom para sempre.
+do $t$
+declare
+  v_prod uuid := current_setting('app.growth_prod')::uuid;
+  v_id uuid := current_setting('app.coupon_id')::uuid;
+  v_order public.orders;
+  v_before integer;
+  v_status text;
+begin
+  v_before := public.coupon_used_count(v_id);
+
+  select * into v_order from public.create_order(
+    'cup-growth', gen_random_uuid(), 'Cliente MP', '11999993333', 'pickup', null, null,
+    jsonb_build_array(jsonb_build_object('product_id', v_prod, 'quantity', 1)), 'NATAL10');
+  if public.coupon_used_count(v_id) <> v_before + 1 then
+    raise exception 'FAIL: reserva nao aconteceu';
+  end if;
+
+  -- É exatamente o que mark_creation_failed faz com o pedido.
+  update public.orders set status = 'cancelled', cancelled_at = now() where id = v_order.id;
+
+  select status into v_status from public.coupon_redemptions where order_id = v_order.id;
+  if v_status <> 'released' then
+    raise exception 'FAIL: falha na criacao do Pix deixou a vaga presa (%)', v_status;
+  end if;
+  if public.coupon_used_count(v_id) <> v_before then
+    raise exception 'FAIL: vaga nao voltou apos falha do provedor';
+  end if;
+  raise notice 'PASS - falha na criacao do Pix devolve a vaga (nenhuma reserva presa)';
+end;
+$t$;
+
+-- ============================================================
+-- Caso 16: matriz completa da state machine
+-- ============================================================
+do $t$
+declare
+  v_prod uuid := current_setting('app.growth_prod')::uuid;
+  v_id uuid := current_setting('app.coupon_id')::uuid;
+  v_o1 public.orders; v_o2 public.orders;
+  v_s text;
+begin
+  -- preview -> none  (coupon_validate nao cria linha)
+  perform * from public.coupon_validate(current_setting('app.growth_store')::uuid, 'NATAL10', 20000);
+  if exists (select 1 from public.coupon_redemptions r
+             join public.orders o on o.id = r.order_id
+             where o.customer_name = 'Preview') then
+    raise exception 'FAIL: preview criou resgate';
+  end if;
+
+  -- order created -> reserved
+  select * into v_o1 from public.create_order(
+    'cup-growth', gen_random_uuid(), 'Matriz A', '11999992222', 'pickup', null, null,
+    jsonb_build_array(jsonb_build_object('product_id', v_prod, 'quantity', 1)), 'NATAL10');
+  select status into v_s from public.coupon_redemptions where order_id = v_o1.id;
+  if v_s <> 'reserved' then raise exception 'FAIL: created -> % (esperado reserved)', v_s; end if;
+
+  -- payment approved -> consumed
+  update public.orders set status = 'confirmed' where id = v_o1.id;
+  select status into v_s from public.coupon_redemptions where order_id = v_o1.id;
+  if v_s <> 'consumed' then raise exception 'FAIL: approved -> % (esperado consumed)', v_s; end if;
+
+  -- cancelled AFTER consumed -> permanece consumed
+  update public.orders set status = 'cancelled' where id = v_o1.id;
+  select status into v_s from public.coupon_redemptions where order_id = v_o1.id;
+  if v_s <> 'consumed' then raise exception 'FAIL: cancelado apos pago -> %', v_s; end if;
+
+  -- payment failed/expired -> released
+  select * into v_o2 from public.create_order(
+    'cup-growth', gen_random_uuid(), 'Matriz B', '11999991111', 'pickup', null, null,
+    jsonb_build_array(jsonb_build_object('product_id', v_prod, 'quantity', 1)), 'NATAL10');
+  update public.orders set status = 'cancelled' where id = v_o2.id;
+  select status into v_s from public.coupon_redemptions where order_id = v_o2.id;
+  if v_s <> 'released' then raise exception 'FAIL: falha/expiracao -> % (esperado released)', v_s; end if;
+
+  raise notice 'PASS - matriz: preview=none, created=reserved, approved=consumed, cancelado-pos-pago=consumed, falha=released';
+end;
+$t$;
+
 do $t$ begin raise notice 'OK: TODOS os casos de cupom passaram'; end; $t$;
 
 rollback;

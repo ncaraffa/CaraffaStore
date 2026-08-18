@@ -1,0 +1,96 @@
+/* Campo de cupom do carrinho. Mobile primeiro. */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text);
+  /* 16px evita o zoom automático do iOS. */
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--color-danger-text, #a01b1b);
+}
+
+.apply {
+  min-height: 44px;
+  padding: 0 1.125rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.apply:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger-text, #a01b1b);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.applied {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.appliedText {
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.remove {
+  background: none;
+  border: none;
+  padding: 0.5rem 0;
+  min-height: 44px;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  text-decoration: underline;
+  cursor: pointer;
+  flex-shrink: 0;
+}
