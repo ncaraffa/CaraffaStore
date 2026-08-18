@@ -23,7 +23,7 @@ MIGRATIONS_DIR="supabase/migrations"
 STASH_DIR="$(mktemp -d)"
 PSQL="docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -v ON_ERROR_STOP=1"
 
-NEW_MIGRATIONS="0012_plan_entitlements.sql 0013_workspace_subscription.sql 0014_quota_enforcement.sql 0015_workspace_team.sql 0016_app_sessions.sql 0017_app_session_by_store.sql"
+NEW_MIGRATIONS="0012_plan_entitlements.sql 0013_workspace_subscription.sql 0014_quota_enforcement.sql 0015_workspace_team.sql 0016_app_sessions.sql 0017_app_session_by_store.sql 0018_session_fail_closed.sql"
 
 restore_migrations() {
   for f in $NEW_MIGRATIONS; do
@@ -33,7 +33,7 @@ restore_migrations() {
 }
 trap restore_migrations EXIT
 
-echo "==> Movendo 0012..0017 para fora (simula estado pós-0011)"
+echo "==> Movendo 0012..0018 para fora (simula estado pós-0011)"
 for f in $NEW_MIGRATIONS; do mv "$MIGRATIONS_DIR/$f" "$STASH_DIR/"; done
 
 echo "==> supabase db reset (aplica 0001..0011)"
@@ -74,7 +74,7 @@ SQL
 CHARGE_BEFORE=$($PSQL -q -t -A -c "select amount_cents || '|' || status || '|' || approved_at from public.billing_charges where external_reference='ext-upgrade-1';")
 echo "    cobrança histórica antes do upgrade: $CHARGE_BEFORE"
 
-echo "==> Devolvendo 0012..0017 e aplicando migration up (SEM reset)"
+echo "==> Devolvendo 0012..0018 e aplicando migration up (SEM reset)"
 for f in $NEW_MIGRATIONS; do mv "$STASH_DIR/$f" "$MIGRATIONS_DIR/"; done
 npx supabase migration up --local >/dev/null
 
@@ -128,9 +128,39 @@ begin
   -- upgrade não vira logout global.
   select count(*) into v from public.app_sessions;
   if v <> 0 then raise exception 'FAIL: upgrade criou % sessoes do nada', v; end if;
-  if public.app_session_denied() then
-    raise exception 'FAIL: upgrade negaria acesso a quem ja estava logado (logout global)';
+
+  -- O cutover é gravado NA APLICAÇÃO da migration, não hardcoded.
+  if public.app_session_enforced_from() is null then
+    raise exception 'FAIL: cutover da sessao nao foi registrado';
   end if;
+  if public.app_session_enforced_from() > now() then
+    raise exception 'FAIL: cutover no futuro — a compatibilidade nunca fecharia';
+  end if;
+
+  -- Compatibilidade de rollout: um JWT emitido ANTES do cutover ainda
+  -- passa (para o deploy não deslogar quem estava no meio de algo);
+  -- um emitido DEPOIS, sem sessão registrada, é negado. Como todo
+  -- refresh emite iat novo, o primeiro caso deixa de existir sozinho
+  -- em no máximo um ciclo de token.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', '11111111-1111-4111-8111-111111111111',
+    'session_id', gen_random_uuid()::text,
+    'iat', extract(epoch from public.app_session_enforced_from())::bigint - 60
+  )::text, true);
+  if public.app_session_denied() then
+    raise exception 'FAIL: JWT anterior ao cutover foi negado (viraria logout global no deploy)';
+  end if;
+
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', '11111111-1111-4111-8111-111111111111',
+    'session_id', gen_random_uuid()::text,
+    'iat', extract(epoch from now())::bigint
+  )::text, true);
+  if not public.app_session_denied() then
+    raise exception 'FAIL: JWT posterior ao cutover SEM sessao foi permitido (bypass)';
+  end if;
+  perform set_config('request.jwt.claims', '', true);
+  raise notice 'PASS - cutover: JWT pre-corte tolerado, JWT pos-corte sem sessao NEGADO';
   select max_concurrent_sessions into v from public.platform_plans where plan_key='essential';
   if v <> 1 then raise exception 'FAIL: essential max_concurrent_sessions=%', v; end if;
   if (select max_concurrent_sessions from public.platform_plans where plan_key='growth') is not null then
