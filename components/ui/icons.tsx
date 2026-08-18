@@ -22,6 +22,16 @@ function Icon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Equipe (TASK-012) — duas pessoas, mesmo traço 1.75 dos demais. */
+export const IconUsers = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <circle cx="9" cy="8" r="3.25" />
+    <path d="M2.75 20a6.25 6.25 0 0 1 12.5 0" />
+    <path d="M16.5 5.2a3.25 3.25 0 0 1 0 5.6" />
+    <path d="M18.4 14.3A5.4 5.4 0 0 1 21.25 20" />
+  </Icon>
+);
+
 export const IconHome = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <path d="M3 10.5 12 3l9 7.5" />

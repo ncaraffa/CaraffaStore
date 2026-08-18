@@ -11,11 +11,13 @@ import {
   IconReceipt,
   IconCreditCard,
   IconLayers,
+  IconUsers,
   IconLogout,
   IconExternalLink,
   IconChevronDown,
 } from "@/components/ui/icons";
 import { dashboardNavItems, type DashboardNavKey } from "./nav-items";
+import { SessionHeartbeat } from "./SessionHeartbeat";
 import styles from "./DashboardShell.module.css";
 
 const NAV_ICONS: Record<DashboardNavKey, ReactNode> = {
@@ -24,6 +26,7 @@ const NAV_ICONS: Record<DashboardNavKey, ReactNode> = {
   produtos: <IconBox />,
   pedidos: <IconReceipt />,
   pagamentos: <IconCreditCard />,
+  equipe: <IconUsers />,
   assinatura: <IconLayers />,
 };
 
@@ -57,6 +60,12 @@ export function DashboardShell({ storeName, storeSlug, storeStatus, active, brea
 
   return (
     <div className={styles.shell}>
+      {/* TASK-012: mantém o lease da sessão vivo e encerra a sessão local
+          quando ela é revogada em outro lugar. Fica no shell porque toda
+          tela administrativa passa por aqui — não é segurança (o banco
+          recusa de qualquer forma), é para o lojista não operar uma tela
+          morta. */}
+      <SessionHeartbeat />
       <aside className={styles.sidebar}>
         <Link href={`/dashboard?store=${storeSlug}`} className={styles.brand} aria-label="Ir para o painel">
           <Logo size="md" />

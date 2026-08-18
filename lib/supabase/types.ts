@@ -134,6 +134,89 @@ export interface Database {
         };
         Relationships: [];
       };
+      /**
+       * TASK-012 — ASSENTO/licença de equipe. Uma linha por PESSOA por
+       * workspace. Não confundir com store_members, que é a projeção de
+       * ACESSO (uma linha por pessoa POR LOJA).
+       */
+      workspace_members: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          user_id: string;
+          role: "owner" | "member";
+          invited_by: string | null;
+          joined_at: string;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      workspace_invitations: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          email: string;
+          /** Só o SHA-256 — o token em claro nunca é persistido. */
+          token_hash: string;
+          role: "member";
+          invited_by: string | null;
+          status: "pending" | "accepted" | "revoked" | "expired";
+          expires_at: string;
+          accepted_at: string | null;
+          accepted_by: string | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      app_sessions: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          user_id: string;
+          supabase_session_hash: string;
+          enforces_single_session: boolean;
+          user_agent_label: string | null;
+          created_at: string;
+          last_seen_at: string;
+          expires_at: string;
+          revoked_at: string | null;
+          revoked_reason: "logout" | "takeover" | "member_removed" | "stale" | "plan_downgrade" | "admin" | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      workspace_subscriptions: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          plan_key: PlanKey;
+          status: "pending_payment" | "active" | "past_due" | "cancelled";
+          entitlement_version: number;
+          started_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      workspaces: {
+        Row: {
+          id: string;
+          owner_user_id: string;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       store_members: {
         Row: {
           id: string;
@@ -1318,6 +1401,15 @@ export interface Database {
           period_start: string;
           period_end: string;
           created_at: string;
+        }[];
+      };
+      app_session_start_for_store: {
+        Args: { p_store_id: string; p_user_agent_label?: string | null; p_takeover?: boolean };
+        Returns: {
+          session_id: string | null;
+          conflict: boolean;
+          other_label: string | null;
+          other_last_seen: string | null;
         }[];
       };
       app_session_start: {

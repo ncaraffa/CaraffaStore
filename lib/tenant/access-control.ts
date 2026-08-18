@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { startAppSessionForStore, browserLabel } from "@/lib/auth/app-session";
 import type { Database, StoreRole, StoreStatus } from "@/lib/supabase/types";
 import type { Store } from "@/lib/data/repository";
 import { SupabaseStoreRepository } from "@/lib/data/supabase-repository";
@@ -85,7 +87,48 @@ export async function requireStoreStatus(
     redirect(storeStatusRedirectPath(access.store.status, access.store.slug));
   }
 
+  // TASK-012 — bootstrap da sessão da CaraffaStore.
+  //
+  // Fica AQUI, e não em cada página, porque este é o único ponto por onde
+  // todo acesso administrativo autenticado já passa (requisito 11: guarda
+  // centralizada, sem espalhar `if (!session)`). É idempotente: abas e
+  // navegação normal caem no ramo de renovação e nunca criam sessão nova.
+  //
+  // Isto NÃO é a barreira de segurança — quem nega é o banco
+  // (app_session_denied, consultada pelos três helpers de autorização).
+  // Aqui só se registra a sessão e se desvia para a tela de conflito
+  // quando o plano permite apenas uma sessão simultânea.
+  const outcome = await ensureAppSession(supabase, access.store.id);
+  if (outcome === "conflict") {
+    redirect(`/sessao-ativa?store=${access.store.slug}`);
+  }
+
   return access;
+}
+
+/**
+ * Abre/renova a sessão do browser atual para o workspace da loja.
+ * Devolve "conflict" quando já existe outra sessão ativa num plano de
+ * sessão única — o chamador decide o que fazer (a página de conflito
+ * oferece o takeover explícito).
+ *
+ * Uma falha aqui NUNCA bloqueia o acesso por conta própria: se o
+ * registro da sessão falhar por um motivo transitório, a autorização
+ * continua sendo decidida pelo banco. Barrar aqui seria transformar um
+ * erro de infraestrutura em logout.
+ */
+async function ensureAppSession(supabase: Client, storeId: string): Promise<"ok" | "conflict"> {
+  // UMA chamada por request: a resolução loja -> workspace acontece
+  // dentro do banco (app_session_start_for_store). Fazer um SELECT aqui
+  // só para devolver o workspace na chamada seguinte dobraria o custo do
+  // caminho mais quente da aplicação.
+  const headerList = await headers();
+  const result = await startAppSessionForStore(supabase, {
+    storeId,
+    userAgentLabel: browserLabel(headerList.get("user-agent")),
+  });
+
+  return result.status === "conflict" ? "conflict" : "ok";
 }
 
 /**

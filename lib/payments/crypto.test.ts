@@ -1,6 +1,14 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Estes testes varrem app/, lib/, scripts/ e supabase/ no disco de forma
+// síncrona: o custo cresce com o repositório, e sob execução paralela
+// passaram a estourar o limite padrão de 5s (TASK-012 acrescentou
+// arquivos). O que eles verificam é uma FRONTEIRA DE SEGURANÇA, não
+// desempenho — dar folga aqui preserva a intenção; baixar o rigor da
+// varredura, não.
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * Guarda de regressão por análise estática para a fronteira server-only

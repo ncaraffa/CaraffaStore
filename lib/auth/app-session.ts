@@ -84,6 +84,37 @@ export async function startAppSession(
 }
 
 /**
+ * Mesma coisa, mas a partir da LOJA — o banco resolve o workspace.
+ *
+ * É a variante usada no bootstrap de requireStoreStatus, que roda em
+ * toda requisição administrativa: uma chamada só, sem um SELECT extra
+ * para descobrir o workspace antes.
+ */
+export async function startAppSessionForStore(
+  supabase: Client,
+  params: { storeId: string; userAgentLabel?: string | null; takeover?: boolean },
+): Promise<StartSessionResult> {
+  const { data, error } = await supabase.rpc("app_session_start_for_store", {
+    p_store_id: params.storeId,
+    p_user_agent_label: params.userAgentLabel ?? null,
+    p_takeover: params.takeover ?? false,
+  });
+
+  if (error) return { status: "error", code: extractCode(error.message) };
+
+  const row = data?.[0];
+  if (!row) return { status: "error", code: "unknown_error" };
+
+  if (row.conflict) {
+    return {
+      status: "conflict",
+      conflict: { otherLabel: row.other_label, otherLastSeen: row.other_last_seen },
+    };
+  }
+  return { status: "active", sessionId: row.session_id ?? "" };
+}
+
+/**
  * Renova o lease. `false` significa que esta sessão não vale mais (foi
  * revogada por takeover, logout, remoção de membro ou downgrade) — o
  * cliente deve encerrar e voltar ao login.
