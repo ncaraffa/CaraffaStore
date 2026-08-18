@@ -23,7 +23,7 @@ MIGRATIONS_DIR="supabase/migrations"
 STASH_DIR="$(mktemp -d)"
 PSQL="docker exec -i supabase_db_commerce-platform-local psql -U postgres -d postgres -v ON_ERROR_STOP=1"
 
-NEW_MIGRATIONS="0012_plan_entitlements.sql 0013_workspace_subscription.sql 0014_quota_enforcement.sql 0015_workspace_team.sql 0016_app_sessions.sql 0017_app_session_by_store.sql 0018_session_fail_closed.sql"
+NEW_MIGRATIONS="0012_plan_entitlements.sql 0013_workspace_subscription.sql 0014_quota_enforcement.sql 0015_workspace_team.sql 0016_app_sessions.sql 0017_app_session_by_store.sql 0018_session_fail_closed.sql 0019_coupons.sql 0020_coupon_lifecycle.sql"
 
 restore_migrations() {
   for f in $NEW_MIGRATIONS; do
@@ -33,7 +33,7 @@ restore_migrations() {
 }
 trap restore_migrations EXIT
 
-echo "==> Movendo 0012..0018 para fora (simula estado pós-0011)"
+echo "==> Movendo 0012..0020 para fora (simula estado pós-0011)"
 for f in $NEW_MIGRATIONS; do mv "$MIGRATIONS_DIR/$f" "$STASH_DIR/"; done
 
 echo "==> supabase db reset (aplica 0001..0011)"
@@ -71,10 +71,20 @@ insert into public.billing_charges (
 );
 SQL
 
+$PSQL -q <<'SQL'
+insert into public.orders (
+  store_id, public_code, idempotency_key, request_fingerprint,
+  customer_name, customer_phone, fulfillment_method, status, subtotal_cents, total_cents
+) values (
+  'aaaaaaaa-0000-4000-8000-000000000003', 'LEGADO01', gen_random_uuid(), 'legado-fingerprint',
+  'Cliente Legado', '11999990000', 'pickup', 'confirmed', 15000, 15000
+);
+SQL
+
 CHARGE_BEFORE=$($PSQL -q -t -A -c "select amount_cents || '|' || status || '|' || approved_at from public.billing_charges where external_reference='ext-upgrade-1';")
 echo "    cobrança histórica antes do upgrade: $CHARGE_BEFORE"
 
-echo "==> Devolvendo 0012..0018 e aplicando migration up (SEM reset)"
+echo "==> Devolvendo 0012..0020 e aplicando migration up (SEM reset)"
 for f in $NEW_MIGRATIONS; do mv "$STASH_DIR/$f" "$MIGRATIONS_DIR/"; done
 npx supabase migration up --local >/dev/null
 
@@ -161,6 +171,21 @@ begin
   end if;
   perform set_config('request.jwt.claims', '', true);
   raise notice 'PASS - cutover: JWT pre-corte tolerado, JWT pos-corte sem sessao NEGADO';
+
+  -- Pedido LEGADO (criado antes dos cupons) sobrevive intacto: desconto
+  -- zero, total = subtotal, nenhum cupom inventado.
+  select count(*) into v from public.orders where public_code = 'LEGADO01';
+  if v <> 1 then raise exception 'FAIL: pedido legado sumiu no upgrade'; end if;
+  select discount_cents into v from public.orders where public_code = 'LEGADO01';
+  if v <> 0 then raise exception 'FAIL: pedido legado ganhou desconto % do nada', v; end if;
+  if (select total_cents from public.orders where public_code='LEGADO01')
+     <> (select subtotal_cents from public.orders where public_code='LEGADO01') then
+    raise exception 'FAIL: total do pedido legado deixou de bater com o subtotal';
+  end if;
+  if (select coupon_id from public.orders where public_code='LEGADO01') is not null then
+    raise exception 'FAIL: pedido legado ganhou cupom';
+  end if;
+  raise notice 'PASS - pedido legado preservado: desconto 0, total = subtotal, sem cupom';
   select max_concurrent_sessions into v from public.platform_plans where plan_key='essential';
   if v <> 1 then raise exception 'FAIL: essential max_concurrent_sessions=%', v; end if;
   if (select max_concurrent_sessions from public.platform_plans where plan_key='growth') is not null then

@@ -139,6 +139,45 @@ export interface Database {
        * workspace. Não confundir com store_members, que é a projeção de
        * ACESSO (uma linha por pessoa POR LOJA).
        */
+      coupons: {
+        Row: {
+          id: string;
+          store_id: string;
+          code: string;
+          normalized_code: string;
+          discount_type: "percentage" | "fixed_amount";
+          /** percentage: BASIS POINTS (1000 = 10%). fixed_amount: CENTAVOS. Sempre inteiro. */
+          discount_value: number;
+          minimum_order_cents: number | null;
+          maximum_discount_cents: number | null;
+          starts_at: string | null;
+          expires_at: string | null;
+          max_uses: number | null;
+          active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      coupon_redemptions: {
+        Row: {
+          id: string;
+          coupon_id: string;
+          store_id: string;
+          order_id: string;
+          status: "reserved" | "consumed" | "released";
+          discount_cents: number;
+          reserved_at: string;
+          consumed_at: string | null;
+          released_at: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       workspace_members: {
         Row: {
           id: string;
@@ -539,7 +578,13 @@ export interface Database {
           customer_notes: string | null;
           status: OrderStatus;
           subtotal_cents: number;
+          /** TASK-012: desconto aplicado neste pedido. total = subtotal - discount, garantido por CHECK no banco. */
+          discount_cents: number;
           total_cents: number;
+          coupon_id: string | null;
+          coupon_code_snapshot: string | null;
+          coupon_discount_type_snapshot: "percentage" | "fixed_amount" | null;
+          coupon_discount_value_snapshot: number | null;
           created_at: string;
           updated_at: string;
           cancelled_at: string | null;
@@ -1199,6 +1244,49 @@ export interface Database {
         Args: { target_store_id: string };
         Returns: boolean;
       };
+      coupon_preview: {
+        Args: { p_store_slug: string; p_code: string; p_subtotal_cents: number };
+        Returns: {
+          valid: boolean;
+          reason: string | null;
+          code: string | null;
+          discount_cents: number;
+          minimum_order_cents: number | null;
+        }[];
+      };
+      coupon_list: {
+        Args: { p_store_id: string };
+        Returns: {
+          id: string;
+          code: string;
+          discount_type: "percentage" | "fixed_amount";
+          discount_value: number;
+          minimum_order_cents: number | null;
+          maximum_discount_cents: number | null;
+          starts_at: string | null;
+          expires_at: string | null;
+          max_uses: number | null;
+          used_count: number;
+          active: boolean;
+          created_at: string;
+        }[];
+      };
+      coupon_upsert: {
+        Args: {
+          p_store_id: string;
+          p_coupon_id: string | null;
+          p_code: string;
+          p_discount_type: "percentage" | "fixed_amount";
+          p_discount_value: number;
+          p_minimum_order_cents?: number | null;
+          p_maximum_discount_cents?: number | null;
+          p_starts_at?: string | null;
+          p_expires_at?: string | null;
+          p_max_uses?: number | null;
+          p_active?: boolean;
+        };
+        Returns: Database["public"]["Tables"]["coupons"]["Row"];
+      };
       create_order: {
         Args: {
           p_store_slug: string;
@@ -1209,6 +1297,8 @@ export interface Database {
           p_delivery_address: string | null;
           p_customer_notes: string | null;
           p_items: { product_id: string; quantity: number }[];
+          /** TASK-012: código do cupom como digitado. Normalização, validação e cálculo do desconto acontecem no banco. */
+          p_coupon_code?: string | null;
         };
         Returns: Database["public"]["Tables"]["orders"]["Row"];
       };

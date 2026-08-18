@@ -45,6 +45,12 @@ export async function createOrder(
     deliveryAddress?: string;
     customerNotes?: string;
     items: { productId: string; quantity: number }[];
+    /**
+     * Código do cupom como o comprador digitou. Normalização, validação
+     * e cálculo do desconto acontecem TODOS no banco, dentro da mesma
+     * transação do pedido — daqui não sai nem desconto nem total.
+     */
+    couponCode?: string | null;
   },
 ): Promise<OrderRow> {
   return unwrap(
@@ -57,6 +63,7 @@ export async function createOrder(
       p_delivery_address: params.deliveryAddress ?? null,
       p_customer_notes: params.customerNotes ?? null,
       p_items: params.items.map((item) => ({ product_id: item.productId, quantity: item.quantity })),
+      p_coupon_code: params.couponCode ?? null,
     }),
   );
 }
