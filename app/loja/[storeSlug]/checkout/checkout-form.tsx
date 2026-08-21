@@ -13,7 +13,7 @@ import {
 } from "@/lib/cart/coupon-storage";
 import { formatPriceCents } from "@/lib/catalog/format";
 import { IDLE_ACTION_STATE } from "@/lib/auth/action-state";
-import { isCompletePostalCode } from "@/lib/shipping/format";
+import { formatCityState } from "@/lib/shipping/format";
 import { quoteMessage } from "@/lib/shipping/messages";
 import type { ShippingQuote } from "@/lib/shipping/service";
 import { submitCheckoutAction, type CheckoutState } from "./actions";
@@ -50,6 +50,26 @@ export function CheckoutForm({
   const [fulfillment, setFulfillment] = useState<"pickup" | "delivery">("pickup");
   const [address, setAddress] = useState<ShippingAddressState>(EMPTY_SHIPPING_ADDRESS);
   /**
+   * Dados do comprador em estado controlado.
+   *
+   * Não é preferência de estilo: o React limpa os campos NÃO controlados
+   * de um `<form action={...}>` assim que a action retorna. Com campos
+   * soltos, qualquer recusa do servidor — cupom vencido, estoque que
+   * acabou, o total que mudou no meio do preenchimento — apagava nome,
+   * telefone, e-mail e CPF, e a pessoa recomeçava do zero logo depois de
+   * ler "envie de novo".
+   */
+  const [buyer, setBuyer] = useState({
+    customerName: "",
+    customerPhone: "",
+    payerEmail: "",
+    payerDocument: "",
+    customerNotes: "",
+    deliveryAddress: "",
+  });
+  const setBuyerField = (field: keyof typeof buyer) => (event: { target: { value: string } }) =>
+    setBuyer((current) => ({ ...current, [field]: event.target.value }));
+  /**
    * Resumo financeiro calculado NO SERVIDOR (produtos, desconto, frete,
    * total). Nunca é somado aqui: a mesma RPC que responde esta prévia é
    * a que create_order usa para gravar o pedido, então o que aparece na
@@ -80,7 +100,6 @@ export function CheckoutForm({
   );
 
   const wantsShipping = shippingEnabled && fulfillment === "delivery";
-  const destinationReady = isCompletePostalCode(address.postalCode) && Boolean(address.city) && Boolean(address.state);
 
   /**
    * Recalcula o resumo sempre que muda algo que afeta o valor: itens,
@@ -111,9 +130,9 @@ export function CheckoutForm({
         storeSlug,
         items: cart.items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
         couponCode: couponCode ?? null,
+        // Só o CEP. Cidade e UF não são enviadas: o servidor as resolve
+        // e devolve em destCity/destState, que é o que a tela exibe.
         postalCode: wantsShipping ? address.postalCode : null,
-        city: wantsShipping ? address.city : null,
-        state: wantsShipping ? address.state : null,
       });
       if (cancelled) return;
       setQuote(result.status === "ok" && result.quote ? result.quote : null);
@@ -132,8 +151,11 @@ export function CheckoutForm({
     couponCode,
     wantsShipping,
     address.postalCode,
-    address.city,
-    address.state,
+    // O backend recusou por total divergente (o lojista mudou a tabela
+    // enquanto o comprador preenchia). Recotiza, senão a mensagem
+    // "confira o novo total" apontaria para o número velho ainda na tela
+    // — e o reenvio falharia em looping.
+    state.code,
   ]);
 
   useEffect(() => {
@@ -168,6 +190,23 @@ export function CheckoutForm({
     quote && quote.freeShippingEnabled && quote.freeShippingMinimumCents !== null && quote.rule !== "free"
       ? quote.freeShippingMinimumCents - (quote.subtotalCents - quote.discountCents)
       : null;
+
+  /**
+   * Destino que o SERVIDOR confirmou pelo CEP. Prioriza o que veio da
+   * cotação (é literalmente o par que decidiu o preço); antes dela
+   * chegar, usa o que a busca de CEP devolveu, que veio do mesmo lugar.
+   */
+  const destination =
+    formatCityState(quote?.destCity ?? null, quote?.destState ?? null) ??
+    formatCityState(address.city || null, address.state || null);
+
+  /**
+   * O pedido só pode ser enviado quando a conta está fechada: com
+   * entrega, isso significa ter uma cotação disponível. Sem ela, o
+   * backend recusaria de qualquer forma (destino não resolvido) — travar
+   * o botão evita mandar o comprador contra um erro previsível.
+   */
+  const canSubmit = !wantsShipping || quote?.available === true;
 
   return (
     <>
@@ -243,6 +282,14 @@ export function CheckoutForm({
                 quanto cobrar. Quem decide o frete é a configuração real
                 da loja, lida dentro da transação do pedido. */}
             <input type="hidden" name="shippingEnabled" value={shippingEnabled ? "true" : "false"} />
+            {/* O total que está na tela viaja como TRAVA, não como
+                preço: se o valor recalculado no banco não bater com
+                este, o pedido é recusado em vez de cobrar em silêncio
+                algo diferente do que o comprador viu. Mandar um número
+                menor aqui não barateia nada — só faz o pedido falhar. */}
+            {quote?.available === true && (
+              <input type="hidden" name="expectedTotalCents" value={quote.totalCents} />
+            )}
 
             {state.status === "error" && state.message && (
               <div className={styles.alertGap}>
@@ -252,7 +299,15 @@ export function CheckoutForm({
 
             <p className={styles.sectionLabel}>Seus dados</p>
             <Field label="Nome" htmlFor="customerName" required error={state.fieldErrors?.customerName}>
-              <Input id="customerName" name="customerName" required maxLength={120} aria-invalid={Boolean(state.fieldErrors?.customerName)} />
+              <Input
+                id="customerName"
+                name="customerName"
+                required
+                maxLength={120}
+                value={buyer.customerName}
+                onChange={setBuyerField("customerName")}
+                aria-invalid={Boolean(state.fieldErrors?.customerName)}
+              />
             </Field>
 
             <Field label="Telefone / WhatsApp" htmlFor="customerPhone" required error={state.fieldErrors?.customerPhone}>
@@ -264,6 +319,8 @@ export function CheckoutForm({
                 inputMode="tel"
                 autoComplete="tel"
                 placeholder="(11) 99999-8888"
+                value={buyer.customerPhone}
+                onChange={setBuyerField("customerPhone")}
                 aria-invalid={Boolean(state.fieldErrors?.customerPhone)}
               />
             </Field>
@@ -278,6 +335,8 @@ export function CheckoutForm({
                 maxLength={200}
                 autoComplete="email"
                 placeholder="voce@example.com"
+                value={buyer.payerEmail}
+                onChange={setBuyerField("payerEmail")}
                 aria-invalid={Boolean(state.fieldErrors?.payerEmail)}
               />
             </Field>
@@ -296,6 +355,8 @@ export function CheckoutForm({
                 inputMode="numeric"
                 maxLength={20}
                 placeholder="000.000.000-00"
+                value={buyer.payerDocument}
+                onChange={setBuyerField("payerDocument")}
                 aria-invalid={Boolean(state.fieldErrors?.payerDocument)}
               />
             </Field>
@@ -330,17 +391,36 @@ export function CheckoutForm({
 
             {fulfillment === "delivery" &&
               (shippingEnabled ? (
-                <ShippingFields address={address} onChange={setAddress} fieldErrors={state.fieldErrors} />
+                <ShippingFields
+                  address={address}
+                  onChange={setAddress}
+                  fieldErrors={state.fieldErrors}
+                  destination={destination}
+                />
               ) : (
                 /* Loja que ainda não configurou frete: caminho de sempre,
                    endereço em texto livre e sem cobrança de entrega. */
                 <Field label="Endereço de entrega" htmlFor="deliveryAddress" required error={state.fieldErrors?.deliveryAddress}>
-                  <Textarea id="deliveryAddress" name="deliveryAddress" maxLength={500} required aria-invalid={Boolean(state.fieldErrors?.deliveryAddress)} />
+                  <Textarea
+                    id="deliveryAddress"
+                    name="deliveryAddress"
+                    maxLength={500}
+                    required
+                    value={buyer.deliveryAddress}
+                    onChange={setBuyerField("deliveryAddress")}
+                    aria-invalid={Boolean(state.fieldErrors?.deliveryAddress)}
+                  />
                 </Field>
               ))}
 
             <Field label="Observações (opcional)" htmlFor="customerNotes">
-              <Textarea id="customerNotes" name="customerNotes" maxLength={1000} />
+              <Textarea
+                id="customerNotes"
+                name="customerNotes"
+                maxLength={1000}
+                value={buyer.customerNotes}
+                onChange={setBuyerField("customerNotes")}
+              />
             </Field>
 
             <p className={styles.legal}>
@@ -348,11 +428,25 @@ export function CheckoutForm({
               <Link href="/privacidade">Política de Privacidade</Link>.
             </p>
 
-            <Button type="submit" size="lg" fullWidth loading={pending} icon={<IconArrowRight />} iconPosition="end">
-              {wantsShipping && destinationReady && totalToShow !== null
+            <Button
+              type="submit"
+              size="lg"
+              fullWidth
+              loading={pending}
+              disabled={!canSubmit}
+              icon={<IconArrowRight />}
+              iconPosition="end"
+            >
+              {wantsShipping && quote?.available === true && totalToShow !== null
                 ? `Enviar pedido · ${formatPriceCents(totalToShow)}`
                 : "Enviar pedido"}
             </Button>
+
+            {!canSubmit && (
+              <p className={styles.shippingHint}>
+                Precisamos confirmar o CEP para calcular o frete antes de fechar o pedido. Se preferir, escolha retirada.
+              </p>
+            )}
 
             <p className={styles.trustLine}>
               <IconShield />

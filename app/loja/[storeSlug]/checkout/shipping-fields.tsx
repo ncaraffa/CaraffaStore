@@ -8,6 +8,15 @@ import { quoteMessage } from "@/lib/shipping/messages";
 import { lookupPostalCodeAction } from "./shipping-actions";
 import styles from "./checkout.module.css";
 
+/**
+ * Estado local do endereço.
+ *
+ * `city` e `state` estão aqui só para EXIBIÇÃO — são o que o servidor
+ * respondeu ao resolver o CEP. Não existe input com esses nomes, então
+ * não são enviados no formulário, e create_order nem aceita esses
+ * parâmetros: quem decide a cidade que define a faixa de frete é o
+ * banco, a partir do CEP.
+ */
 export interface ShippingAddressState {
   postalCode: string;
   street: string;
@@ -31,27 +40,34 @@ export const EMPTY_SHIPPING_ADDRESS: ShippingAddressState = {
 /**
  * Endereço de entrega do checkout.
  *
- * Duas decisões que a tarefa pede explicitamente e que valem comentário:
+ * O que a pessoa preenche: CEP, rua, número, complemento e bairro.
+ * Nenhum desses últimos quatro entra em conta nenhuma — servem para o
+ * comerciante entregar. O CEP é o único campo com efeito financeiro, e
+ * mesmo ele só como chave: o valor sai da configuração da loja.
  *
- * 1. Nenhum campo trazido pela busca de CEP fica bloqueado. O que a API
- *    devolve é sugestão — endereço real tem exceção (loteamento novo,
- *    logradouro renomeado, CEP único de cidade pequena), e travar o
- *    campo transformaria um acerto de 95% num beco sem saída nos outros
- *    5%.
+ * Rua e bairro chegam preenchidos pela busca de CEP e continuam
+ * editáveis, porque endereço real tem exceção (loteamento novo,
+ * logradouro renomeado) e travar o campo transformaria um acerto de 95%
+ * num beco sem saída nos outros 5%.
  *
- * 2. Se a busca falhar, o formulário continua inteiro e utilizável. O
- *    CEP permanece obrigatório porque é ele que identifica o destino no
- *    pedido, mas cidade/UF podem ser digitadas — e é a cidade/UF que
- *    vira faixa de frete no banco, então o pedido continua calculável.
+ * Cidade e UF, ao contrário, aparecem como TEXTO. Elas decidem a faixa
+ * de frete; deixá-las editáveis seria deixar o comprador escolher quanto
+ * quer pagar.
  */
 export function ShippingFields({
   address,
   onChange,
   fieldErrors,
+  /**
+   * Destino confirmado pelo servidor ("São Paulo - SP"). Vem da cotação
+   * quando ela já chegou — é literalmente o par que decidiu o preço.
+   */
+  destination,
 }: {
   address: ShippingAddressState;
   onChange: (next: ShippingAddressState) => void;
   fieldErrors?: Record<string, string>;
+  destination: string | null;
 }) {
   const [lookupState, setLookupState] = useState<"idle" | "loading" | "not_found" | "unavailable" | "found">("idle");
   // Guarda o último CEP consultado para não repetir a chamada a cada
@@ -75,13 +91,16 @@ export function ShippingFields({
           // escreveu à mão num campo que a API não conhece.
           street: result.street ?? current.street,
           neighborhood: result.neighborhood ?? current.neighborhood,
-          city: result.city ?? current.city,
-          state: result.state ?? current.state,
+          city: result.city ?? "",
+          state: result.state ?? "",
         });
         return;
       }
 
+      // Destino não confirmado: limpa cidade/UF para a tela não sugerir
+      // um destino que o cálculo não vai usar.
       setLookupState(result.status === "not_found" || result.status === "invalid" ? "not_found" : "unavailable");
+      onChange({ ...current, postalCode: digits, city: "", state: "" });
     },
     [onChange],
   );
@@ -97,20 +116,27 @@ export function ShippingFields({
   const handlePostalCodeChange = (raw: string) => {
     const digits = normalizePostalCode(raw);
     const next = { ...address, postalCode: digits };
-    onChange(next);
 
-    if (digits.length < 8) {
+    if (digits.length !== 8) {
       lastLookedUp.current = "";
       setLookupState("idle");
+      // CEP incompleto ou longo demais: não há destino confirmado.
+      onChange({ ...next, city: "", state: "" });
       return;
     }
+
+    onChange(next);
     void runLookup(digits, next);
   };
 
   const set = (patch: Partial<ShippingAddressState>) => onChange({ ...address, ...patch });
 
-  const lookupHint =
-    lookupState === "loading"
+  const digits = normalizePostalCode(address.postalCode);
+  const tooManyDigits = digits.length > 8;
+
+  const lookupHint = tooManyDigits
+    ? "O CEP tem 8 dígitos — confira o que foi colado."
+    : lookupState === "loading"
       ? "Buscando endereço…"
       : lookupState === "not_found"
         ? quoteMessage("postal_code_not_found")
@@ -140,7 +166,7 @@ export function ShippingFields({
           placeholder="79002-000"
           value={formatPostalCode(address.postalCode)}
           onChange={(event) => handlePostalCodeChange(event.target.value)}
-          aria-invalid={Boolean(fieldErrors?.shippingPostalCode)}
+          aria-invalid={Boolean(fieldErrors?.shippingPostalCode) || tooManyDigits || undefined}
           aria-busy={lookupState === "loading" || undefined}
         />
       </Field>
@@ -200,43 +226,25 @@ export function ShippingFields({
         />
       </Field>
 
-      <div className={styles.addressGrid}>
-        <div className={styles.addressStreet}>
-          <Field label="Cidade" htmlFor="shippingCity" required error={fieldErrors?.shippingCity}>
-            <Input
-              id="shippingCity"
-              name="shippingCity"
-              required
-              maxLength={120}
-              autoComplete="address-level2"
-              value={address.city}
-              onChange={(event) => set({ city: event.target.value })}
-              aria-invalid={Boolean(fieldErrors?.shippingCity)}
-            />
-          </Field>
-        </div>
-
-        <div className={styles.addressNumber}>
-          <Field label="Estado" htmlFor="shippingState" required error={fieldErrors?.shippingState}>
-            <Input
-              id="shippingState"
-              name="shippingState"
-              required
-              maxLength={2}
-              placeholder="MS"
-              autoComplete="address-level1"
-              autoCapitalize="characters"
-              value={address.state}
-              onChange={(event) => set({ state: event.target.value.toUpperCase().slice(0, 2) })}
-              aria-invalid={Boolean(fieldErrors?.shippingState)}
-            />
-          </Field>
-        </div>
+      {/*
+        Cidade e UF são MOSTRADAS, não perguntadas — ver o comentário do
+        componente. É o destino que o servidor confirmou pelo CEP e que
+        vai decidir o valor cobrado.
+      */}
+      <div className={styles.resolvedDestination}>
+        <span className={styles.resolvedLabel}>Cidade de entrega</span>
+        {destination ? (
+          <strong className={styles.resolvedValue}>{destination}</strong>
+        ) : (
+          <span className={styles.resolvedPending}>
+            {lookupState === "loading"
+              ? "Confirmando pelo CEP…"
+              : isCompletePostalCode(address.postalCode)
+                ? "Não foi possível confirmar pelo CEP"
+                : "Informe o CEP para confirmarmos"}
+          </span>
+        )}
       </div>
-
-      {!isCompletePostalCode(address.postalCode) && (
-        <p className={styles.shippingHint}>Informe o CEP para calcularmos o frete.</p>
-      )}
     </>
   );
 }

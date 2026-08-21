@@ -221,3 +221,62 @@
 .addressNumber {
   min-width: 0;
 }
+
+/* ============================================================
+   Destino confirmado pelo servidor
+   ============================================================
+   Cidade e UF nao sao campos: elas decidem a faixa de frete, entao quem
+   as define e o backend, a partir do CEP. Aparecem como leitura para o
+   comprador ver exatamente o destino que esta sendo cobrado. */
+.resolvedDestination {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cs-space-3);
+  flex-wrap: wrap;
+  padding: var(--cs-space-3) var(--cs-space-4);
+  margin-bottom: var(--cs-space-5);
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-md);
+}
+
+.resolvedLabel {
+  font-size: var(--cs-text-xs);
+  font-weight: 600;
+  color: var(--cs-ink-body);
+}
+
+.resolvedValue {
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.resolvedPending {
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
+  text-align: right;
+}
+
+/* ============================================================
+   Safari/iOS: input abaixo de 16px faz a pagina dar zoom ao focar
+   ============================================================
+   O token global do design system usa 14px (--cs-text-sm) em todos os
+   controles. Trocar o token afetaria todas as telas do painel e da loja;
+   aqui a regra e escopada ao checkout, que e onde o zoom mais atrapalha:
+   o campo entra em foco, a pagina amplia, e o comprador perde de vista o
+   resumo com o total. Vale para todos os campos do formulario, nao so os
+   de endereco -- alternar entre campos com tamanhos diferentes faria a
+   pagina ampliar e reduzir a cada tab.
+
+   Limitado a telas estreitas porque so ali o zoom acontece; no desktop o
+   14px do design system continua valendo. */
+@media (max-width: 30rem) {
+  .main input,
+  .main textarea,
+  .main select {
+    font-size: 1rem;
+  }
+}
