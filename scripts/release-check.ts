@@ -11,6 +11,7 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
+import { scanBundleForSecrets, type BundleFile, type ServerSecret } from "./bundle-secret-scan";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -127,6 +128,11 @@ const SECRET_SCAN_ALLOWLIST = new Set([
   // Fixture negativa deliberada (JWT falso) — prova que seed-output.ts
   // NUNCA imprime o valor real; ver scripts/seed-output.test.ts, caso 1.
   "scripts/seed-output.test.ts",
+  // Mesma razão: este arquivo testa o PRÓPRIO scanner de segredos, e
+  // para isso precisa conter os padrões que ele deve pegar (uma chave
+  // sk_live_ e um cabeçalho de chave privada, ambos inventados). Sem a
+  // exceção, o teste que garante o gate faria o gate falhar.
+  "scripts/bundle-secret-scan.test.ts",
 ]);
 const secretHits = trackedFiles.filter((relative) => {
   if (!/\.(ts|tsx|md|json)$/.test(relative)) return false;
@@ -139,10 +145,38 @@ const secretHits = trackedFiles.filter((relative) => {
 record("scan de segredos no código-fonte", secretHits.length === 0, secretHits.length === 0 ? "OK" : `encontrado em: ${secretHits.join(", ")}`);
 
 // --- 7. Scan de segredos no bundle de produção (.next/static) -----------
+//
+// UMA chave JWT no bundle é ESPERADA: a anon key do Supabase é marcada
+// `NEXT_PUBLIC_` justamente para ir ao navegador — é ela que o cliente
+// usa para falar com o PostgREST, e quem protege os dados é a RLS, não o
+// segredo da chave. Marcar isso como falha treinava a equipe a ignorar
+// um gate vermelho, que é o pior resultado possível para um scanner.
+//
+// A correção NÃO é permitir "qualquer JWT". É distinguir os dois casos
+// pelo que o token declara:
+//
+//   - decodifica o payload de cada JWT encontrado;
+//   - `role: "anon"` é aceito (é a chave pública, por construção);
+//   - qualquer outro papel — service_role à frente — continua falhando.
+//
+// Um vazamento real da service role key segue reprovando, e agora com
+// diagnóstico melhor do que antes: o scanner diz QUAL papel vazou.
+//
+// A busca pelo NOME "SUPABASE_SERVICE_ROLE_KEY" também saiu. Nome de
+// variável não é segredo, e ele aparecia legitimamente no schema Zod de
+// lib/supabase/env.ts — que é bundlado. No lugar dela entrou algo mais
+// forte: comparação com o VALOR real das variáveis de servidor, quando
+// elas estão presentes no ambiente. Isso pega o vazamento de verdade
+// (o valor inline), que o match por nome nunca pegaria.
+
+/** Segredos de servidor que NUNCA podem aparecer no bundle, por valor. */
+const SERVER_SECRET_VALUES: ServerSecret[] = ["SUPABASE_SERVICE_ROLE_KEY", "PAYMENT_ENCRYPTION_KEY", "CRON_SECRET"]
+  .map((name) => ({ name, value: process.env[name] }))
+  .filter((entry): entry is ServerSecret => Boolean(entry.value && entry.value.length >= 16));
 
 const bundleDir = path.join(ROOT, ".next", "static");
 if (existsSync(bundleDir)) {
-  const bundleHits: string[] = [];
+  const bundleFiles: BundleFile[] = [];
   function walkBundle(dir: string) {
     for (const entry of readdirSync(dir)) {
       const full = path.join(dir, entry);
@@ -152,19 +186,20 @@ if (existsSync(bundleDir)) {
         continue;
       }
       if (!/\.(js|css)$/.test(entry)) continue;
-      const content = readFileSync(full, "utf8");
-      if (
-        content.includes("SUPABASE_SERVICE_ROLE_KEY") ||
-        content.includes("PAYMENT_ENCRYPTION_KEY") ||
-        content.includes("CRON_SECRET") ||
-        SECRET_PATTERNS.some((pattern) => pattern.test(content))
-      ) {
-        bundleHits.push(path.relative(ROOT, full).replace(/\\/g, "/"));
-      }
+      bundleFiles.push({
+        path: path.relative(ROOT, full).replace(/\\/g, "/"),
+        content: readFileSync(full, "utf8"),
+      });
     }
   }
   walkBundle(bundleDir);
-  record("scan de segredos no bundle (.next/static)", bundleHits.length === 0, bundleHits.length === 0 ? "OK" : `encontrado em: ${bundleHits.join(", ")}`);
+
+  const hits = scanBundleForSecrets(bundleFiles, SERVER_SECRET_VALUES);
+  record(
+    "scan de segredos no bundle (.next/static)",
+    hits.length === 0,
+    hits.length === 0 ? "OK" : `encontrado em: ${hits.join(", ")}`,
+  );
 } else {
   record("scan de segredos no bundle (.next/static)", false, "build não encontrado — rode após a etapa de build");
 }
