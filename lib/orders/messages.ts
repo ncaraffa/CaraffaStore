@@ -52,6 +52,15 @@ export const MESSAGES: Record<string, string> = {
   paid_order_requires_refund: "Pedido já pago não pode ser cancelado por aqui — é necessário reembolso.",
   pix_order_requires_payment_flow: "Pedidos com Pix são cancelados pela tela de pagamento, não por aqui.",
   payment_pending_requires_reconciliation: "O pagamento ainda está pendente — confira o status no provedor antes de cancelar.",
+  // TASK-013 — endereço de entrega estruturado. Nada aqui revela a
+  // configuração de frete da loja: só o que o comprador pode corrigir.
+  invalid_shipping_postal_code: "Informe um CEP válido, com 8 dígitos.",
+  invalid_shipping_street: "Informe a rua.",
+  invalid_shipping_number: "Informe o número.",
+  invalid_shipping_complement: "Complemento muito longo.",
+  invalid_shipping_neighborhood: "Bairro muito longo.",
+  invalid_shipping_city: "Informe a cidade.",
+  invalid_shipping_state: "Informe o estado (duas letras, como MS).",
   pix_not_configured: "Esta loja ainda não está pronta para receber pagamentos. Tente novamente mais tarde.",
   payment_attempt_failed: "Não foi possível iniciar o pagamento. Tente novamente.",
   payment_provider_unavailable: "O sistema de pagamento está indisponível no momento. Tente novamente em instantes.",
@@ -65,6 +74,13 @@ export const FIELD_LEVEL_CODES: Record<string, string> = {
   delivery_address_required: "deliveryAddress",
   invalid_delivery_address: "deliveryAddress",
   invalid_customer_notes: "customerNotes",
+  invalid_shipping_postal_code: "shippingPostalCode",
+  invalid_shipping_street: "shippingStreet",
+  invalid_shipping_number: "shippingNumber",
+  invalid_shipping_complement: "shippingComplement",
+  invalid_shipping_neighborhood: "shippingNeighborhood",
+  invalid_shipping_city: "shippingCity",
+  invalid_shipping_state: "shippingState",
 };
 
 function hasErrorCode(error: unknown): error is { code: string } {

@@ -40,6 +40,18 @@ export async function submitCheckoutAction(_prev: CheckoutState, formData: FormD
     idempotencyKey: String(formData.get("idempotencyKey") ?? ""),
     items: itemsRaw,
     couponCode: String(formData.get("couponCode") ?? ""),
+    // TASK-013 — a loja oferece entrega calculada? Vem do formulário só
+    // para o schema saber QUAL endereço exigir. Mentir aqui não rende
+    // nada: o banco decide o frete pela configuração real da loja e
+    // recusa o pedido se o endereço necessário não vier.
+    shippingEnabled: String(formData.get("shippingEnabled") ?? "") === "true",
+    shippingPostalCode: String(formData.get("shippingPostalCode") ?? ""),
+    shippingStreet: String(formData.get("shippingStreet") ?? ""),
+    shippingNumber: String(formData.get("shippingNumber") ?? ""),
+    shippingComplement: String(formData.get("shippingComplement") ?? ""),
+    shippingNeighborhood: String(formData.get("shippingNeighborhood") ?? ""),
+    shippingCity: String(formData.get("shippingCity") ?? ""),
+    shippingState: String(formData.get("shippingState") ?? ""),
   });
 
   if (!normalizedPhone) {
@@ -72,6 +84,21 @@ export async function submitCheckoutAction(_prev: CheckoutState, formData: FormD
       // create_order revalida e recalcula tudo no banco, e a cobrança do
       // Mercado Pago usa o total resultante.
       couponCode: parsed.data.couponCode || null,
+      // Idem para o frete: só o ENDEREÇO viaja. O valor é calculado no
+      // banco a partir da configuração da loja — não existe campo de
+      // preço de frete em nenhum ponto deste caminho.
+      shipping:
+        parsed.data.fulfillmentMethod === "delivery" && parsed.data.shippingEnabled
+          ? {
+              postalCode: parsed.data.shippingPostalCode ?? "",
+              street: parsed.data.shippingStreet ?? "",
+              number: parsed.data.shippingNumber ?? "",
+              complement: parsed.data.shippingComplement || null,
+              neighborhood: parsed.data.shippingNeighborhood || null,
+              city: parsed.data.shippingCity ?? "",
+              state: parsed.data.shippingState ?? "",
+            }
+          : null,
     });
 
     const cookieStore = await cookies();

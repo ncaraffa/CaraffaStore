@@ -30,6 +30,22 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
   return result.data;
 }
 
+/**
+ * Endereço de entrega como o comprador preencheu. Cidade e UF são o que
+ * decide a faixa de frete no banco — o CEP serve para localizar o
+ * endereço e para o snapshot do pedido, não para calcular por faixa de
+ * CEP (isso está fora do escopo da V1).
+ */
+export interface ShippingAddressInput {
+  postalCode: string;
+  street: string;
+  number: string;
+  complement?: string | null;
+  neighborhood?: string | null;
+  city: string;
+  state: string;
+}
+
 // ============================================================
 // Checkout público — criação (RPC: create_order, chamável por anon)
 // ============================================================
@@ -51,6 +67,16 @@ export async function createOrder(
      * transação do pedido — daqui não sai nem desconto nem total.
      */
     couponCode?: string | null;
+    /**
+     * Endereço de entrega estruturado (TASK-013). Repare no que NÃO
+     * existe aqui: valor de frete. A RPC não tem esse parâmetro — o
+     * número é calculado no banco a partir da configuração vigente da
+     * loja, então não há payload capaz de alterá-lo.
+     *
+     * Só é exigido quando a loja tem entrega configurada; lojas sem
+     * frete continuam usando `deliveryAddress` em texto livre.
+     */
+    shipping?: ShippingAddressInput | null;
   },
 ): Promise<OrderRow> {
   return unwrap(
@@ -64,6 +90,13 @@ export async function createOrder(
       p_customer_notes: params.customerNotes ?? null,
       p_items: params.items.map((item) => ({ product_id: item.productId, quantity: item.quantity })),
       p_coupon_code: params.couponCode ?? null,
+      p_shipping_postal_code: params.shipping?.postalCode ?? null,
+      p_shipping_street: params.shipping?.street ?? null,
+      p_shipping_number: params.shipping?.number ?? null,
+      p_shipping_complement: params.shipping?.complement ?? null,
+      p_shipping_neighborhood: params.shipping?.neighborhood ?? null,
+      p_shipping_city: params.shipping?.city ?? null,
+      p_shipping_state: params.shipping?.state ?? null,
     }),
   );
 }

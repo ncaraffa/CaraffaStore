@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, PixDocType } from "@/lib/supabase/types";
 import { getPublicStore } from "@/lib/catalog/service";
-import { createOrder, OrderError } from "@/lib/orders/service";
+import { createOrder, OrderError, type ShippingAddressInput } from "@/lib/orders/service";
 import { createPaymentsServiceClient } from "@/lib/payments/service-only/client";
 import { getStorePaymentCredentials } from "@/lib/payments/service-only/credentials-reader";
 import { getPixPaymentGateway } from "@/lib/payments/gateway";
@@ -43,6 +43,14 @@ export interface PixCheckoutParams {
   items: { productId: string; quantity: number }[];
   /** Código do cupom digitado pelo comprador. O desconto NUNCA vem daqui — quem calcula é o banco. */
   couponCode?: string | null;
+  /**
+   * Endereço de entrega estruturado (TASK-013). O VALOR do frete não
+   * trafega por aqui — não existe esse campo em nenhum ponto do caminho
+   * navegador → Server Action → RPC. O total cobrado do Mercado Pago
+   * continua saindo de `order.total_cents`, que agora já inclui o frete
+   * calculado dentro da transação do pedido.
+   */
+  shipping?: ShippingAddressInput | null;
 }
 
 export interface PixCheckoutResult {
@@ -92,6 +100,7 @@ export async function createPixCheckout(supabase: Client, params: PixCheckoutPar
       customerNotes: params.customerNotes,
       items: params.items,
       couponCode: params.couponCode ?? null,
+      shipping: params.shipping ?? null,
     });
   } catch (error) {
     if (error instanceof OrderError) {

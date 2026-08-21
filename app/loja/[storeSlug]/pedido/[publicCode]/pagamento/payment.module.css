@@ -225,3 +225,68 @@
 .backLink a:hover {
   color: var(--cs-blue-600);
 }
+
+/* ============================================================
+   TASK-013 — resumo do pedido e endereco de entrega
+   ============================================================ */
+.orderSummary {
+  margin-top: var(--cs-space-5);
+  padding: var(--cs-space-5);
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-lg);
+}
+
+.summaryRow,
+.summaryTotalRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cs-space-4);
+  padding: 0.1875rem 0;
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-body);
+}
+
+.summaryTotalRow {
+  margin-top: var(--cs-space-2);
+  padding-top: var(--cs-space-3);
+  border-top: 1px solid var(--cs-line);
+  font-weight: 700;
+  color: var(--cs-ink);
+}
+
+.summaryValue {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.summaryValue[data-free] {
+  color: var(--cs-success-text);
+  font-weight: 700;
+}
+
+.addressBlock {
+  margin-top: var(--cs-space-4);
+  padding-top: var(--cs-space-4);
+  border-top: 1px solid var(--cs-line);
+}
+
+.addressLabel {
+  margin: 0 0 var(--cs-space-2);
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cs-ink-muted);
+}
+
+.address {
+  margin: 0;
+  font-style: normal;
+  font-size: var(--cs-text-sm);
+  line-height: 1.6;
+  color: var(--cs-ink-body);
+  overflow-wrap: anywhere;
+}

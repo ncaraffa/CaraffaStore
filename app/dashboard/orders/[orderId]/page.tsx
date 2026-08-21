@@ -7,6 +7,7 @@ import * as orders from "@/lib/orders/service";
 import { getOrderPayment, listPaymentEvents } from "@/lib/payments/order-payments-service";
 import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/orders/messages";
 import { formatPriceCents } from "@/lib/catalog/format";
+import { formatCityState, formatPostalCode, SHIPPING_RULE_LABEL } from "@/lib/shipping/format";
 import { advanceOrderStatusAction, reconcileOrderPaymentAction } from "../actions";
 import { CancelOrderForm } from "./cancel-order-form";
 import type { OrderStatus } from "@/lib/supabase/types";
@@ -183,10 +184,49 @@ export default async function OrderDetailPage({
                 <dt>Modalidade</dt>
                 <dd>{order.fulfillment_method === "pickup" ? "Retirada" : "Entrega"}</dd>
               </div>
-              {order.delivery_address && (
+              {/* TASK-013 — com frete configurado o endereço vem
+                  estruturado e o CEP ganha linha própria (é o que o
+                  lojista copia para a etiqueta ou dita no telefone).
+                  Sem frete, cai no endereço em texto livre de sempre. */}
+              {order.shipping_postal_code ? (
+                <>
+                  <div>
+                    <dt>CEP</dt>
+                    <dd className={styles.numeric}>{formatPostalCode(order.shipping_postal_code)}</dd>
+                  </div>
+                  <div className={styles.spanAll}>
+                    <dt>Endereço</dt>
+                    <dd>
+                      {[order.shipping_street, order.shipping_number].filter(Boolean).join(", ")}
+                      {order.shipping_complement ? ` — ${order.shipping_complement}` : ""}
+                      {order.shipping_neighborhood ? <br /> : null}
+                      {order.shipping_neighborhood}
+                      <br />
+                      {formatCityState(order.shipping_city, order.shipping_state)}
+                    </dd>
+                  </div>
+                </>
+              ) : (
+                order.delivery_address && (
+                  <div>
+                    <dt>Endereço</dt>
+                    <dd>{order.delivery_address}</dd>
+                  </div>
+                )
+              )}
+              {order.fulfillment_method === "delivery" && order.shipping_rule && (
                 <div>
-                  <dt>Endereço</dt>
-                  <dd>{order.delivery_address}</dd>
+                  <dt>Frete</dt>
+                  <dd className={styles.numeric}>
+                    {order.shipping_rule === "free" ? (
+                      "Frete grátis"
+                    ) : (
+                      <>
+                        {formatPriceCents(order.shipping_amount_cents)}
+                        <span className={styles.couponTag}> · {SHIPPING_RULE_LABEL[order.shipping_rule]}</span>
+                      </>
+                    )}
+                  </dd>
                 </div>
               )}
               {order.customer_notes && (
@@ -239,6 +279,17 @@ export default async function OrderDetailPage({
                     )}
                   </span>
                   <span className={styles.numeric}>−{formatPriceCents(order.discount_cents)}</span>
+                </div>
+              )}
+              {/* TASK-013 — snapshot, igual ao do cupom: se a loja mudar
+                  a tabela de frete amanhã, este pedido continua
+                  mostrando o que foi realmente cobrado. */}
+              {order.shipping_rule && (
+                <div className={styles.totalRow}>
+                  <span>Frete</span>
+                  <span className={styles.numeric}>
+                    {order.shipping_rule === "free" ? "Grátis" : formatPriceCents(order.shipping_amount_cents)}
+                  </span>
                 </div>
               )}
               <div className={styles.totalRowFinal}>
