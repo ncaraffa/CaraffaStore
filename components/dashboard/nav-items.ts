@@ -4,6 +4,7 @@ export type DashboardNavKey =
   | "produtos"
   | "pedidos"
   | "pagamentos"
+  | "frete"
   | "marketing"
   | "equipe"
   | "assinatura";
@@ -22,6 +23,10 @@ export function dashboardNavItems(storeSlug: string): DashboardNavItem[] {
     { key: "produtos", label: "Produtos", href: `/dashboard/products?store=${storeSlug}` },
     { key: "pedidos", label: "Pedidos", href: `/dashboard/orders?store=${storeSlug}` },
     { key: "pagamentos", label: "Pagamentos", href: `/dashboard/settings/payments?store=${storeSlug}` },
+    // Frete fica logo abaixo de Pagamentos: as duas respondem "como o
+    // dinheiro e a mercadoria chegam", e o lojista procura as duas no
+    // mesmo canto do painel.
+    { key: "frete", label: "Frete", href: `/dashboard/settings/frete?store=${storeSlug}` },
     // Cupons e Equipe aparecem em TODOS os planos de propósito: no
     // Essencial cada uma é o ponto de descoberta do recurso (upsell),
     // não um item quebrado. Esconder deixaria o comerciante sem saber
