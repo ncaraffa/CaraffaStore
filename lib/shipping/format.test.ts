@@ -19,8 +19,15 @@ describe("normalizePostalCode", () => {
     expect(normalizePostalCode(" 79.330-000 ")).toBe("79330000");
   });
 
-  it("corta em 8 dígitos: colar um telefone no campo de CEP não vira um CEP longo", () => {
-    expect(normalizePostalCode("7933000012345")).toBe("79330000");
+  /**
+   * NÃO trunca — e isso é a correção de uma inconsistência real: o
+   * frontend cortava em 8 dígitos enquanto o banco recusava o mesmo
+   * valor. Colar um telefone no campo de CEP tem que dar erro, não virar
+   * silenciosamente um CEP válido e diferente do que a pessoa colou.
+   */
+  it("não trunca: excesso de dígitos é entrada inválida, não entrada a consertar", () => {
+    expect(normalizePostalCode("7933000012345")).toBe("7933000012345");
+    expect(isCompletePostalCode("7933000012345")).toBe(false);
   });
 
   it("aceita CEP incompleto sem inventar dígito", () => {

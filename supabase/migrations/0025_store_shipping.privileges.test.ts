@@ -118,12 +118,51 @@ describe("shipping_fee_for — a regra financeira", () => {
   });
 });
 
-describe("nenhum valor financeiro entra pelo cliente", () => {
-  it("create_order não tem parâmetro de frete, desconto ou total", () => {
-    const signature = sql.slice(
-      sql.indexOf("create or replace function public.create_order"),
-      sql.indexOf("returns public.orders"),
+describe("shipping_postal_codes — o destino só entra pelo servidor", () => {
+  it("nem anon nem authenticated recebem qualquer privilégio na tabela", () => {
+    expect(sql).toContain(
+      "revoke all on public.shipping_postal_codes from public, anon, authenticated, service_role",
     );
+    const grantLines = sql
+      .split(";")
+      .filter((s) => /^\s*grant\s/.test(s.trimStart()) && /\bon\s+public\.shipping_postal_codes\b/.test(s));
+    expect(grantLines.length).toBeGreaterThan(0);
+    for (const line of grantLines) {
+      expect(line).not.toMatch(/\banon\b/);
+      expect(line).not.toMatch(/\bauthenticated\b/);
+      expect(line).toMatch(/\bservice_role\b/);
+    }
+  });
+
+  it("a tabela não tem policy nenhuma — só as funções SECURITY DEFINER leem", () => {
+    expect(sql).toContain("alter table public.shipping_postal_codes enable row level security");
+    expect(sql).not.toMatch(/create policy \w+\s+on public\.shipping_postal_codes/);
+  });
+
+  it("shipping_postal_code_upsert é executável SÓ por service_role", () => {
+    expect(sql).toContain(
+      "revoke all on function public.shipping_postal_code_upsert(text, text, text) from public, anon, authenticated",
+    );
+    expect(sql).toContain(
+      "grant execute on function public.shipping_postal_code_upsert(text, text, text) to service_role",
+    );
+    const grants = sql
+      .split("\n")
+      .filter((line) => line.includes("grant execute on function public.shipping_postal_code_upsert"));
+    for (const grant of grants) {
+      expect(grant).not.toMatch(/\banon\b/);
+      expect(grant).not.toMatch(/\bauthenticated\b/);
+    }
+  });
+});
+
+describe("nenhum valor financeiro — nem o destino — entra pelo cliente", () => {
+  const signature = sql.slice(
+    sql.indexOf("create or replace function public.create_order"),
+    sql.indexOf("returns public.orders"),
+  );
+
+  it("create_order não tem parâmetro de frete, desconto ou total", () => {
     expect(signature).toContain("p_shipping_postal_code");
     expect(signature).not.toContain("p_shipping_amount");
     expect(signature).not.toContain("p_shipping_cents");
@@ -132,13 +171,56 @@ describe("nenhum valor financeiro entra pelo cliente", () => {
     expect(signature).not.toContain("p_subtotal");
   });
 
-  it("shipping_quote recebe ITENS, não um subtotal pronto", () => {
-    const signature = sql.slice(
+  /**
+   * A regressão mais cara desta task: cidade e UF decidem a FAIXA, então
+   * aceitá-las do navegador equivale a aceitar o preço. Um CEP de São
+   * Paulo com city="Corumbá" pagava frete de mesma cidade.
+   */
+  it("create_order NÃO aceita cidade nem UF de destino", () => {
+    expect(signature).not.toContain("p_shipping_city");
+    expect(signature).not.toContain("p_shipping_state");
+  });
+
+  it("o destino sai de shipping_resolve_destination, e CEP não resolvido recusa o pedido", () => {
+    const fn = sql.slice(
+      sql.indexOf("create or replace function public.create_order"),
+      sql.indexOf("comment on function public.create_order"),
+    );
+    expect(fn).toContain("public.shipping_resolve_destination(v_ship_postal)");
+    expect(fn).toContain("raise exception 'shipping_destination_unresolved'");
+  });
+
+  it("p_expected_total_cents só recusa — nunca substitui o total calculado", () => {
+    const fn = sql.slice(
+      sql.indexOf("create or replace function public.create_order"),
+      sql.indexOf("comment on function public.create_order"),
+    );
+    expect(signature).toContain("p_expected_total_cents integer default null");
+    expect(fn).toContain("raise exception 'total_changed'");
+    // O total gravado é sempre v_total (recalculado); o parâmetro do
+    // cliente nunca é atribuído a ele.
+    expect(fn).not.toMatch(/v_total\s*:=\s*p_expected_total_cents/);
+  });
+
+  it("shipping_quote recebe ITENS e CEP — nem subtotal, nem cidade, nem UF", () => {
+    const quoteSignature = sql.slice(
       sql.indexOf("create or replace function public.shipping_quote"),
       sql.indexOf("returns table (\n  shipping_enabled"),
     );
-    expect(signature).toContain("p_items jsonb");
-    expect(signature).not.toContain("p_subtotal_cents");
+    expect(quoteSignature).toContain("p_items jsonb");
+    expect(quoteSignature).toContain("p_postal_code text");
+    expect(quoteSignature).not.toContain("p_subtotal_cents");
+    expect(quoteSignature).not.toContain("p_city");
+    expect(quoteSignature).not.toContain("p_state");
+  });
+
+  it("a prévia resolve o destino do mesmo jeito que o pedido", () => {
+    const fn = sql.slice(
+      sql.indexOf("create or replace function public.shipping_quote"),
+      sql.indexOf("comment on function public.shipping_quote"),
+    );
+    expect(fn).toContain("public.shipping_resolve_destination(v_postal)");
+    expect(fn).toContain("'destination_unresolved'");
   });
 
   it("shipping_quote é stable e recalcula o subtotal a partir de products", () => {

@@ -51,6 +51,12 @@ export interface PixCheckoutParams {
    * calculado dentro da transação do pedido.
    */
   shipping?: ShippingAddressInput | null;
+  /**
+   * Total que o comprador viu na tela. Trava contra divergência
+   * silenciosa entre a prévia e a cobrança — só faz o pedido falhar,
+   * nunca baratear.
+   */
+  expectedTotalCents?: number | null;
 }
 
 export interface PixCheckoutResult {
@@ -101,6 +107,7 @@ export async function createPixCheckout(supabase: Client, params: PixCheckoutPar
       items: params.items,
       couponCode: params.couponCode ?? null,
       shipping: params.shipping ?? null,
+      expectedTotalCents: params.expectedTotalCents ?? null,
     });
   } catch (error) {
     if (error instanceof OrderError) {

@@ -15,9 +15,18 @@ import type { ShippingRule } from "@/lib/supabase/types";
  */
 export { currencyToCents, centsToCurrencyInput } from "@/lib/coupons/format";
 
-/** Só os dígitos — espelha public.shipping_normalize_postal_code no banco. */
+/**
+ * Só os dígitos — espelha public.shipping_normalize_postal_code no
+ * banco, inclusive em NÃO truncar.
+ *
+ * Truncar aqui faria um "793300001234" colado por engano virar um CEP
+ * válido e DIFERENTE do que a pessoa colou, enquanto o banco recusaria o
+ * mesmo valor. Frente e backend precisam concordar sobre o que é um CEP:
+ * excesso de dígitos é entrada inválida, não entrada a ser consertada em
+ * silêncio.
+ */
 export function normalizePostalCode(input: string): string {
-  return input.replace(/\D/g, "").slice(0, 8);
+  return input.replace(/\D/g, "");
 }
 
 export function isCompletePostalCode(input: string): boolean {

@@ -153,7 +153,7 @@ create table public.store_shipping_settings (
 );
 
 comment on table public.store_shipping_settings is
-  'Configuração de frete DA LOJA (store-scoped, nunca por workspace — um workspace pode ter lojas em cidades diferentes). Toda escrita passa por shipping_settings_upsert (SECURITY DEFINER, owner/admin + loja active + sessão viva). O comprador nunca lê esta tabela: ele manda cidade/UF de destino e recebe de volta apenas o valor do frete, via shipping_quote.';
+  'Configuração de frete DA LOJA (store-scoped, nunca por workspace — um workspace pode ter lojas em cidades diferentes). Toda escrita passa por shipping_settings_upsert (SECURITY DEFINER, owner/admin + loja active + sessão viva). O comprador nunca lê esta tabela: ele manda o CEP e recebe de volta apenas o valor do frete, via shipping_quote — a cidade/UF do destino sai de shipping_postal_codes, resolvida pelo servidor.';
 
 comment on column public.store_shipping_settings.additional_fee_cents is
   'Acréscimo fixo em centavos somado ao valor da faixa. NÃO é somado quando o frete grátis se aplica — a regra está em shipping_fee_for e é a razão de o acréscimo não ser apenas mais uma parcela da soma.';
@@ -178,6 +178,121 @@ create policy store_shipping_settings_select_member on public.store_shipping_set
 revoke all on public.store_shipping_settings from public, anon, authenticated, service_role;
 grant select on public.store_shipping_settings to authenticated;
 grant select, insert, update, delete on public.store_shipping_settings to service_role;
+
+-- ============================================================
+-- 2.1 shipping_postal_codes — de onde vem a cidade/UF do destino
+-- ============================================================
+--
+-- POR QUE ESTA TABELA EXISTE
+--
+-- A faixa de frete é decidida comparando a cidade/UF do DESTINO com a da
+-- origem. Se o destino viesse do navegador, bastaria interceptar a
+-- requisição e enviar a cidade da loja para pagar sempre a faixa mais
+-- barata:
+--
+--   CEP 01310-100 (São Paulo)  +  city="Corumbá", state="MS"  ->  same_city
+--
+-- O banco não faz chamada de rede, então não consegue consultar o CEP
+-- sozinho. A solução é estreitar a porta: cidade e UF entram por um
+-- único caminho, escrito exclusivamente por `service_role` a partir de
+-- uma consulta REAL de CEP feita no servidor
+-- (lib/shipping/postal-code-lookup.ts). O checkout público lê daqui, e o
+-- que o navegador digitou nesses dois campos deixa de existir para
+-- efeito de preço.
+--
+-- É a mesma técnica já usada nos pagamentos (0007_payments.sql): o fato
+-- que o banco não pode verificar sozinho entra por uma RPC service_role
+-- dedicada, e não por parâmetro de função pública.
+--
+-- Não é "tabela de faixas de CEP": não há faixa nenhuma aqui, é um cache
+-- de CEP -> (cidade, UF) preenchido sob demanda, um CEP por linha.
+
+create table public.shipping_postal_codes (
+  postal_code text primary key check (postal_code ~ '^[0-9]{8}$'),
+  city text not null check (char_length(city) between 1 and 120),
+  state text not null check (state ~ '^[A-Z]{2}$'),
+  resolved_at timestamptz not null default now()
+);
+
+comment on table public.shipping_postal_codes is
+  'Cache de CEP -> (cidade, UF) resolvido pelo SERVIDOR, nunca pelo navegador. É a única fonte de destino aceita no cálculo de frete: create_order e shipping_quote leem daqui e ignoram qualquer cidade/UF vinda do cliente. Escrita só por service_role (shipping_postal_code_upsert), a partir de uma consulta real ao serviço de CEP. Dado público de referência — não contém nada de pessoal, apenas o CEP e a localidade correspondente.';
+
+comment on column public.shipping_postal_codes.resolved_at is
+  'Quando esta linha foi confirmada pelo serviço de CEP. O servidor reconsulta e reescreve a cada checkout, então o valor tende a ser recente; guardado para auditoria e para uma eventual política de expiração futura.';
+
+alter table public.shipping_postal_codes enable row level security;
+
+-- Sem NENHUMA policy: nem o comprador nem o lojista leem esta tabela
+-- diretamente. Quem lê são as funções SECURITY DEFINER de frete, que
+-- rodam como dono. Enumerar CEPs por aqui não revelaria nada sensível,
+-- mas também não há motivo para abrir.
+revoke all on public.shipping_postal_codes from public, anon, authenticated, service_role;
+grant select, insert, update, delete on public.shipping_postal_codes to service_role;
+
+create or replace function public.shipping_postal_code_upsert(
+  p_postal_code text,
+  p_city text,
+  p_state text
+)
+returns public.shipping_postal_codes
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_postal text := public.shipping_normalize_postal_code(p_postal_code);
+  v_city text := nullif(trim(coalesce(p_city, '')), '');
+  v_state text := public.shipping_normalize_state(p_state);
+  v_row public.shipping_postal_codes;
+begin
+  if v_postal is null or v_postal !~ '^[0-9]{8}$' then
+    raise exception 'invalid_postal_code' using errcode = '22023';
+  end if;
+  if v_city is null or char_length(v_city) > 120 then
+    raise exception 'invalid_postal_code_city' using errcode = '22023';
+  end if;
+  if v_state is null or v_state !~ '^[A-Z]{2}$' then
+    raise exception 'invalid_postal_code_state' using errcode = '22023';
+  end if;
+
+  insert into public.shipping_postal_codes (postal_code, city, state)
+  values (v_postal, v_city, v_state)
+  on conflict (postal_code) do update set
+    city = excluded.city,
+    state = excluded.state,
+    resolved_at = now()
+  returning * into v_row;
+
+  return v_row;
+end;
+$fn$;
+
+comment on function public.shipping_postal_code_upsert(text, text, text) is
+  'Grava o resultado de uma consulta de CEP feita no servidor. EXECUTE só para service_role — é esta restrição que impede o comprador de plantar "CEP de São Paulo fica em Corumbá/MS" e pagar a faixa mais barata. Chamada exclusivamente por lib/shipping/service-only/postal-code-store.ts, depois de uma resposta real do serviço de CEP.';
+
+revoke all on function public.shipping_postal_code_upsert(text, text, text) from public, anon, authenticated;
+grant execute on function public.shipping_postal_code_upsert(text, text, text) to service_role;
+
+-- Leitura do destino confiável. Devolve zero linhas quando o CEP nunca
+-- foi resolvido pelo servidor — e é assim que o cálculo descobre que não
+-- pode prosseguir, em vez de cair num palpite.
+create or replace function public.shipping_resolve_destination(p_postal_code text)
+returns table (city text, state text)
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select p.city, p.state
+  from public.shipping_postal_codes p
+  where p.postal_code = public.shipping_normalize_postal_code(p_postal_code);
+$fn$;
+
+comment on function public.shipping_resolve_destination(text) is
+  'Cidade/UF de um CEP, sempre a partir do que o SERVIDOR resolveu. Única fonte de destino do cálculo de frete. CEP não resolvido devolve vazio — o chamador recusa o pedido (shipping_destination_unresolved) em vez de aceitar o que o navegador afirmou.';
+
+revoke all on function public.shipping_resolve_destination(text) from public;
+grant execute on function public.shipping_resolve_destination(text) to anon, authenticated, service_role;
 
 -- ============================================================
 -- 3. shipping_fee_for — a regra, num lugar só
@@ -521,15 +636,17 @@ alter table public.orders add constraint orders_shipping_snapshot_complete
 -- isso: as duas contas nascem das mesmas fontes.
 --
 -- Um payload adulterado (preço, desconto ou frete inventados) não muda
--- nada aqui, porque nenhum desses números é aceito como entrada.
+-- nada aqui, porque nenhum desses números é aceito como entrada. Cidade
+-- e UF também não: o destino vem de shipping_resolve_destination, sobre
+-- o CEP. Esta função recebe exatamente os mesmos dados que create_order
+-- e roda a mesma conta — é por isso que prévia e cobrança não têm como
+-- divergir.
 
 create or replace function public.shipping_quote(
   p_store_slug text,
   p_items jsonb,
   p_coupon_code text,
-  p_postal_code text,
-  p_city text,
-  p_state text
+  p_postal_code text
 )
 returns table (
   shipping_enabled boolean,
@@ -543,7 +660,12 @@ returns table (
   free_shipping_enabled boolean,
   free_shipping_minimum_cents integer,
   origin_city text,
-  origin_state text
+  origin_state text,
+  -- Destino REALMENTE usado no calculo, resolvido do CEP pelo servidor.
+  -- A tela mostra este par, nunca o que foi digitado: assim o comprador
+  -- ve a mesma cidade que decidiu o preco.
+  dest_city text,
+  dest_state text
 )
 language plpgsql
 stable
@@ -563,14 +685,15 @@ declare
   v_coupon record;
   v_coupon_code text := nullif(trim(coalesce(p_coupon_code, '')), '');
   v_postal text := public.shipping_normalize_postal_code(p_postal_code);
-  v_city text := nullif(trim(coalesce(p_city, '')), '');
-  v_state text := public.shipping_normalize_state(p_state);
+  -- Destino resolvido pelo servidor a partir do CEP, nunca recebido.
+  v_city text;
+  v_state text;
   v_fee record;
 begin
   select id, status into v_store_id, v_store_status from public.stores where slug = p_store_slug;
   if v_store_id is null or v_store_status <> 'active' then
     return query select false, false, 'store_not_available'::text, null::text, 0, 0, 0, 0,
-      false, null::integer, null::text, null::text;
+      false, null::integer, null::text, null::text, null::text, null::text;
     return;
   end if;
 
@@ -581,7 +704,7 @@ begin
   -- endereço livre, frete zero).
   if v_settings.id is null or not v_settings.enabled then
     return query select false, false, 'shipping_disabled'::text, null::text, 0, 0, 0, 0,
-      false, null::integer, null::text, null::text;
+      false, null::integer, null::text, null::text, null::text, null::text;
     return;
   end if;
 
@@ -589,13 +712,13 @@ begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
     return query select true, false, 'empty_cart'::text, null::text, 0, 0, 0, 0,
       v_settings.free_shipping_enabled, v_settings.free_shipping_minimum_cents,
-      v_settings.origin_city, v_settings.origin_state;
+      v_settings.origin_city, v_settings.origin_state, null::text, null::text;
     return;
   end if;
   if jsonb_array_length(p_items) > 50 then
     return query select true, false, 'too_many_items'::text, null::text, 0, 0, 0, 0,
       v_settings.free_shipping_enabled, v_settings.free_shipping_minimum_cents,
-      v_settings.origin_city, v_settings.origin_state;
+      v_settings.origin_city, v_settings.origin_state, null::text, null::text;
     return;
   end if;
   if exists (
@@ -608,7 +731,7 @@ begin
   ) then
     return query select true, false, 'invalid_item'::text, null::text, 0, 0, 0, 0,
       v_settings.free_shipping_enabled, v_settings.free_shipping_minimum_cents,
-      v_settings.origin_city, v_settings.origin_state;
+      v_settings.origin_city, v_settings.origin_state, null::text, null::text;
     return;
   end if;
 
@@ -631,7 +754,7 @@ begin
   if v_found <> v_expected then
     return query select true, false, 'product_not_found'::text, null::text, 0, 0, 0, 0,
       v_settings.free_shipping_enabled, v_settings.free_shipping_minimum_cents,
-      v_settings.origin_city, v_settings.origin_state;
+      v_settings.origin_city, v_settings.origin_state, null::text, null::text;
     return;
   end if;
 
@@ -646,19 +769,26 @@ begin
   end if;
   v_discounted := v_subtotal - v_discount;
 
-  -- Destino incompleto: a tela ainda não tem o que perguntar respondido.
+  -- CEP ainda não preenchido, ou preenchido fora do formato: a tela
+  -- simplesmente ainda não tem o que perguntar respondido.
   if v_postal is null or v_postal !~ '^[0-9]{8}$' then
     return query select true, false, 'invalid_postal_code'::text, null::text, 0,
       v_subtotal, v_discount, v_discounted,
       v_settings.free_shipping_enabled, v_settings.free_shipping_minimum_cents,
-      v_settings.origin_city, v_settings.origin_state;
+      v_settings.origin_city, v_settings.origin_state, null::text, null::text;
     return;
   end if;
-  if v_city is null or v_state is null or v_state !~ '^[A-Z]{2}$' then
-    return query select true, false, 'incomplete_destination'::text, null::text, 0,
+
+  -- Destino SEMPRE do CEP resolvido pelo servidor. Se o CEP nunca foi
+  -- resolvido (serviço de CEP fora do ar, ou CEP inexistente), a prévia
+  -- diz que não deu para calcular — e não chuta uma faixa a partir do
+  -- que o navegador digitou.
+  select d.city, d.state into v_city, v_state from public.shipping_resolve_destination(v_postal) d;
+  if v_city is null or v_state is null then
+    return query select true, false, 'destination_unresolved'::text, null::text, 0,
       v_subtotal, v_discount, v_discounted,
       v_settings.free_shipping_enabled, v_settings.free_shipping_minimum_cents,
-      v_settings.origin_city, v_settings.origin_state;
+      v_settings.origin_city, v_settings.origin_state, null::text, null::text;
     return;
   end if;
 
@@ -673,26 +803,46 @@ begin
   return query select true, true, null::text, v_fee.rule, v_fee.shipping_cents,
     v_subtotal, v_discount, v_discounted + v_fee.shipping_cents,
     v_settings.free_shipping_enabled, v_settings.free_shipping_minimum_cents,
-    v_settings.origin_city, v_settings.origin_state;
+    v_settings.origin_city, v_settings.origin_state, v_city, v_state;
 end;
 $fn$;
 
-comment on function public.shipping_quote(text, jsonb, text, text, text, text) is
+comment on function public.shipping_quote(text, jsonb, text, text) is
   'Prévia do frete para o checkout público. Recalcula subtotal a partir de products e desconto por coupon_validate — nenhum valor monetário é aceito do navegador, nem para exibir. Por isso o total mostrado na tela é exatamente o que create_order vai gravar e o que o Mercado Pago vai cobrar. Não reserva nada e não cria pedido.';
 
-revoke all on function public.shipping_quote(text, jsonb, text, text, text, text) from public;
-grant execute on function public.shipping_quote(text, jsonb, text, text, text, text) to anon, authenticated;
+revoke all on function public.shipping_quote(text, jsonb, text, text) from public;
+grant execute on function public.shipping_quote(text, jsonb, text, text) to anon, authenticated;
 
 -- ============================================================
 -- 8. create_order passa a calcular e gravar o frete
 -- ============================================================
 --
 -- Corpo derivado do de 0020_coupon_lifecycle.sql; as mudanças estão
--- marcadas com TASK-013: os sete parâmetros de endereço, o endereço no
+-- marcadas com TASK-013: os parâmetros de endereço, o endereço no
 -- fingerprint de idempotência, o bloco 6.6 (frete) e o snapshot no
 -- INSERT. Todo o resto — releitura de preços do banco, lock de produtos
 -- em ORDER BY id, reserva do cupom, baixa de estoque, auditoria — é
 -- preservado literalmente.
+--
+-- O QUE NÃO É PARÂMETRO, DE PROPÓSITO
+--
+-- Não existe p_shipping_amount_cents, p_subtotal_cents, p_discount_cents
+-- nem p_total_cents: valor que o cliente não pode enviar é valor que o
+-- cliente não pode forjar.
+--
+-- Também não existe p_shipping_city nem p_shipping_state. Cidade e UF
+-- decidem a FAIXA, então aceitá-las do navegador seria o mesmo que
+-- aceitar o preço: bastaria mandar um CEP de São Paulo com
+-- city="Corumbá"/state="MS" para pagar a faixa de mesma cidade. As duas
+-- saem de shipping_resolve_destination, sobre o CEP, a partir do que o
+-- servidor resolveu.
+--
+-- p_expected_total_cents é o único número que o cliente manda — e ele
+-- só consegue FAZER O PEDIDO FALHAR, nunca baratear: é comparado com o
+-- total recalculado aqui e, se divergir, o pedido é recusado. Serve para
+-- o caso em que o lojista muda a tabela de preços entre a tela e o
+-- envio: em vez de cobrar em silêncio um valor diferente do que estava
+-- na tela, o checkout recotiza e mostra o novo valor.
 --
 -- DROP explícito: os parâmetros novos criariam uma SOBRECARGA em vez de
 -- substituir, e a chamada de 9 argumentos ficaria presa na versão antiga
@@ -714,8 +864,7 @@ create or replace function public.create_order(
   p_shipping_number text default null,
   p_shipping_complement text default null,
   p_shipping_neighborhood text default null,
-  p_shipping_city text default null,
-  p_shipping_state text default null
+  p_expected_total_cents integer default null
 )
 returns public.orders
 language plpgsql
@@ -759,8 +908,9 @@ declare
   v_ship_number text := nullif(trim(coalesce(p_shipping_number, '')), '');
   v_ship_complement text := nullif(trim(coalesce(p_shipping_complement, '')), '');
   v_ship_neighborhood text := nullif(trim(coalesce(p_shipping_neighborhood, '')), '');
-  v_ship_city text := nullif(trim(coalesce(p_shipping_city, '')), '');
-  v_ship_state text := public.shipping_normalize_state(p_shipping_state);
+  -- Resolvidos do CEP pelo servidor, nunca recebidos do cliente.
+  v_ship_city text;
+  v_ship_state text;
   v_shipping_cents integer := 0;
   v_shipping_rule text;
   v_fee record;
@@ -814,11 +964,20 @@ begin
     if v_ship_neighborhood is not null and char_length(v_ship_neighborhood) > 120 then
       raise exception 'invalid_shipping_neighborhood' using errcode = '22023';
     end if;
-    if v_ship_city is null or char_length(v_ship_city) > 120 then
-      raise exception 'invalid_shipping_city' using errcode = '22023';
-    end if;
-    if v_ship_state is null or v_ship_state !~ '^[A-Z]{2}$' then
-      raise exception 'invalid_shipping_state' using errcode = '22023';
+
+    -- O destino sai do CEP, resolvido pelo SERVIDOR (shipping_postal_codes,
+    -- escrita só por service_role). Nada aqui olha para o que o navegador
+    -- afirmou sobre cidade ou UF — esses campos nem chegam nesta função.
+    --
+    -- CEP nunca resolvido (serviço de CEP fora do ar, ou CEP inexistente)
+    -- recusa o pedido em vez de arbitrar uma faixa. É o fallback seguro:
+    -- a alternativa seria deixar o comprador escolher a própria cidade e,
+    -- com ela, o próprio preço.
+    select d.city, d.state into v_ship_city, v_ship_state
+    from public.shipping_resolve_destination(v_ship_postal) d;
+
+    if v_ship_city is null or v_ship_state is null then
+      raise exception 'shipping_destination_unresolved' using errcode = '23514';
     end if;
 
     v_delivery_address := v_ship_street || ', ' || v_ship_number
@@ -1003,6 +1162,22 @@ begin
     v_total := v_total + v_shipping_cents;
   end if;
 
+  -- 6.7 TASK-013 — o total da tela tem que ser o total cobrado.
+  --
+  -- Entre a prévia e o envio, o lojista pode ter mudado a tabela de
+  -- frete, o preço de um produto ou o cupom (TOCTOU real, não teórico).
+  -- O pedido continua sendo criado com o valor RECALCULADO aqui — nunca
+  -- com o que veio do cliente —, mas se esse valor não bate com o que o
+  -- comprador tinha na tela, é melhor recusar e recotizar do que debitar
+  -- em silêncio um valor que ele não viu.
+  --
+  -- Este parâmetro só aperta: mandar um total errado faz o pedido
+  -- falhar, nunca ficar mais barato. Omiti-lo mantém o comportamento
+  -- anterior (usado por retirada e pelas lojas sem frete).
+  if p_expected_total_cents is not null and p_expected_total_cents <> v_total then
+    raise exception 'total_changed' using errcode = '23514';
+  end if;
+
   -- 7. cria pedido + itens + reduz estoque + auditoria
   v_public_code := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
 
@@ -1071,8 +1246,8 @@ begin
 end;
 $$;
 
-comment on function public.create_order(text, uuid, text, text, text, text, text, jsonb, text, text, text, text, text, text, text, text) is
-  'Única forma de criar um pedido — checkout público, chamável por anon E authenticated. Nunca confia em preço, total, desconto ou FRETE vindo do cliente: preços são relidos de products, o desconto é recalculado por coupon_validate e o frete por shipping_fee_for sobre a configuração vigente da loja, tudo dentro da MESMA transação. TASK-013: o valor do frete não é sequer um parâmetro desta função, então não existe payload capaz de alterá-lo; o endereço estruturado só é exigido quando a loja tem entrega configurada, preservando o caminho de endereço livre das lojas que ainda não configuraram. CEP/cidade/UF entram no fingerprint de idempotência — trocar o endereço sob a mesma key não devolve o pedido antigo com o frete antigo.';
+comment on function public.create_order(text, uuid, text, text, text, text, text, jsonb, text, text, text, text, text, text, integer) is
+  'Única forma de criar um pedido — checkout público, chamável por anon E authenticated. Nunca confia em preço, total, desconto ou FRETE vindo do cliente: preços são relidos de products, o desconto é recalculado por coupon_validate e o frete por shipping_fee_for sobre a configuração vigente da loja, tudo dentro da MESMA transação. TASK-013: nem o valor do frete nem a cidade/UF de destino são parâmetros — o valor sai da configuração da loja e o destino de shipping_resolve_destination sobre o CEP, resolvido pelo servidor; não existe payload capaz de escolher a faixa. O endereço estruturado só é exigido quando a loja tem entrega configurada, preservando o caminho de endereço livre das lojas que ainda não configuraram. p_expected_total_cents é uma trava opcional: total divergente recusa o pedido (total_changed), nunca o barateia. CEP e destino resolvido entram no fingerprint de idempotência — trocar o endereço sob a mesma key não devolve o pedido antigo com o frete antigo.';
 
-revoke all on function public.create_order(text, uuid, text, text, text, text, text, jsonb, text, text, text, text, text, text, text, text) from public;
-grant execute on function public.create_order(text, uuid, text, text, text, text, text, jsonb, text, text, text, text, text, text, text, text) to anon, authenticated;
+revoke all on function public.create_order(text, uuid, text, text, text, text, text, jsonb, text, text, text, text, text, text, integer) from public;
+grant execute on function public.create_order(text, uuid, text, text, text, text, text, jsonb, text, text, text, text, text, text, integer) to anon, authenticated;

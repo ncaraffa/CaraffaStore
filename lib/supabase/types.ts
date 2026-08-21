@@ -673,6 +673,33 @@ export interface Database {
         ];
       };
       /**
+       * TASK-013 — cache de CEP → (cidade, UF) resolvido pelo SERVIDOR.
+       * É a única fonte de destino aceita no cálculo de frete. Escrita só
+       * por service_role, a partir de uma consulta real ao serviço de
+       * CEP; ninguém mais tem GRANT nenhum aqui.
+       */
+      shipping_postal_codes: {
+        Row: {
+          postal_code: string;
+          city: string;
+          state: string;
+          resolved_at: string;
+        };
+        Insert: {
+          postal_code: string;
+          city: string;
+          state: string;
+          resolved_at?: string;
+        };
+        Update: {
+          postal_code?: string;
+          city?: string;
+          state?: string;
+          resolved_at?: string;
+        };
+        Relationships: [];
+      };
+      /**
        * TASK-013 — configuração de frete por LOJA (nunca por workspace:
        * um workspace pode ter lojas em cidades diferentes). Escrita só
        * por shipping_settings_upsert; o comprador nunca lê esta tabela.
@@ -1394,17 +1421,26 @@ export interface Database {
           /**
            * TASK-013: endereço de entrega estruturado. Só é exigido
            * quando a loja tem frete configurado e a modalidade é
-           * `delivery`; nas demais, é ignorado. Não existe parâmetro de
-           * VALOR de frete — o número sai de shipping_fee_for dentro da
-           * transação, e por isso nenhum payload consegue alterá-lo.
+           * `delivery`; nas demais, é ignorado.
+           *
+           * Repare no que NÃO está aqui: valor de frete, subtotal,
+           * desconto, total — e também cidade e UF. Cidade/UF decidem a
+           * FAIXA, então são resolvidas no servidor a partir do CEP
+           * (shipping_resolve_destination); aceitá-las do cliente seria
+           * o mesmo que deixá-lo escolher o preço.
            */
           p_shipping_postal_code?: string | null;
           p_shipping_street?: string | null;
           p_shipping_number?: string | null;
           p_shipping_complement?: string | null;
           p_shipping_neighborhood?: string | null;
-          p_shipping_city?: string | null;
-          p_shipping_state?: string | null;
+          /**
+           * Total que o comprador viu na tela. Trava opcional contra
+           * divergência silenciosa: se não bater com o total recalculado,
+           * o pedido é RECUSADO (`total_changed`). Só consegue fazer o
+           * pedido falhar — nunca baratear.
+           */
+          p_expected_total_cents?: number | null;
         };
         Returns: Database["public"]["Tables"]["orders"]["Row"];
       };
@@ -1442,10 +1478,11 @@ export interface Database {
         Returns: Database["public"]["Tables"]["store_shipping_settings"]["Row"];
       };
       /**
-       * Prévia do frete no checkout. Recebe os ITENS, nunca um subtotal
-       * pronto: subtotal, desconto e frete são todos recalculados no
-       * banco, então o total mostrado na tela é o mesmo que create_order
-       * vai gravar e o Mercado Pago vai cobrar.
+       * Prévia do frete no checkout. Recebe os ITENS e o CEP — nunca um
+       * subtotal pronto, nunca cidade/UF: subtotal, desconto, destino e
+       * frete são todos resolvidos no banco, então o total mostrado na
+       * tela é o mesmo que create_order vai gravar e o Mercado Pago vai
+       * cobrar.
        */
       shipping_quote: {
         Args: {
@@ -1453,8 +1490,6 @@ export interface Database {
           p_items: { product_id: string; quantity: number }[];
           p_coupon_code: string | null;
           p_postal_code: string | null;
-          p_city: string | null;
-          p_state: string | null;
         };
         Returns: {
           shipping_enabled: boolean;
@@ -1469,7 +1504,23 @@ export interface Database {
           free_shipping_minimum_cents: number | null;
           origin_city: string | null;
           origin_state: string | null;
+          /** Destino REALMENTE usado no cálculo, resolvido do CEP. */
+          dest_city: string | null;
+          dest_state: string | null;
         }[];
+      };
+      /**
+       * Registra cidade/UF de um CEP a partir de uma consulta feita no
+       * SERVIDOR. EXECUTE só para service_role — é esta restrição que
+       * impede o comprador de escolher a própria faixa de frete.
+       */
+      shipping_postal_code_upsert: {
+        Args: { p_postal_code: string; p_city: string; p_state: string };
+        Returns: Database["public"]["Tables"]["shipping_postal_codes"]["Row"];
+      };
+      shipping_resolve_destination: {
+        Args: { p_postal_code: string };
+        Returns: { city: string; state: string }[];
       };
       order_advance_status: {
         Args: { p_order_id: string; p_new_status: OrderStatus };

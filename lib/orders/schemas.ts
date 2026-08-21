@@ -56,8 +56,12 @@ export const checkoutSchema = z
     shippingNumber: z.string().trim().max(20, "Número muito longo.").optional().or(z.literal("")),
     shippingComplement: z.string().trim().max(100, "Complemento muito longo.").optional().or(z.literal("")),
     shippingNeighborhood: z.string().trim().max(120, "Bairro muito longo.").optional().or(z.literal("")),
-    shippingCity: z.string().trim().max(120, "Cidade muito longa.").optional().or(z.literal("")),
-    shippingState: z.string().trim().max(2, "Use a sigla do estado, com duas letras.").optional().or(z.literal("")),
+    /**
+     * Total exibido ao comprador. Vai para create_order como TRAVA: se
+     * divergir do total recalculado no banco, o pedido é recusado. Não
+     * há como usá-lo para pagar menos — só para o pedido falhar.
+     */
+    expectedTotalCents: z.coerce.number().int().min(0).max(100_000_000).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.fulfillmentMethod !== "delivery") {
@@ -84,10 +88,7 @@ export const checkoutSchema = z
     if (!data.shippingNumber) {
       ctx.addIssue({ code: "custom", path: ["shippingNumber"], message: "Informe o número." });
     }
-    if (!data.shippingCity) {
-      ctx.addIssue({ code: "custom", path: ["shippingCity"], message: "Informe a cidade." });
-    }
-    if (!data.shippingState || !/^[A-Za-z]{2}$/.test(data.shippingState)) {
-      ctx.addIssue({ code: "custom", path: ["shippingState"], message: "Informe o estado (duas letras, como MS)." });
-    }
+    // Cidade e UF não são validadas aqui porque não são mais enviadas: o
+    // servidor as resolve do CEP. Quem recusa um CEP que ele não
+    // conseguiu resolver é create_order (shipping_destination_unresolved).
   });

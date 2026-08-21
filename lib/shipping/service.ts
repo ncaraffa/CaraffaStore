@@ -106,16 +106,24 @@ export interface ShippingQuote {
   freeShippingMinimumCents: number | null;
   originCity: string | null;
   originState: string | null;
+  /**
+   * Cidade/UF que o SERVIDOR resolveu do CEP e usou no cálculo. A tela
+   * mostra este par, não o que foi digitado — assim o comprador vê a
+   * mesma cidade que decidiu o preço que ele vai pagar.
+   */
+  destCity: string | null;
+  destState: string | null;
 }
 
 /**
  * Prévia do frete para o checkout.
  *
  * NÃO cria pedido e NÃO reserva nada. Mas — diferente da prévia de cupom
- * — nem o subtotal é aceito do navegador: a RPC recebe os ITENS e
- * recalcula subtotal, desconto e frete a partir de products/coupons.
- * É por isso que o total mostrado aqui é exatamente o que create_order
- * vai gravar e o que o Mercado Pago vai cobrar.
+ * — nada que valha dinheiro é aceito do navegador: a RPC recebe os ITENS
+ * e o CEP, e recalcula subtotal, desconto, destino e frete a partir de
+ * products/coupons/shipping_postal_codes. Cidade e UF não são sequer
+ * parâmetros. É por isso que o total mostrado aqui é exatamente o que
+ * create_order vai gravar e o que o Mercado Pago vai cobrar.
  */
 export async function quoteShipping(
   supabase: Client,
@@ -124,8 +132,6 @@ export async function quoteShipping(
     items: { productId: string; quantity: number }[];
     couponCode?: string | null;
     postalCode?: string | null;
-    city?: string | null;
-    state?: string | null;
   },
 ): Promise<ShippingQuote> {
   const { data, error } = await supabase.rpc("shipping_quote", {
@@ -133,8 +139,6 @@ export async function quoteShipping(
     p_items: params.items.map((item) => ({ product_id: item.productId, quantity: item.quantity })),
     p_coupon_code: params.couponCode ?? null,
     p_postal_code: params.postalCode ?? null,
-    p_city: params.city ?? null,
-    p_state: params.state ?? null,
   });
 
   if (error) throw new ShippingError(error.message);
@@ -155,5 +159,7 @@ export async function quoteShipping(
     freeShippingMinimumCents: row.free_shipping_minimum_cents,
     originCity: row.origin_city,
     originState: row.origin_state,
+    destCity: row.dest_city,
+    destState: row.dest_state,
   };
 }

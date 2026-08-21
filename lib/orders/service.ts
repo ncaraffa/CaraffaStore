@@ -36,14 +36,18 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
  * endereço e para o snapshot do pedido, não para calcular por faixa de
  * CEP (isso está fora do escopo da V1).
  */
+/**
+ * Endereço de entrega como o comprador preencheu — menos cidade e UF,
+ * que decidem a faixa de frete e por isso são resolvidas no servidor a
+ * partir do CEP. Aceitá-las daqui seria deixar o comprador escolher o
+ * preço: bastaria mandar um CEP de São Paulo com a cidade da loja.
+ */
 export interface ShippingAddressInput {
   postalCode: string;
   street: string;
   number: string;
   complement?: string | null;
   neighborhood?: string | null;
-  city: string;
-  state: string;
 }
 
 // ============================================================
@@ -69,14 +73,22 @@ export async function createOrder(
     couponCode?: string | null;
     /**
      * Endereço de entrega estruturado (TASK-013). Repare no que NÃO
-     * existe aqui: valor de frete. A RPC não tem esse parâmetro — o
-     * número é calculado no banco a partir da configuração vigente da
-     * loja, então não há payload capaz de alterá-lo.
+     * existe aqui: valor de frete, e cidade/UF. A RPC não tem esses
+     * parâmetros — o valor sai da configuração da loja e o destino de
+     * shipping_resolve_destination sobre o CEP, então não há payload
+     * capaz de alterar nem o preço nem a faixa.
      *
      * Só é exigido quando a loja tem entrega configurada; lojas sem
      * frete continuam usando `deliveryAddress` em texto livre.
      */
     shipping?: ShippingAddressInput | null;
+    /**
+     * Total que o comprador viu na tela. Trava opcional: se não bater
+     * com o total recalculado no banco, o pedido é recusado
+     * (`total_changed`) em vez de cobrar em silêncio um valor diferente
+     * do exibido. Só aperta — nunca baixa o preço.
+     */
+    expectedTotalCents?: number | null;
   },
 ): Promise<OrderRow> {
   return unwrap(
@@ -95,8 +107,7 @@ export async function createOrder(
       p_shipping_number: params.shipping?.number ?? null,
       p_shipping_complement: params.shipping?.complement ?? null,
       p_shipping_neighborhood: params.shipping?.neighborhood ?? null,
-      p_shipping_city: params.shipping?.city ?? null,
-      p_shipping_state: params.shipping?.state ?? null,
+      p_expected_total_cents: params.expectedTotalCents ?? null,
     }),
   );
 }
