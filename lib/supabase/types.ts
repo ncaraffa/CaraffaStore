@@ -10,6 +10,14 @@ export type OnboardingStep =
 export type PlanKey = "essential" | "growth" | "professional";
 
 export type PlanCode = 30 | 50 | 80;
+
+/**
+ * TASK-013 — faixa de frete aplicada a um pedido. `free` é uma faixa
+ * como as outras (e não um booleano à parte) porque é assim que o banco
+ * grava: shipping_rule guarda a razão do valor, não só o valor.
+ */
+export type ShippingRule = "free" | "same_city" | "same_state" | "other_state";
+
 export type AuditAction =
   | "email_verification_completed"
   | "password_recovery_grant_issued"
@@ -63,7 +71,8 @@ export type AuditAction =
   | "store_reactivated_by_platform_admin"
   | "store_suspended_by_billing_overdue"
   | "store_reactivated_by_billing"
-  | "plan_changed_by_billing";
+  | "plan_changed_by_billing"
+  | "shipping_settings_updated";
 export type StoreSuspensionReason = "platform_admin" | "billing_overdue";
 export type ProductStatus = "draft" | "published" | "archived";
 export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "completed" | "cancelled";
@@ -585,6 +594,25 @@ export interface Database {
           coupon_code_snapshot: string | null;
           coupon_discount_type_snapshot: "percentage" | "fixed_amount" | null;
           coupon_discount_value_snapshot: number | null;
+          /**
+           * TASK-013: frete cobrado neste pedido. total = subtotal -
+           * discount + shipping, garantido pela CHECK
+           * orders_total_matches_components no banco.
+           */
+          shipping_amount_cents: number;
+          /** Faixa aplicada no momento da compra — snapshot, nunca recalculada. */
+          shipping_rule: ShippingRule | null;
+          shipping_postal_code: string | null;
+          shipping_street: string | null;
+          shipping_number: string | null;
+          shipping_complement: string | null;
+          shipping_neighborhood: string | null;
+          shipping_city: string | null;
+          shipping_state: string | null;
+          /** Origem usada no cálculo — preserva a conta mesmo se a loja mudar de cidade. */
+          shipping_origin_postal_code: string | null;
+          shipping_origin_city: string | null;
+          shipping_origin_state: string | null;
           created_at: string;
           updated_at: string;
           cancelled_at: string | null;
@@ -639,6 +667,70 @@ export interface Database {
             foreignKeyName: "orders_store_id_fkey";
             columns: ["store_id"];
             isOneToOne: false;
+            referencedRelation: "stores";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      /**
+       * TASK-013 — configuração de frete por LOJA (nunca por workspace:
+       * um workspace pode ter lojas em cidades diferentes). Escrita só
+       * por shipping_settings_upsert; o comprador nunca lê esta tabela.
+       */
+      store_shipping_settings: {
+        Row: {
+          id: string;
+          store_id: string;
+          enabled: boolean;
+          origin_postal_code: string | null;
+          origin_city: string | null;
+          origin_state: string | null;
+          same_city_fee_cents: number;
+          same_state_fee_cents: number;
+          other_state_fee_cents: number;
+          additional_fee_cents: number;
+          free_shipping_enabled: boolean;
+          free_shipping_minimum_cents: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          store_id: string;
+          enabled?: boolean;
+          origin_postal_code?: string | null;
+          origin_city?: string | null;
+          origin_state?: string | null;
+          same_city_fee_cents?: number;
+          same_state_fee_cents?: number;
+          other_state_fee_cents?: number;
+          additional_fee_cents?: number;
+          free_shipping_enabled?: boolean;
+          free_shipping_minimum_cents?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          store_id?: string;
+          enabled?: boolean;
+          origin_postal_code?: string | null;
+          origin_city?: string | null;
+          origin_state?: string | null;
+          same_city_fee_cents?: number;
+          same_state_fee_cents?: number;
+          other_state_fee_cents?: number;
+          additional_fee_cents?: number;
+          free_shipping_enabled?: boolean;
+          free_shipping_minimum_cents?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "store_shipping_settings_store_id_fkey";
+            columns: ["store_id"];
+            isOneToOne: true;
             referencedRelation: "stores";
             referencedColumns: ["id"];
           },
@@ -1299,8 +1391,85 @@ export interface Database {
           p_items: { product_id: string; quantity: number }[];
           /** TASK-012: código do cupom como digitado. Normalização, validação e cálculo do desconto acontecem no banco. */
           p_coupon_code?: string | null;
+          /**
+           * TASK-013: endereço de entrega estruturado. Só é exigido
+           * quando a loja tem frete configurado e a modalidade é
+           * `delivery`; nas demais, é ignorado. Não existe parâmetro de
+           * VALOR de frete — o número sai de shipping_fee_for dentro da
+           * transação, e por isso nenhum payload consegue alterá-lo.
+           */
+          p_shipping_postal_code?: string | null;
+          p_shipping_street?: string | null;
+          p_shipping_number?: string | null;
+          p_shipping_complement?: string | null;
+          p_shipping_neighborhood?: string | null;
+          p_shipping_city?: string | null;
+          p_shipping_state?: string | null;
         };
         Returns: Database["public"]["Tables"]["orders"]["Row"];
+      };
+      shipping_settings_get: {
+        Args: { p_store_id: string };
+        Returns: {
+          is_configured: boolean;
+          enabled: boolean;
+          origin_postal_code: string | null;
+          origin_city: string | null;
+          origin_state: string | null;
+          same_city_fee_cents: number;
+          same_state_fee_cents: number;
+          other_state_fee_cents: number;
+          additional_fee_cents: number;
+          free_shipping_enabled: boolean;
+          free_shipping_minimum_cents: number | null;
+          updated_at: string | null;
+        }[];
+      };
+      shipping_settings_upsert: {
+        Args: {
+          p_store_id: string;
+          p_enabled: boolean;
+          p_origin_postal_code: string | null;
+          p_origin_city: string | null;
+          p_origin_state: string | null;
+          p_same_city_fee_cents: number;
+          p_same_state_fee_cents: number;
+          p_other_state_fee_cents: number;
+          p_additional_fee_cents: number;
+          p_free_shipping_enabled: boolean;
+          p_free_shipping_minimum_cents: number | null;
+        };
+        Returns: Database["public"]["Tables"]["store_shipping_settings"]["Row"];
+      };
+      /**
+       * Prévia do frete no checkout. Recebe os ITENS, nunca um subtotal
+       * pronto: subtotal, desconto e frete são todos recalculados no
+       * banco, então o total mostrado na tela é o mesmo que create_order
+       * vai gravar e o Mercado Pago vai cobrar.
+       */
+      shipping_quote: {
+        Args: {
+          p_store_slug: string;
+          p_items: { product_id: string; quantity: number }[];
+          p_coupon_code: string | null;
+          p_postal_code: string | null;
+          p_city: string | null;
+          p_state: string | null;
+        };
+        Returns: {
+          shipping_enabled: boolean;
+          available: boolean;
+          reason: string | null;
+          rule: ShippingRule | null;
+          shipping_cents: number;
+          subtotal_cents: number;
+          discount_cents: number;
+          total_cents: number;
+          free_shipping_enabled: boolean;
+          free_shipping_minimum_cents: number | null;
+          origin_city: string | null;
+          origin_state: string | null;
+        }[];
       };
       order_advance_status: {
         Args: { p_order_id: string; p_new_status: OrderStatus };
