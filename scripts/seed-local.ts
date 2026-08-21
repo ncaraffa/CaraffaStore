@@ -8,6 +8,41 @@
  *   npx supabase start
  *   npx supabase db reset
  *   npm run seed:local
+ *
+ * ============================================================
+ * QUEBRADO DESDE A TASK-012 — E POR QUE NÃO FOI CONSERTADO AQUI
+ * ============================================================
+ *
+ * Sintoma: `npm run seed:local` falha na primeira loja, com
+ *   null value in column "workspace_id" of relation "stores"
+ *
+ * Causa: a TASK-012 tornou o workspace o dono real da loja
+ * (`stores.workspace_id` NOT NULL) e moveu a assinatura para ele. Este
+ * script ainda cria loja solta, do jeito pré-TASK-012.
+ *
+ * A correção óbvia — inserir em `workspaces`, `workspace_subscriptions`
+ * e `workspace_members` antes da loja — NÃO funciona, e não por detalhe
+ * de tipagem: a migration 0021_revoke_default_table_grants.sql revogou
+ * INSERT/UPDATE/DELETE dessas três tabelas de TODOS os roles, incluindo
+ * `service_role`. Foi correção de um furo real (TRUNCATE cross-tenant
+ * por qualquer conta autenticada), e `Insert: never` em
+ * lib/supabase/types.ts documenta a mesma decisão no TypeScript. Toda
+ * escrita passa por RPC SECURITY DEFINER.
+ *
+ * Ou seja, consertar exigiria uma destas três, todas piores que o bug:
+ *
+ *   1. devolver escrita a `service_role` nessas tabelas — desfazendo uma
+ *      barreira de segurança de produção para conveniência de teste;
+ *   2. criar uma RPC de seed SECURITY DEFINER — código de produção que
+ *      existe só para fixture;
+ *   3. reescrever o seed inteiro sobre `supabase/seed.sql` (que roda
+ *      como superusuário) — mas as fixtures dependem de usuários criados
+ *      pela API admin do Auth, então seria mover o script todo, não um
+ *      trecho.
+ *
+ * Nenhuma cabe numa task de frete. Enquanto isso, fixtures locais são
+ * montadas à mão em SQL (workspace + subscription + workspace_members +
+ * store + store_members + products) — ver qa/reports/TASK-013.md.
  */
 import { loadLocalEnv } from "../lib/env/load-local-env";
 import { assertLocalOnlyScript } from "../lib/env/local-only-guard";
