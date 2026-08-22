@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { getPublicPaymentView } from "@/lib/payments/service-only/payment-page-reader";
 import { RECEIPT_COOKIE_NAME } from "@/lib/payments/receipt-cookie";
+import { formatPriceCents } from "@/lib/catalog/format";
+import { formatCityState, formatPostalCode } from "@/lib/shipping/format";
 import { PaymentStatusClient } from "./payment-status-client";
 import styles from "./payment.module.css";
 
@@ -49,6 +51,58 @@ export default async function PaymentPage({
         ticketUrl={view.ticketUrl}
         expiresAt={view.expiresAt}
       />
+
+      {/* TASK-013 — a conferência antes de pagar: de onde saiu o valor e
+          para onde vai. Tudo é snapshot do pedido; mudar a tabela de
+          frete da loja depois não reescreve nada disto. */}
+      <section className={styles.orderSummary} aria-label="Resumo do pedido">
+        <div className={styles.summaryRow}>
+          <span>Produtos</span>
+          <span className={styles.summaryValue}>{formatPriceCents(view.order.subtotalCents)}</span>
+        </div>
+        {view.order.discountCents > 0 && (
+          <div className={styles.summaryRow}>
+            <span>Desconto</span>
+            <span className={styles.summaryValue}>−{formatPriceCents(view.order.discountCents)}</span>
+          </div>
+        )}
+        {view.order.shippingRule && (
+          <div className={styles.summaryRow}>
+            <span>Frete</span>
+            <span className={styles.summaryValue} data-free={view.order.shippingRule === "free" || undefined}>
+              {view.order.shippingRule === "free" ? "Grátis" : formatPriceCents(view.order.shippingAmountCents)}
+            </span>
+          </div>
+        )}
+        <div className={styles.summaryTotalRow}>
+          <span>Total</span>
+          <span className={styles.summaryValue}>{formatPriceCents(view.order.totalCents)}</span>
+        </div>
+
+        {view.order.fulfillmentMethod === "delivery" && (
+          <div className={styles.addressBlock}>
+            <p className={styles.addressLabel}>Entrega em</p>
+            {view.order.shippingPostalCode ? (
+              <address className={styles.address}>
+                {[view.order.shippingStreet, view.order.shippingNumber].filter(Boolean).join(", ")}
+                {view.order.shippingComplement ? ` — ${view.order.shippingComplement}` : ""}
+                <br />
+                {view.order.shippingNeighborhood ? (
+                  <>
+                    {view.order.shippingNeighborhood}
+                    <br />
+                  </>
+                ) : null}
+                {formatCityState(view.order.shippingCity, view.order.shippingState)}
+                <br />
+                CEP {formatPostalCode(view.order.shippingPostalCode)}
+              </address>
+            ) : (
+              <address className={styles.address}>{view.order.deliveryAddress}</address>
+            )}
+          </div>
+        )}
+      </section>
 
       <p className={styles.backLink}>
         <a href={`/loja/${storeSlug}`}>← Voltar para a loja</a>

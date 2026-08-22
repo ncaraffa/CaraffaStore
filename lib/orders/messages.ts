@@ -52,6 +52,19 @@ export const MESSAGES: Record<string, string> = {
   paid_order_requires_refund: "Pedido já pago não pode ser cancelado por aqui — é necessário reembolso.",
   pix_order_requires_payment_flow: "Pedidos com Pix são cancelados pela tela de pagamento, não por aqui.",
   payment_pending_requires_reconciliation: "O pagamento ainda está pendente — confira o status no provedor antes de cancelar.",
+  // TASK-013 — endereço de entrega estruturado. Nada aqui revela a
+  // configuração de frete da loja: só o que o comprador pode corrigir.
+  invalid_shipping_postal_code: "Informe um CEP válido, com 8 dígitos.",
+  invalid_shipping_street: "Informe a rua.",
+  invalid_shipping_number: "Informe o número.",
+  invalid_shipping_complement: "Complemento muito longo.",
+  invalid_shipping_neighborhood: "Bairro muito longo.",
+  // Cidade e UF não são mais campos do pedido — o servidor as resolve
+  // pelo CEP. Quando não consegue, é o CEP que precisa ser conferido.
+  shipping_destination_unresolved:
+    "Não conseguimos confirmar a cidade deste CEP agora, então não dá para calcular o frete. Confira o CEP ou escolha retirada.",
+  total_changed:
+    "O valor do pedido mudou enquanto você preenchia. Confira o novo total na tela e envie de novo.",
   pix_not_configured: "Esta loja ainda não está pronta para receber pagamentos. Tente novamente mais tarde.",
   payment_attempt_failed: "Não foi possível iniciar o pagamento. Tente novamente.",
   payment_provider_unavailable: "O sistema de pagamento está indisponível no momento. Tente novamente em instantes.",
@@ -65,6 +78,12 @@ export const FIELD_LEVEL_CODES: Record<string, string> = {
   delivery_address_required: "deliveryAddress",
   invalid_delivery_address: "deliveryAddress",
   invalid_customer_notes: "customerNotes",
+  invalid_shipping_postal_code: "shippingPostalCode",
+  invalid_shipping_street: "shippingStreet",
+  invalid_shipping_number: "shippingNumber",
+  invalid_shipping_complement: "shippingComplement",
+  invalid_shipping_neighborhood: "shippingNeighborhood",
+  shipping_destination_unresolved: "shippingPostalCode",
 };
 
 function hasErrorCode(error: unknown): error is { code: string } {

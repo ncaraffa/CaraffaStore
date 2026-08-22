@@ -139,8 +139,144 @@
 /* TASK-012 — aviso de cupom no resumo do checkout. */
 .couponNote {
   margin: 0.5rem 0 0;
-  color: var(--color-text-muted);
+  /* --color-text-muted nunca existiu no design system (os tokens são
+     --cs-*), então esta linha vinha herdando a cor do corpo em vez da
+     cor secundária. */
+  color: var(--cs-ink-muted);
   font-size: 0.875rem;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+/* ============================================================
+   TASK-013 — resumo calculado no servidor e endereco de entrega
+   ============================================================ */
+
+/* O detalhamento vive logo abaixo do numero grande: quem quer so o
+   total ja o leu, quem quer entender a conta encontra as parcelas sem
+   precisar abrir nada. */
+.breakdown {
+  padding: var(--cs-space-4) var(--cs-space-5);
+  margin: calc(var(--cs-space-5) * -1) 0 var(--cs-space-5);
+  background: var(--cs-white);
+  border: 1px solid var(--cs-line);
+  border-top: 0;
+  border-radius: 0 0 var(--cs-radius-lg) var(--cs-radius-lg);
+}
+
+.breakdownRow,
+.breakdownTotal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cs-space-4);
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink-body);
+  padding: 0.1875rem 0;
+}
+
+.breakdownTotal {
+  margin-top: var(--cs-space-2);
+  padding-top: var(--cs-space-3);
+  border-top: 1px solid var(--cs-line);
+  font-weight: 700;
+  color: var(--cs-ink);
+}
+
+/* tabular-nums alinha os centavos entre as linhas; sem isso "R$ 199,90"
+   e "R$ 15,00" dancam na vertical. */
+.breakdownValue {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.breakdownValue[data-free] {
+  color: var(--cs-success-text);
+  font-weight: 700;
+}
+
+.shippingHint {
+  margin: var(--cs-space-2) 0 0;
+  font-size: var(--cs-text-xs);
+  line-height: 1.5;
+  color: var(--cs-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Rua + numero e cidade + UF dividem a linha. Abaixo de 360px a divisao
+   deixaria "Numero" com ~4 caracteres visiveis, entao volta a empilhar. */
+.addressGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 var(--cs-space-3);
+}
+
+@media (min-width: 22.5rem) {
+  .addressGrid {
+    grid-template-columns: minmax(0, 1fr) 6.5rem;
+  }
+}
+
+.addressStreet,
+.addressNumber {
+  min-width: 0;
+}
+
+/* ============================================================
+   Destino confirmado pelo servidor
+   ============================================================
+   Cidade e UF nao sao campos: elas decidem a faixa de frete, entao quem
+   as define e o backend, a partir do CEP. Aparecem como leitura para o
+   comprador ver exatamente o destino que esta sendo cobrado. */
+.resolvedDestination {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cs-space-3);
+  flex-wrap: wrap;
+  padding: var(--cs-space-3) var(--cs-space-4);
+  margin-bottom: var(--cs-space-5);
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius-md);
+}
+
+.resolvedLabel {
+  font-size: var(--cs-text-xs);
+  font-weight: 600;
+  color: var(--cs-ink-body);
+}
+
+.resolvedValue {
+  font-size: var(--cs-text-sm);
+  color: var(--cs-ink);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.resolvedPending {
+  font-size: var(--cs-text-xs);
+  color: var(--cs-ink-muted);
+  text-align: right;
+}
+
+/* ============================================================
+   Safari/iOS: input abaixo de 16px faz a pagina dar zoom ao focar
+   ============================================================
+   O token global do design system usa 14px (--cs-text-sm) em todos os
+   controles. Trocar o token afetaria todas as telas do painel e da loja;
+   aqui a regra e escopada ao checkout, que e onde o zoom mais atrapalha:
+   o campo entra em foco, a pagina amplia, e o comprador perde de vista o
+   resumo com o total. Vale para todos os campos do formulario, nao so os
+   de endereco -- alternar entre campos com tamanhos diferentes faria a
+   pagina ampliar e reduzir a cada tab.
+
+   Limitado a telas estreitas porque so ali o zoom acontece; no desktop o
+   14px do design system continua valendo. */
+@media (max-width: 30rem) {
+  .main input,
+  .main textarea,
+  .main select {
+    font-size: 1rem;
+  }
 }

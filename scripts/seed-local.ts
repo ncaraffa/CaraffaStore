@@ -8,10 +8,35 @@
  *   npx supabase start
  *   npx supabase db reset
  *   npm run seed:local
+ *
+ * ============================================================
+ * COMO AS LOJAS FIXTURE SÃO CRIADAS (e por que não por INSERT)
+ * ============================================================
+ *
+ * Desde a TASK-012 a loja pertence a um workspace
+ * (`stores.workspace_id` NOT NULL), e a migration 0021 revogou
+ * INSERT/UPDATE/DELETE de `workspaces`, `workspace_subscriptions` e
+ * `workspace_members` de TODOS os roles — inclusive `service_role`.
+ * Foi a correção de um furo real (TRUNCATE cross-tenant por qualquer
+ * conta autenticada), e `Insert: never` em lib/supabase/types.ts
+ * documenta a mesma decisão no TypeScript.
+ *
+ * Por isso o seed não insere loja direto: ele percorre o MESMO caminho
+ * do comerciante real — preenche o onboarding e chama
+ * onboarding_complete() autenticado como o próprio usuário fixture, que
+ * cria workspace, assinatura, loja, store_members e o assento do dono
+ * numa transação só (ver provisionStoreViaOnboarding).
+ *
+ * Efeito colateral bom: se o onboarding real quebrar, o seed quebra
+ * junto — em vez de mascarar o problema com um INSERT que a aplicação
+ * nunca faz.
  */
 import { loadLocalEnv } from "../lib/env/load-local-env";
 import { assertLocalOnlyScript } from "../lib/env/local-only-guard";
+import { createClient } from "@supabase/supabase-js";
 import { createAdminSupabaseClient } from "../lib/supabase/admin";
+import { getPublicSupabaseEnv } from "../lib/supabase/env";
+import type { Database } from "../lib/supabase/types";
 import { FIXTURE_PRODUCTS, FIXTURE_STORES, FIXTURE_USERS } from "../lib/data/fixtures";
 import type { OnboardingStep, PlanCode, StoreStatus } from "../lib/supabase/types";
 import { logSeedFailure, logSeedSummary } from "./seed-output";
@@ -52,6 +77,96 @@ async function ensureUser(
     throw new Error(`Falha ao criar usuário ${email}: ${error?.message}`);
   }
   return data.user.id;
+}
+
+/**
+ * Provisiona a loja pelo MESMO caminho que a aplicação usa de verdade:
+ * preenche o onboarding e chama onboarding_complete() autenticado como o
+ * próprio comerciante.
+ *
+ * Por que não inserir direto: desde a TASK-012 a loja pertence a um
+ * workspace (stores.workspace_id NOT NULL), e a migration 0021 revogou
+ * INSERT/UPDATE/DELETE de workspaces / workspace_subscriptions /
+ * workspace_members de TODOS os roles, inclusive service_role — correção
+ * de um furo real de TRUNCATE cross-tenant. Reabrir esses grants só para
+ * o seed passar trocaria uma barreira de produção por conveniência de
+ * teste.
+ *
+ * onboarding_complete() é SECURITY DEFINER e faz numa transação só o que
+ * o seed precisa: workspace, assinatura, loja, store_members,
+ * workspace_members (o assento do dono), store_plans e o perfil. Usá-la
+ * aqui tem um efeito colateral bom: se o fluxo real de onboarding
+ * quebrar, o seed quebra junto, em vez de mascarar com um INSERT que a
+ * aplicação nunca faz.
+ *
+ * O login usa a senha dev-only já criada por ensureUser — nenhum
+ * privilégio novo, nenhum segredo adicional.
+ */
+async function provisionStoreViaOnboarding(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  params: {
+    email: string;
+    userId: string;
+    slug: string;
+    storeName: string;
+    merchantName: string;
+    whatsapp: string;
+    planCode: PlanCode;
+  },
+): Promise<string> {
+  const { data: existing } = await admin.from("stores").select("id").eq("slug", params.slug).maybeSingle();
+  if (existing) return existing.id;
+
+  // O onboarding precisa estar completo em dados, mas ainda não marcado
+  // como concluído — é onboarding_complete() quem fecha a etapa.
+  await ensureOnboardingProgress(admin, params.userId, {
+    step: "review",
+    merchantName: params.merchantName,
+    whatsapp: params.whatsapp,
+    storeName: params.storeName,
+    slug: params.slug,
+    planCode: params.planCode,
+  });
+
+  const { NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY } = getPublicSupabaseEnv();
+  const asMerchant = createClient<Database>(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const { error: signInError } = await asMerchant.auth.signInWithPassword({
+    email: params.email,
+    password: DEV_ONLY_PASSWORD,
+  });
+  if (signInError) {
+    throw new Error(`Falha ao autenticar ${params.email} para o onboarding: ${signInError.message}`);
+  }
+
+  const { data: store, error } = await asMerchant.rpc("onboarding_complete");
+  if (error || !store) {
+    throw new Error(`Falha ao provisionar loja ${params.slug} via onboarding_complete: ${error?.message}`);
+  }
+
+  await asMerchant.auth.signOut();
+  return store.id;
+}
+
+/**
+ * Ajusta o status da loja depois do provisionamento.
+ *
+ * onboarding_complete() sempre entrega `pending_payment` — é o estado
+ * real de quem acabou de escolher o plano. `active`/`suspended` só
+ * existem depois de pagamento aprovado ou ação administrativa, e o fluxo
+ * público nunca os alcança (T2-DEC-006). Aqui o seed grava direto, via
+ * service_role, porque é exatamente para isso que a fixture existe:
+ * cobrir estados que o onboarding sozinho não produz.
+ */
+async function setStoreStatus(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  storeId: string,
+  status: StoreStatus,
+  whatsapp?: string,
+) {
+  await admin.from("stores").update({ status, whatsapp: whatsapp ?? null }).eq("id", storeId);
 }
 
 async function ensureStore(
@@ -190,23 +305,32 @@ async function main() {
   // `active`: representam lojas já "operando" para os testes de
   // isolamento de produto da TASK-001 — só seed pode gravar este status,
   // o fluxo público de onboarding nunca alcança `active` (T2-DEC-006).
-  const storeAId = await ensureStore(admin, FIXTURE_STORES.storeA.slug, FIXTURE_STORES.storeA.name, {
-    status: "active",
+  const storeAId = await provisionStoreViaOnboarding(admin, {
+    email: FIXTURE_USERS.adminA.email,
+    userId: adminAId,
+    slug: FIXTURE_STORES.storeA.slug,
+    storeName: FIXTURE_STORES.storeA.name,
+    merchantName: "Admin Loja A",
+    whatsapp: "+5511900000010",
+    planCode: 50,
   });
-  const storeBId = await ensureStore(admin, FIXTURE_STORES.storeB.slug, FIXTURE_STORES.storeB.name, {
-    status: "active",
+  const storeBId = await provisionStoreViaOnboarding(admin, {
+    email: FIXTURE_USERS.adminB.email,
+    userId: adminBId,
+    slug: FIXTURE_STORES.storeB.slug,
+    storeName: FIXTURE_STORES.storeB.name,
+    merchantName: "Admin Loja B",
+    whatsapp: "+5511900000011",
+    planCode: 80,
   });
 
-  // Só admin-a/admin-b são membros de staff — cliente-a/cliente-b ficam
-  // sem vínculo de propósito, representando clientes finais autenticados.
-  await ensureMembership(admin, storeAId, adminAId, "admin");
-  await ensureMembership(admin, storeBId, adminBId, "admin");
+  // onboarding_complete() entrega a loja em pending_payment; a fixture
+  // precisa dela `active` para os testes de isolamento da TASK-001.
+  await setStoreStatus(admin, storeAId, "active");
+  await setStoreStatus(admin, storeBId, "active");
 
-  // Lojas `active` só existem, na realidade, depois de terem passado
-  // pelo onboarding (que sempre grava um plano atomicamente) — mantém
-  // essa mesma invariante nas fixtures.
-  await ensureStorePlan(admin, storeAId, 50);
-  await ensureStorePlan(admin, storeBId, 80);
+  // cliente-a/cliente-b ficam sem vínculo de propósito, representando
+  // clientes finais autenticados sem acesso administrativo.
 
   for (const product of FIXTURE_PRODUCTS) {
     const storeId =
@@ -231,41 +355,46 @@ async function main() {
   });
 
   const merchantPendingId = await ensureUser(admin, ONBOARDING_FIXTURE_USERS.merchantPending.email);
-  const pendingStoreId = await ensureStore(admin, "loja-pendente-fixture", "Loja Pendente Fixture", {
-    status: "pending_payment",
-    whatsapp: "+5511900000002",
-  });
-  await ensureMembership(admin, pendingStoreId, merchantPendingId, "owner");
-  await ensureStorePlan(admin, pendingStoreId, 30);
-  await ensureMerchantProfile(admin, merchantPendingId, "Comerciante Pendente");
-  await ensureOnboardingProgress(admin, merchantPendingId, {
-    step: "completed",
+  // pending_payment é justamente o estado que onboarding_complete()
+  // entrega — esta fixture não precisa de ajuste depois.
+  const pendingStoreId = await provisionStoreViaOnboarding(admin, {
+    email: ONBOARDING_FIXTURE_USERS.merchantPending.email,
+    userId: merchantPendingId,
+    slug: "loja-pendente-fixture",
+    storeName: "Loja Pendente Fixture",
     merchantName: "Comerciante Pendente",
     whatsapp: "+5511900000002",
-    storeName: "Loja Pendente Fixture",
-    slug: "loja-pendente-fixture",
     planCode: 30,
   });
 
   const merchantSuspendedId = await ensureUser(admin, ONBOARDING_FIXTURE_USERS.merchantSuspended.email);
-  const suspendedStoreId = await ensureStore(admin, "loja-suspensa-fixture", "Loja Suspensa Fixture", {
-    status: "suspended",
+  const suspendedStoreId = await provisionStoreViaOnboarding(admin, {
+    email: ONBOARDING_FIXTURE_USERS.merchantSuspended.email,
+    userId: merchantSuspendedId,
+    slug: "loja-suspensa-fixture",
+    storeName: "Loja Suspensa Fixture",
+    merchantName: "Comerciante Suspenso",
     whatsapp: "+5511900000003",
+    planCode: 50,
   });
-  await ensureMembership(admin, suspendedStoreId, merchantSuspendedId, "owner");
-  await ensureStorePlan(admin, suspendedStoreId, 50);
-  await ensureMerchantProfile(admin, merchantSuspendedId, "Comerciante Suspenso");
+  await setStoreStatus(admin, suspendedStoreId, "suspended", "+5511900000003");
 
   // owner da própria loja E também staff da Loja A — testa o seletor
   // explícito de múltiplas lojas (nunca escolher a primeira em silêncio).
   const merchantMultiId = await ensureUser(admin, ONBOARDING_FIXTURE_USERS.merchantMulti.email);
-  const multiStoreId = await ensureStore(admin, "loja-multi-fixture", "Loja Multi Fixture", {
-    status: "pending_payment",
+  const multiStoreId = await provisionStoreViaOnboarding(admin, {
+    email: ONBOARDING_FIXTURE_USERS.merchantMulti.email,
+    userId: merchantMultiId,
+    slug: "loja-multi-fixture",
+    storeName: "Loja Multi Fixture",
+    merchantName: "Comerciante Multi-loja",
     whatsapp: "+5511900000004",
+    planCode: 80,
   });
-  await ensureMembership(admin, multiStoreId, merchantMultiId, "owner");
-  await ensureStorePlan(admin, multiStoreId, 80);
-  await ensureMerchantProfile(admin, merchantMultiId, "Comerciante Multi-loja");
+  // Acesso de staff numa loja de OUTRO workspace — é o que faz este
+  // usuário cair no seletor de múltiplas lojas. O assento de equipe do
+  // workspace A não é criado aqui de propósito: quem convida é
+  // workspace_invite_member, e a fixture só precisa do acesso à loja.
   await ensureMembership(admin, storeAId, merchantMultiId, "staff");
 
   logSeedSummary({

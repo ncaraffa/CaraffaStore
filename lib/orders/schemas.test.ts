@@ -106,3 +106,105 @@ describe("checkoutSchema", () => {
     expect(checkoutSchema.safeParse(baseCheckout({ payerDocument: "123" })).success).toBe(false);
   });
 });
+
+/**
+ * TASK-013 — qual endereço o checkout exige depende de a loja ter frete
+ * configurado. Estas asserções são só o primeiro filtro (evitam uma
+ * viagem ao banco por um erro óbvio); a fonte de verdade continua sendo
+ * create_order, provada em supabase/tests/shipping_check.sql.
+ */
+function deliveryWithShipping(overrides: Record<string, unknown> = {}) {
+  return baseCheckout({
+    fulfillmentMethod: "delivery",
+    shippingEnabled: true,
+    shippingPostalCode: "79002-000",
+    shippingStreet: "Rua 14 de Julho",
+    shippingNumber: "500",
+    shippingNeighborhood: "Centro",
+    // Repare no que NÃO está aqui: cidade e UF. Elas decidem a faixa de
+    // frete, então são resolvidas no servidor a partir do CEP — o
+    // formulário não as envia e create_order não as aceita.
+    ...overrides,
+  });
+}
+
+describe("checkoutSchema — endereço estruturado (loja com frete)", () => {
+  it("aceita um endereço completo", () => {
+    expect(checkoutSchema.safeParse(deliveryWithShipping()).success).toBe(true);
+  });
+
+  it("não exige o endereço em texto livre quando o estruturado está presente", () => {
+    expect(checkoutSchema.safeParse(deliveryWithShipping({ deliveryAddress: "" })).success).toBe(true);
+  });
+
+  it("CEP é obrigatório e precisa ter 8 dígitos", () => {
+    expect(checkoutSchema.safeParse(deliveryWithShipping({ shippingPostalCode: "" })).success).toBe(false);
+    expect(checkoutSchema.safeParse(deliveryWithShipping({ shippingPostalCode: "7900" })).success).toBe(false);
+  });
+
+  it("aceita o CEP com ou sem máscara — a pontuação é da tela", () => {
+    expect(checkoutSchema.safeParse(deliveryWithShipping({ shippingPostalCode: "79002000" })).success).toBe(true);
+    expect(checkoutSchema.safeParse(deliveryWithShipping({ shippingPostalCode: "79002-000" })).success).toBe(true);
+  });
+
+  it("rua e número são obrigatórios", () => {
+    for (const field of ["shippingStreet", "shippingNumber"]) {
+      expect(checkoutSchema.safeParse(deliveryWithShipping({ [field]: "" })).success).toBe(false);
+    }
+  });
+
+  it("bairro e complemento são opcionais", () => {
+    const result = checkoutSchema.safeParse(
+      deliveryWithShipping({ shippingNeighborhood: "", shippingComplement: "" }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  /**
+   * Cidade e UF não são mais campos do formulário. Um payload que as
+   * inclua é aceito pelo schema e simplesmente DESCARTADO — nunca chega
+   * a create_order, que não tem esses parâmetros. É o caso A/B dos
+   * testes de manipulação, provado ponta a ponta em
+   * supabase/tests/shipping_check.sql.
+   */
+  it("cidade e UF enviadas por um payload adulterado são descartadas", () => {
+    const result = checkoutSchema.safeParse(
+      deliveryWithShipping({ shippingCity: "Corumbá", shippingState: "MS" }),
+    );
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data).not.toHaveProperty("shippingCity");
+    expect(result.data).not.toHaveProperty("shippingState");
+  });
+
+  it("o total esperado é aceito como número, para virar trava no banco", () => {
+    const result = checkoutSchema.safeParse(deliveryWithShipping({ expectedTotalCents: "12470" }));
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.expectedTotalCents).toBe(12470);
+  });
+
+  it("total esperado negativo é rejeitado antes de chegar ao banco", () => {
+    expect(checkoutSchema.safeParse(deliveryWithShipping({ expectedTotalCents: "-1" })).success).toBe(false);
+  });
+
+  it("retirada não exige endereço nenhum, mesmo com frete configurado", () => {
+    const result = checkoutSchema.safeParse(
+      baseCheckout({ fulfillmentMethod: "pickup", shippingEnabled: true }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it("loja SEM frete continua no caminho antigo: endereço livre obrigatório, estruturado ignorado", () => {
+    expect(
+      checkoutSchema.safeParse(
+        baseCheckout({ fulfillmentMethod: "delivery", shippingEnabled: false, deliveryAddress: "" }),
+      ).success,
+    ).toBe(false);
+    expect(
+      checkoutSchema.safeParse(
+        baseCheckout({ fulfillmentMethod: "delivery", shippingEnabled: false, deliveryAddress: "Rua Antiga, 45" }),
+      ).success,
+    ).toBe(true);
+  });
+});

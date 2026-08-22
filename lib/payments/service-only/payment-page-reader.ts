@@ -15,6 +15,30 @@ export interface PublicPaymentView {
   ticketUrl: string | null;
   expiresAt: string | null;
   createdAt: string;
+  /**
+   * TASK-013 — o que o comprador precisa conferir antes de pagar:
+   * a conta que gerou o valor e o endereço para onde vai. Tudo vem do
+   * SNAPSHOT do pedido, não da configuração atual da loja.
+   *
+   * Protegido pela mesma porta do resto desta view: sem o token de
+   * recibo, nada disso existe (a função devolve null antes).
+   */
+  order: {
+    subtotalCents: number;
+    discountCents: number;
+    shippingAmountCents: number;
+    totalCents: number;
+    shippingRule: string | null;
+    fulfillmentMethod: string;
+    deliveryAddress: string | null;
+    shippingPostalCode: string | null;
+    shippingStreet: string | null;
+    shippingNumber: string | null;
+    shippingComplement: string | null;
+    shippingNeighborhood: string | null;
+    shippingCity: string | null;
+    shippingState: string | null;
+  };
 }
 
 function hashToken(token: string): string {
@@ -53,7 +77,9 @@ export async function getPublicPaymentView(params: {
 
   const { data: order } = await client
     .from("orders")
-    .select("id, public_code, receipt_token_hash, payment_mode")
+    .select(
+      "id, public_code, receipt_token_hash, payment_mode, subtotal_cents, discount_cents, shipping_amount_cents, total_cents, shipping_rule, fulfillment_method, delivery_address, shipping_postal_code, shipping_street, shipping_number, shipping_complement, shipping_neighborhood, shipping_city, shipping_state",
+    )
     .eq("public_code", params.publicCode)
     .eq("store_id", store.id)
     .maybeSingle();
@@ -81,5 +107,21 @@ export async function getPublicPaymentView(params: {
     ticketUrl: attempt.ticket_url,
     expiresAt: attempt.expires_at,
     createdAt: attempt.created_at,
+    order: {
+      subtotalCents: order.subtotal_cents ?? 0,
+      discountCents: order.discount_cents ?? 0,
+      shippingAmountCents: order.shipping_amount_cents ?? 0,
+      totalCents: order.total_cents ?? attempt.amount_cents,
+      shippingRule: order.shipping_rule ?? null,
+      fulfillmentMethod: order.fulfillment_method ?? "pickup",
+      deliveryAddress: order.delivery_address ?? null,
+      shippingPostalCode: order.shipping_postal_code ?? null,
+      shippingStreet: order.shipping_street ?? null,
+      shippingNumber: order.shipping_number ?? null,
+      shippingComplement: order.shipping_complement ?? null,
+      shippingNeighborhood: order.shipping_neighborhood ?? null,
+      shippingCity: order.shipping_city ?? null,
+      shippingState: order.shipping_state ?? null,
+    },
   };
 }
