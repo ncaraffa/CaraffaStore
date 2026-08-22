@@ -206,7 +206,21 @@ export function CheckoutForm({
    * backend recusaria de qualquer forma (destino não resolvido) — travar
    * o botão evita mandar o comprador contra um erro previsível.
    */
-  const canSubmit = !wantsShipping || quote?.available === true;
+  const canSubmitBase = !wantsShipping || quote?.available === true;
+
+  /**
+   * O carrinho guarda um produto que a loja removeu ou despublicou desde
+   * que ele foi adicionado (o carrinho vive no localStorage e sobrevive
+   * a mudanças no catálogo).
+   *
+   * Nesse estado o servidor devolve subtotal zero, e mostrar a conta
+   * assim daria "Produtos R$ 0,00 / Total R$ 0,00" — um resumo que
+   * parece um carrinho válido e barato. O pedido já era bloqueado; o que
+   * faltava era a tela dizer o que houve e para onde ir.
+   */
+  const hasUnavailableItem = quote?.reason === "product_not_found";
+
+  const canSubmit = canSubmitBase && !hasUnavailableItem;
 
   return (
     <>
@@ -224,10 +238,22 @@ export function CheckoutForm({
               SUBTOTAL, não o valor a pagar: desconto e frete são
               calculados no banco no momento do checkout. Rotular como
               "total" aqui mostraria R$200 para quem vai pagar R$180. */}
-          <span className={styles.summaryTotal}>{formatPriceCents(totalToShow ?? subtotalCents)}</span>
+          <span className={styles.summaryTotal}>
+            {hasUnavailableItem ? "—" : formatPriceCents(totalToShow ?? subtotalCents)}
+          </span>
         </div>
 
-        {quote && (
+        {hasUnavailableItem && (
+          <div className={styles.alertGap}>
+            <Alert tone="warning" title="Um item saiu do catálogo">
+              Um produto do seu carrinho não está mais disponível nesta loja, então não dá para fechar o
+              pedido nem calcular o valor.{" "}
+              <Link href={`/loja/${storeSlug}/carrinho`}>Revisar carrinho</Link> para remover o item.
+            </Alert>
+          </div>
+        )}
+
+        {quote && !hasUnavailableItem && (
           <div className={styles.breakdown} aria-live="polite">
             <div className={styles.breakdownRow}>
               <span>Produtos</span>
