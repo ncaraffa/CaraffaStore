@@ -89,3 +89,29 @@ describe("scanBundleForSecrets", () => {
     expect(hits).toHaveLength(1);
   });
 });
+
+/**
+ * Os testes acima usam JWTs sintéticos — nenhum segredo real entra no
+ * repositório. Mas um token inventado prova pouco sobre o formato que o
+ * Supabase realmente emite (algoritmo, claims, comprimento).
+ *
+ * Estes dois casos fecham essa lacuna usando as chaves do AMBIENTE
+ * quando elas existem: o valor nunca é escrito em disco nem impresso,
+ * só passa pelo scanner. Sem as variáveis (CI limpo), os casos se
+ * declaram pulados em vez de darem um verde vazio.
+ */
+describe("chaves reais do ambiente (nunca commitadas)", () => {
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  it.skipIf(!serviceKey)("REPROVA a service role key real deste ambiente", () => {
+    const hits = scanBundleForSecrets([{ path: "chunk.js", content: `x="${serviceKey}"` }], []);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toContain("role=service_role");
+  });
+
+  it.skipIf(!anonKey)("aceita a anon key real deste ambiente", () => {
+    const hits = scanBundleForSecrets([{ path: "chunk.js", content: `x="${anonKey}"` }], []);
+    expect(hits).toEqual([]);
+  });
+});
