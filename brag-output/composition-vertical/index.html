@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>CaraffaStore — brag</title>
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/audio-data.js"></script>
+    <style>
+      @font-face { font-family: "Bricolage Grotesque"; font-weight: 600; src: url("assets/fonts/bricolage-grotesque-latin-600-normal.woff2") format("woff2"); }
+      @font-face { font-family: "Bricolage Grotesque"; font-weight: 700; src: url("assets/fonts/bricolage-grotesque-latin-700-normal.woff2") format("woff2"); }
+      @font-face { font-family: "Bricolage Grotesque"; font-weight: 800; src: url("assets/fonts/bricolage-grotesque-latin-800-normal.woff2") format("woff2"); }
+      @font-face { font-family: "Inter"; font-weight: 400; src: url("assets/fonts/inter-latin-400-normal.woff2") format("woff2"); }
+      @font-face { font-family: "Inter"; font-weight: 500; src: url("assets/fonts/inter-latin-500-normal.woff2") format("woff2"); }
+      @font-face { font-family: "Inter"; font-weight: 600; src: url("assets/fonts/inter-latin-600-normal.woff2") format("woff2"); }
+      @font-face { font-family: "Inter"; font-weight: 700; src: url("assets/fonts/inter-latin-700-normal.woff2") format("woff2"); }
+      @font-face { font-family: "Inter"; font-weight: 800; src: url("assets/fonts/inter-latin-800-normal.woff2") format("woff2"); }
+      @font-face { font-family: "JetBrains Mono"; font-weight: 500; src: url("assets/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); }
+      @font-face { font-family: "JetBrains Mono"; font-weight: 600; src: url("assets/fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2"); }
+
+      :root {
+        --blue-50: #f0f5ff; --blue-100: #dee9ff; --blue-200: #c2d6ff; --blue-500: #2e6bff;
+        --blue-600: #1b4dff; --blue-700: #143bd1;
+        --ink: #0c1b33; --ink-body: #33425c; --ink-muted: #5a6883;
+        --white: #ffffff; --surface: #f7f9fd; --sunken: #eff3fa;
+        --line: #e4eaf4; --line-strong: #cfd9ea;
+        --success: #0e9f6e; --success-bg: #ecfdf5; --success-text: #06603f; --success-border: #a7f3d0;
+        --warning-bg: #fffbeb; --warning-text: #92400e; --warning-border: #fde68a;
+        --display: "Bricolage Grotesque", system-ui, sans-serif;
+        --sans: "Inter", system-ui, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, monospace;
+        --shadow-lg: 0 6px 12px -4px rgba(12, 27, 51, 0.08), 0 36px 80px -24px rgba(12, 27, 51, 0.28);
+        --shadow-md: 0 2px 6px -1px rgba(12, 27, 51, 0.06), 0 14px 32px -10px rgba(12, 27, 51, 0.16);
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #f7f9fd; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--surface); font-family: var(--sans); color: var(--ink); }
+
+      /* ---------- Background layer (lives for the whole video) ---------- */
+      #bg { position: absolute; inset: 0; }
+      .bg-dots { position: absolute; inset: -40px; background-image: radial-gradient(circle, #cfd9ea 2px, transparent 2.4px); background-size: 44px 44px; opacity: 0.55; }
+      .bg-glow { position: absolute; width: 1500px; height: 1500px; right: -520px; top: -640px; border-radius: 50%; background: radial-gradient(circle, rgba(46, 107, 255, 0.26), rgba(46, 107, 255, 0) 64%); }
+      .bg-glow-2 { position: absolute; width: 1200px; height: 1200px; left: -560px; bottom: -700px; border-radius: 50%; background: radial-gradient(circle, rgba(46, 107, 255, 0.14), rgba(46, 107, 255, 0) 62%); }
+      .bg-jar { position: absolute; width: 760px; height: 760px; right: -150px; bottom: -190px; color: #e3ecff; }
+      .bg-jar svg { width: 100%; height: 100%; display: block; }
+      .bg-level { position: absolute; left: 0; right: 0; bottom: 64px; height: 4px; background: var(--blue-100); transform-origin: left center; }
+
+      .scene { position: absolute; inset: 0; }
+      .in { position: absolute; inset: 0; }
+
+      .mono-label { font-family: var(--mono); font-weight: 600; font-size: 24px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-muted); }
+      .accent { color: var(--blue-600); }
+
+      /* ---------- Logo ---------- */
+      .logo { display: flex; align-items: center; }
+      .logo-tile { display: flex; align-items: center; justify-content: center; background: linear-gradient(160deg, #2e6bff, #143bd1); box-shadow: 0 16px 40px -14px rgba(27, 77, 255, 0.55); }
+      .logo-tile svg { display: block; color: #fff; }
+      .logo-word { font-family: var(--display); font-weight: 700; letter-spacing: -0.03em; color: var(--ink); }
+
+      /* ---------- Scene 1: hook ---------- */
+      #s1 .wrap { position: absolute; left: 150px; top: 250px; width: 1560px; }
+      #s1 .headline { font-family: var(--display); font-weight: 800; font-size: 168px; line-height: 1.02; letter-spacing: -0.045em; margin-top: 34px; }
+      #s1 .line { display: block; white-space: nowrap; }
+      #s1 .w { display: inline-block; }
+      #s1 .rule { margin-top: 56px; width: 620px; height: 10px; border-radius: 10px; background: var(--blue-600); transform-origin: left center; }
+
+      /* ---------- Scene 2: link ---------- */
+      #s2 .col { position: absolute; left: 0; right: 0; top: 190px; display: flex; flex-direction: column; align-items: center; }
+      #s2 .logo-tile { width: 132px; height: 132px; border-radius: 30px; }
+      #s2 .logo-tile svg { width: 80px; height: 80px; }
+      #s2 .logo-word { font-size: 104px; margin-left: 32px; }
+      #s2 .bar { margin-top: 84px; width: 1240px; height: 116px; border-radius: 999px; background: var(--white); border: 3px solid var(--line-strong); box-shadow: var(--shadow-md); display: flex; align-items: center; padding: 0 48px; }
+      #s2 .bar .lock { width: 40px; height: 40px; flex: none; color: var(--success); margin-right: 26px; }
+      #s2 .url { position: relative; font-family: var(--sans); font-weight: 500; font-size: 46px; letter-spacing: -0.01em; color: var(--ink-body); white-space: nowrap; }
+      #s2 .url .slug { color: var(--blue-600); font-weight: 700; }
+      #s2 .caret { position: absolute; top: 4px; width: 4px; height: 50px; border-radius: 2px; background: var(--blue-600); left: 0; }
+      #s2 .cap { margin-top: 80px; font-family: var(--display); font-weight: 700; font-size: 84px; letter-spacing: -0.035em; }
+
+      /* ---------- Scene 3: storefront ---------- */
+      #s3 .side { position: absolute; left: 120px; top: 250px; width: 520px; }
+      #s3 .side h2 { margin-top: 30px; font-family: var(--display); font-weight: 800; font-size: 84px; line-height: 1.04; letter-spacing: -0.04em; }
+      #s3 .side p { margin-top: 30px; font-size: 32px; line-height: 1.45; color: var(--ink-body); }
+      .browser { position: absolute; left: 690px; top: 104px; width: 1150px; height: 872px; border-radius: 26px; background: var(--white); box-shadow: var(--shadow-lg); border: 2px solid var(--line); overflow: hidden; }
+      .chrome { height: 64px; display: flex; align-items: center; padding: 0 26px; background: var(--sunken); border-bottom: 2px solid var(--line); }
+      .dots { display: flex; gap: 10px; }
+      .dots i { width: 16px; height: 16px; border-radius: 50%; background: var(--line-strong); display: block; }
+      .chrome .addr { margin-left: 30px; flex: 1; height: 40px; border-radius: 999px; background: var(--white); display: flex; align-items: center; padding: 0 20px; font-size: 20px; font-weight: 500; color: var(--ink-muted); }
+      .store-head { height: 84px; display: flex; align-items: center; justify-content: space-between; padding: 0 36px; border-bottom: 2px solid var(--line); }
+      .store-name { font-weight: 800; font-size: 28px; letter-spacing: -0.01em; }
+      .cart { position: relative; display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-radius: 999px; border: 2px solid var(--line); }
+      .cart svg { width: 28px; height: 28px; color: var(--ink); display: block; }
+      .badge-count { position: relative; width: 32px; height: 32px; }
+      .badge-count span { position: absolute; inset: 0; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 700; color: #fff; }
+      .badge-count .b0 { background: #6b7a96; }
+      .badge-count .b1 { background: var(--blue-600); }
+      .store-body { padding: 26px 36px 0; }
+      .cat-title { font-family: var(--display); font-weight: 700; font-size: 46px; letter-spacing: -0.02em; margin-top: 6px; }
+      .cat-meta { margin-top: 6px; font-size: 21px; color: var(--ink-muted); }
+      .mono-sm { font-family: var(--mono); font-weight: 600; font-size: 18px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-muted); }
+      .chips { display: flex; gap: 10px; margin: 22px 0 24px; }
+      .chip { padding: 9px 20px; border-radius: 999px; border: 2px solid var(--line); font-size: 19px; font-weight: 600; color: var(--ink-body); }
+      .chip.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+      .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+      .card { border: 2px solid var(--line); border-radius: 18px; padding: 14px; background: #fff; box-shadow: 0 1px 2px rgba(12, 27, 51, 0.05); }
+      .art { width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden; }
+      .art svg { width: 100%; height: 100%; display: block; }
+      .pname { margin-top: 12px; font-size: 20px; font-weight: 600; line-height: 1.3; min-height: 52px; }
+      .price { margin-top: 4px; font-size: 26px; font-weight: 700; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; }
+      .actions { margin-top: 12px; display: flex; gap: 8px; }
+      .qty { width: 50px; height: 50px; flex: none; border: 2px solid var(--line-strong); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 19px; }
+      .btn-slot { position: relative; flex: 1; height: 50px; }
+      .btn { position: absolute; inset: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 19px; font-weight: 600; }
+      .btn.add { background: var(--blue-600); color: #fff; }
+      .btn.added { background: var(--success-bg); border: 2px solid var(--success-border); color: var(--success-text); }
+      .btn.added svg { width: 20px; height: 20px; color: var(--success); }
+      .pointer { position: absolute; left: 0; top: 0; width: 54px; height: 54px; }
+      .pointer svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 4px 8px rgba(12, 27, 51, 0.3)); }
+
+      /* ---------- Scene 4: Pix ---------- */
+      .phone { position: absolute; left: 330px; top: 70px; width: 470px; height: 940px; border-radius: 64px; background: #0c1b33; padding: 16px; box-shadow: var(--shadow-lg); }
+      .screen { position: relative; width: 100%; height: 100%; border-radius: 50px; background: #fff; overflow: hidden; }
+      .notch { position: absolute; left: 50%; top: 14px; width: 120px; height: 30px; margin-left: -60px; border-radius: 20px; background: #0c1b33; }
+      .phone .store-head { height: 76px; margin-top: 50px; padding: 0 26px; }
+      .phone .store-name { font-size: 24px; }
+      .pix-body { padding: 22px 26px; }
+      .row-sb { display: flex; align-items: center; justify-content: space-between; }
+      .pix-body .row-sb { display: block; }
+      .pix-body .mono-sm { white-space: nowrap; }
+      .status { position: relative; height: 40px; width: 290px; margin-top: 12px; }
+      .status span { position: absolute; left: 0; top: 0; height: 40px; padding: 0 16px; border-radius: 999px; display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; white-space: nowrap; }
+      .status i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+      .st-wait { background: var(--warning-bg); border: 2px solid var(--warning-border); color: var(--warning-text); }
+      .st-wait i { background: #d97706; }
+      .st-ok { background: var(--success-bg); border: 2px solid var(--success-border); color: var(--success-text); }
+      .st-ok i { background: var(--success); }
+      .amount-label { margin-top: 22px; font-size: 19px; color: var(--ink-muted); }
+      .amount { font-family: var(--display); font-weight: 800; font-size: 64px; letter-spacing: -0.03em; }
+      .qr-box { position: relative; margin: 20px auto 0; width: 300px; height: 300px; border-radius: 20px; border: 2px solid var(--line); padding: 20px; background: #fff; }
+      .qr-box svg { width: 100%; height: 100%; display: block; }
+      .seal { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.92); border-radius: 18px; }
+      .seal-dot { width: 132px; height: 132px; border-radius: 50%; background: var(--success); display: flex; align-items: center; justify-content: center; box-shadow: 0 16px 40px -12px rgba(14, 159, 110, 0.6); }
+      .seal-dot svg { width: 70px; height: 70px; color: #fff; }
+      .seal b { margin-top: 18px; font-size: 24px; font-weight: 700; color: var(--success-text); }
+      .copy { margin-top: 22px; }
+      .copy-field { margin-top: 8px; height: 50px; border-radius: 10px; border: 2px solid var(--line-strong); display: flex; align-items: center; padding: 0 14px; font-family: var(--mono); font-weight: 500; font-size: 16px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; }
+      .copy-lbl { font-size: 18px; font-weight: 600; }
+      #s4 .side { position: absolute; left: 930px; top: 300px; width: 860px; }
+      .pill-ok { display: inline-flex; align-items: center; gap: 14px; padding: 14px 26px; border-radius: 999px; background: var(--success-bg); border: 2px solid var(--success-border); color: var(--success-text); font-size: 30px; font-weight: 600; }
+      .pill-ok i { width: 14px; height: 14px; border-radius: 50%; background: var(--success); display: block; }
+      #s4 .side h2 { margin-top: 36px; font-family: var(--display); font-weight: 800; font-size: 96px; line-height: 1.02; letter-spacing: -0.04em; }
+      .halo { position: absolute; left: 115px; top: 140px; width: 900px; height: 900px; border-radius: 50%; background: radial-gradient(circle, rgba(14, 159, 110, 0.22), rgba(14, 159, 110, 0) 62%); }
+
+      /* ---------- Scene 5: R$ 0,00 ---------- */
+      #s5 .col { position: absolute; left: 260px; top: 230px; width: 1400px; }
+      .panel { margin-top: 24px; border-radius: 24px; background: #fff; border: 2px solid var(--line); box-shadow: var(--shadow-md); overflow: hidden; }
+      .thead, .trow { display: grid; grid-template-columns: 160px 290px 1fr 200px 170px; align-items: center; padding: 0 40px; }
+      .thead { height: 66px; background: var(--sunken); font-size: 20px; font-weight: 600; color: var(--ink-muted); }
+      .trow { height: 100px; font-size: 28px; color: var(--ink); }
+      .trow .code { font-family: var(--mono); font-weight: 600; font-size: 24px; color: var(--ink-body); }
+      .trow .tot { font-weight: 700; font-variant-numeric: tabular-nums; }
+      .tag-pago { justify-self: start; display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 999px; background: var(--success-bg); border: 2px solid var(--success-border); color: var(--success-text); font-size: 21px; font-weight: 600; }
+      .tag-pago i { width: 9px; height: 9px; border-radius: 50%; background: var(--success); display: block; }
+      .receipt { margin-top: 56px; padding: 0 40px; }
+      .rline { display: flex; align-items: baseline; justify-content: space-between; }
+      .rline.sale { font-size: 48px; color: var(--ink-body); font-weight: 500; }
+      .rline.sale b { font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+      .rdiv { margin: 34px 0; height: 4px; border-radius: 4px; background: var(--line-strong); transform-origin: left center; }
+      .rline.fee { font-family: var(--display); font-weight: 800; font-size: 66px; letter-spacing: -0.03em; white-space: nowrap; align-items: center; }
+      .zero { display: inline-block; white-space: nowrap; color: var(--blue-600); font-size: 132px; letter-spacing: -0.04em; transform-origin: right center; }
+
+      /* ---------- Scene 6: outro ---------- */
+      #s6 .col { position: absolute; left: 0; right: 0; top: 200px; display: flex; flex-direction: column; align-items: center; }
+      #s6 .logo-tile { width: 150px; height: 150px; border-radius: 34px; }
+      #s6 .logo-tile svg { width: 92px; height: 92px; }
+      #s6 .logo-word { font-size: 124px; margin-left: 38px; }
+      #s6 .claim { margin-top: 70px; font-family: var(--display); font-weight: 800; font-size: 104px; letter-spacing: -0.04em; }
+      #s6 .cta-row { margin-top: 60px; display: flex; align-items: center; gap: 44px; }
+      #s6 .plans { font-size: 40px; font-weight: 500; color: var(--ink-body); }
+      #s6 .plans b { color: var(--ink); font-weight: 700; }
+      .cta { display: flex; align-items: center; gap: 16px; height: 100px; padding: 0 48px; border-radius: 20px; background: var(--blue-600); color: #fff; font-size: 40px; font-weight: 700; box-shadow: 0 18px 40px -16px rgba(27, 77, 255, 0.7); }
+      .cta svg { width: 36px; height: 36px; display: block; }
+      #s6 .site { margin-top: 52px; font-family: var(--mono); font-weight: 600; font-size: 30px; letter-spacing: 0.04em; color: var(--ink-muted); }
+      /* ================= Vertical (1080x1920) layout overrides ================= */
+      html, body { width: 1080px; height: 1920px; }
+      .bg-glow { width: 1300px; height: 1300px; right: -560px; top: -520px; }
+      .bg-glow-2 { width: 1200px; height: 1200px; left: -620px; bottom: -520px; }
+      .bg-jar { width: 620px; height: 620px; right: -170px; bottom: 120px; }
+      .bg-level { bottom: 110px; }
+
+      #s1 .wrap { left: 80px; top: 560px; width: 940px; }
+      #s1 .headline { font-size: 150px; line-height: 1.0; margin-top: 30px; }
+      #s1 .rule { width: 460px; margin-top: 50px; }
+
+      #s2 .col { top: 560px; }
+      #s2 .logo-tile { width: 120px; height: 120px; border-radius: 28px; }
+      #s2 .logo-tile svg { width: 72px; height: 72px; }
+      #s2 .logo-word { font-size: 92px; margin-left: 28px; }
+      #s2 .bar { margin-top: 90px; width: 960px; height: 104px; padding: 0 36px; }
+      #s2 .bar .lock { width: 34px; height: 34px; margin-right: 20px; }
+      #s2 .url { font-size: 35px; }
+      #s2 .caret { height: 40px; top: 3px; }
+      #s2 .cap { margin-top: 90px; font-size: 92px; line-height: 1.05; text-align: center; width: 900px; }
+
+      #s3 .side { left: 70px; top: 190px; width: 940px; }
+      #s3 .side h2 { font-size: 88px; margin-top: 22px; }
+      .browser { left: 70px; top: 500px; width: 940px; height: 1250px; }
+      .grid { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+      .art { aspect-ratio: 16 / 9; }
+      .chips { margin: 18px 0 22px; }
+
+      .phone { left: 320px; top: 170px; width: 440px; height: 880px; }
+      .halo { left: 90px; top: 160px; width: 900px; height: 900px; }
+      #s4 .side { left: 70px; top: 1110px; width: 940px; text-align: center; }
+      #s4 .side h2 { font-size: 88px; margin-top: 30px; }
+      .qr-box { width: 280px; height: 280px; }
+
+      #s5 .col { left: 70px; top: 420px; width: 940px; }
+      .ocard { padding: 34px 40px; }
+      .ocard .top { display: flex; align-items: center; justify-content: space-between; }
+      .ocard .code { font-family: var(--mono); font-weight: 600; font-size: 30px; color: var(--ink-body); }
+      .ocard .who { margin-top: 22px; font-size: 40px; font-weight: 600; }
+      .ocard .what { margin-top: 8px; display: flex; justify-content: space-between; font-size: 34px; color: var(--ink-body); }
+      .ocard .what b { color: var(--ink); font-weight: 700; }
+      .receipt { margin-top: 70px; padding: 0 10px; }
+      .rline.sale { font-size: 52px; }
+      .rline.fee { display: block; font-size: 64px; white-space: normal; }
+      .zero { display: block; margin-top: 10px; font-size: 200px; line-height: 1; transform-origin: left center; }
+
+      #s6 .col { top: 520px; }
+      #s6 .logo-tile { width: 128px; height: 128px; border-radius: 30px; }
+      #s6 .logo-tile svg { width: 78px; height: 78px; }
+      #s6 .logo-word { font-size: 96px; margin-left: 28px; }
+      #s6 .claim { margin-top: 80px; font-size: 112px; line-height: 1.02; text-align: center; }
+      #s6 .claim .accent { display: block; }
+      #s6 .cta-row { margin-top: 70px; flex-direction: column; gap: 40px; }
+      #s6 .site { margin-top: 56px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="21.6" data-width="1080" data-height="1920">
+      <!-- Background: one continuous layer, never swaps between scenes -->
+      <div id="bg" class="clip" data-start="0" data-duration="21.6" data-track-index="0">
+        <div class="bg-dots" id="bg-dots"></div>
+        <div class="bg-glow" id="bg-glow" data-layout-allow-overflow></div>
+        <div class="bg-glow-2" id="bg-glow-2" data-layout-allow-overflow></div>
+        <div class="bg-jar" id="bg-jar" data-layout-allow-overflow><svg viewBox="0 0 24 24"><use href="#jar" /></svg></div>
+        <div class="bg-level" id="bg-level"></div>
+      </div>
+
+      <!-- Scene 1: hook -->
+      <section id="s1" class="scene clip" data-start="0" data-duration="3.7" data-track-index="1">
+        <div class="in" id="s1-in">
+          <div class="wrap">
+            <div class="mono-label" id="s1-label">Loja virtual para pequenos comerciantes</div>
+            <h1 class="headline">
+              <span class="line"><span class="w">Do</span> <span class="w">catálogo</span></span>
+              <span class="line"><span class="w">ao</span> <span class="w accent">Pix</span> <span class="w accent">na</span></span>
+              <span class="line accent"><span class="w">sua</span> <span class="w">conta.</span></span>
+            </h1>
+            <div class="rule" id="s1-rule"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 2: the link -->
+      <section id="s2" class="scene clip" data-start="3.7" data-duration="2.64" data-track-index="1">
+        <div class="in" id="s2-in">
+          <div class="col">
+            <div class="logo" id="s2-logo">
+              <div class="logo-tile" id="s2-tile"><svg viewBox="0 0 24 24"><use href="#jar" /></svg></div>
+              <div class="logo-word">CaraffaStore</div>
+            </div>
+            <div class="bar" id="s2-bar">
+              <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5" /><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7" /></svg>
+              <div class="url" id="s2-url"></div>
+            </div>
+            <div class="cap" id="s2-cap">Um link, <span class="accent">sua loja inteira.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 3: the storefront -->
+      <section id="s3" class="scene clip" data-start="6.34" data-duration="4.2" data-track-index="1">
+        <div class="in" id="s3-in">
+          <div class="side" id="s3-side">
+            <div class="mono-label">A loja do seu cliente</div>
+            <h2>Seu cliente compra <span class="accent">sem criar conta.</span></h2>
+          </div>
+          <div class="browser" id="s3-browser">
+            <div class="chrome">
+              <div class="dots"><i></i><i></i><i></i></div>
+              <div class="addr">caraffastore.vercel.app/loja/casa-do-cafe</div>
+            </div>
+            <div class="store-head">
+              <div class="store-name">Casa do Café</div>
+              <div class="cart" id="s3-cart">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2.2l2.1 10.4a1.6 1.6 0 0 0 1.6 1.3h8.4a1.6 1.6 0 0 0 1.6-1.2L20.6 8H6.1" /><circle cx="9.5" cy="19.5" r="1.3" /><circle cx="17" cy="19.5" r="1.3" /></svg>
+                <div class="badge-count"><span class="b0" id="s3-b0" data-layout-allow-overlap>0</span><span class="b1" id="s3-b1" data-layout-allow-overlap>1</span></div>
+              </div>
+            </div>
+            <div class="store-body">
+              <div class="mono-sm">Catálogo</div>
+              <div class="cat-title">Casa do Café</div>
+              <div class="cat-meta">4 produtos em 3 categorias</div>
+              <div class="chips"><span class="chip on">Todas</span><span class="chip">Grãos</span><span class="chip">Acessórios</span><span class="chip">Presentes</span></div>
+              <div class="grid">
+                <div class="card" id="card-0">
+                  <div class="art"><svg viewBox="0 0 100 100"><rect width="100" height="100" fill="#fbf1e4" /><path d="M31 30 L69 30 L73 84 L27 84 Z" fill="#7b4a2c" /><path d="M31 30 L36 20 L64 20 L69 30 Z" fill="#94603c" /><rect x="35" y="46" width="30" height="22" rx="3" fill="#fbf1e4" /><circle cx="50" cy="57" r="6" fill="#7b4a2c" /><path d="M50 51.5 C47.5 55 52.5 59 50 62.5" stroke="#fbf1e4" stroke-width="1.4" fill="none" /></svg></div>
+                  <div class="pname">Café Especial 500 g</div>
+                  <div class="price">R$ 39,90</div>
+                  <div class="actions"><div class="qty">1</div><div class="btn-slot"><div class="btn add" id="add-0">Adicionar</div><div class="btn added" id="added-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>Adicionado</div></div></div>
+                </div>
+                <div class="card" id="card-1">
+                  <div class="art"><svg viewBox="0 0 100 100"><rect width="100" height="100" fill="#eef4ff" /><path d="M26 34 L74 34 L60 62 L40 62 Z" fill="#ffffff" stroke="#c2d6ff" stroke-width="2" /><rect x="36" y="62" width="28" height="6" rx="2" fill="#c2d6ff" /><path d="M32 72 L68 72 L64 86 L36 86 Z" fill="#5c8dff" /><path d="M74 38 C84 38 84 50 72 50" stroke="#c2d6ff" stroke-width="3" fill="none" /></svg></div>
+                  <div class="pname">Coador Artesanal</div>
+                  <div class="price">R$ 29,90</div>
+                  <div class="actions"><div class="qty">1</div><div class="btn-slot"><div class="btn add">Adicionar</div></div></div>
+                </div>
+                <div class="card" id="card-2">
+                  <div class="art"><svg viewBox="0 0 100 100"><rect width="100" height="100" fill="#f0f5ff" /><rect x="28" y="34" width="38" height="44" rx="7" fill="#1b4dff" /><path d="M66 44 C80 44 80 66 66 66" stroke="#1b4dff" stroke-width="6" fill="none" /><rect x="34" y="50" width="26" height="4" rx="2" fill="#ffffff" /><path d="M40 24 C37 28 43 30 40 34 M50 22 C47 27 53 29 50 33" stroke="#94b6ff" stroke-width="2.4" fill="none" stroke-linecap="round" /></svg></div>
+                  <div class="pname">Caneca Casa do Café</div>
+                  <div class="price">R$ 34,90</div>
+                  <div class="actions"><div class="qty">1</div><div class="btn-slot"><div class="btn add">Adicionar</div></div></div>
+                </div>
+                <div class="card" id="card-3">
+                  <div class="art"><svg viewBox="0 0 100 100"><rect width="100" height="100" fill="#f4f1ec" /><rect x="33" y="44" width="34" height="40" rx="5" fill="#8a5a3a" /><rect x="36" y="36" width="28" height="10" rx="3" fill="#33425c" /><rect x="48" y="22" width="4" height="16" fill="#33425c" /><path d="M50 22 L72 22" stroke="#33425c" stroke-width="4" stroke-linecap="round" /><circle cx="74" cy="22" r="5" fill="#0c1b33" /><rect x="40" y="62" width="20" height="10" rx="2" fill="#f4f1ec" opacity="0.55" /></svg></div>
+                  <div class="pname">Moedor Manual</div>
+                  <div class="price">R$ 89,90</div>
+                  <div class="actions"><div class="qty">1</div><div class="btn-slot"><div class="btn add">Adicionar</div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pointer" id="s3-pointer"><svg viewBox="0 0 24 24"><path d="M5 3 L5 19.5 L9.4 15.4 L12.3 21.6 L15 20.4 L12.2 14.3 L18.2 14.2 Z" fill="#ffffff" stroke="#0c1b33" stroke-width="1.5" stroke-linejoin="round" /></svg></div>
+        </div>
+      </section>
+
+      <!-- Scene 4: Pix -->
+      <section id="s4" class="scene clip" data-start="10.54" data-duration="4.22" data-track-index="1">
+        <div class="in" id="s4-in">
+          <div class="halo" id="s4-halo"></div>
+          <div class="phone" id="s4-phone">
+            <div class="screen">
+              <div class="notch"></div>
+              <div class="store-head">
+                <div class="store-name">Casa do Café</div>
+              </div>
+              <div class="pix-body">
+                <div class="row-sb">
+                  <span class="mono-sm">Pedido #1042</span>
+                  <div class="status">
+                    <span class="st-wait" id="st-wait"><i></i>Aguardando pagamento</span>
+                    <span class="st-ok" id="st-ok"><i></i>Pagamento aprovado</span>
+                  </div>
+                </div>
+                <div class="amount-label">Valor do pedido</div>
+                <div class="amount">R$ 39,90</div>
+                <div class="qr-box">
+                  <svg id="qr" viewBox="0 0 29 29" shape-rendering="crispEdges"></svg>
+                  <div class="seal" id="s4-seal">
+                    <div class="seal-dot" id="s4-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></div>
+                    <b>Pagamento confirmado!</b>
+                  </div>
+                </div>
+                <div class="copy">
+                  <div class="copy-lbl">Pix Copia e Cola</div>
+                  <div class="copy-field">00020126580014br.gov.bcb.pix…</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="side" id="s4-side">
+            <div class="pill-ok" id="s4-pill"><i></i>Pix recebido</div>
+            <h2 id="s4-h">Pix direto na sua conta do <span class="accent">Mercado Pago.</span></h2>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 5: R$ 0,00 -->
+      <section id="s5" class="scene clip" data-start="14.76" data-duration="3.15" data-track-index="1">
+        <div class="in" id="s5-in">
+          <div class="col">
+            <div class="mono-label" id="s5-label">Seu painel · Pedidos</div>
+            <div class="panel ocard" id="s5-panel">
+              <div class="top"><span class="code">Pedido #1042</span><span class="tag-pago"><i></i>Pago</span></div>
+              <div id="s5-row">
+                <div class="who">Marina Alves</div>
+                <div class="what"><span>Café Especial 500 g</span><b>R$ 39,90</b></div>
+              </div>
+            </div>
+            <div class="receipt">
+              <div class="rline sale" id="s5-sale"><span>Venda</span><b>R$ 39,90</b></div>
+              <div class="rdiv" id="s5-div"></div>
+              <div class="rline fee" id="s5-fee"><span>Comissão da CaraffaStore</span><span class="zero" id="s5-zero">R$ 0,00</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 6: outro -->
+      <section id="s6" class="scene clip" data-start="17.91" data-duration="3.69" data-track-index="1">
+        <div class="in" id="s6-in">
+          <div class="col">
+            <div class="logo" id="s6-logo">
+              <div class="logo-tile" id="s6-tile"><svg viewBox="0 0 24 24"><use href="#jar" /></svg></div>
+              <div class="logo-word">CaraffaStore</div>
+            </div>
+            <div class="claim" id="s6-claim">Sem comissão <span class="accent">por venda.</span></div>
+            <div class="cta-row" id="s6-cta">
+              <div class="plans">Planos a partir de <b>R$ 30/mês</b></div>
+              <div class="cta">Criar minha loja <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg></div>
+            </div>
+            <div class="site" id="s6-site">caraffastore.vercel.app</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Audio: music bed + motion-matched SFX (each overlapping clip on its own track) -->
+      <audio id="music" src="assets/music/happy-beats-business-moves-vol-9-by-ende-dot-app.mp3" data-start="0" data-duration="21.6" data-track-index="10" data-volume="1"
+        data-automation='{"version":1,"lanes":[{"target":"volume","points":[{"t":0,"v":0.3},{"t":20.2,"v":0.34},{"t":21.6,"v":0}]}]}'></audio>
+      <audio id="sfx-hook" src="assets/sfx/impact/impactSoft_medium_001.ogg" data-start="0.14" data-duration="0.18" data-track-index="11" data-volume="0.5"></audio>
+      <audio id="sfx-logo" src="assets/sfx/interface/bong_001.ogg" data-start="3.68" data-duration="0.12" data-track-index="12" data-volume="0.6"></audio>
+      <audio id="sfx-k1" src="assets/sfx/keyboard/keypress-003.wav" data-start="4.2" data-duration="0.25" data-track-index="13" data-volume="0.3"></audio>
+      <audio id="sfx-k2" src="assets/sfx/keyboard/keypress-007.wav" data-start="4.33" data-duration="0.25" data-track-index="14" data-volume="0.26"></audio>
+      <audio id="sfx-k3" src="assets/sfx/keyboard/keypress-011.wav" data-start="4.46" data-duration="0.25" data-track-index="15" data-volume="0.3"></audio>
+      <audio id="sfx-k4" src="assets/sfx/keyboard/keypress-014.wav" data-start="4.59" data-duration="0.25" data-track-index="16" data-volume="0.26"></audio>
+      <audio id="sfx-k5" src="assets/sfx/keyboard/keypress-018.wav" data-start="4.72" data-duration="0.25" data-track-index="17" data-volume="0.3"></audio>
+      <audio id="sfx-k6" src="assets/sfx/keyboard/keypress-021.wav" data-start="4.85" data-duration="0.25" data-track-index="18" data-volume="0.26"></audio>
+      <audio id="sfx-k7" src="assets/sfx/keyboard/keypress-025.wav" data-start="4.98" data-duration="0.25" data-track-index="19" data-volume="0.3"></audio>
+      <audio id="sfx-k8" src="assets/sfx/keyboard/keypress-029.wav" data-start="5.11" data-duration="0.25" data-track-index="20" data-volume="0.26"></audio>
+      <audio id="sfx-k9" src="assets/sfx/keyboard/keypress-031.wav" data-start="5.24" data-duration="0.25" data-track-index="21" data-volume="0.3"></audio>
+      <audio id="sfx-card1" src="assets/sfx/casino/card-slide-1.ogg" data-start="6.84" data-duration="0.6" data-track-index="22" data-volume="0.4"></audio>
+      <audio id="sfx-card4" src="assets/sfx/casino/card-slide-1.ogg" data-start="8.42" data-duration="0.6" data-track-index="23" data-volume="0.36"></audio>
+      <audio id="sfx-click" src="assets/sfx/ui/click2.ogg" data-start="9.48" data-duration="0.06" data-track-index="24" data-volume="0.75"></audio>
+      <audio id="sfx-pix" src="assets/sfx/impact/impactBell_heavy_000.ogg" data-start="12.63" data-duration="1.48" data-track-index="25" data-volume="0.5"></audio>
+      <audio id="sfx-zero" src="assets/sfx/impact/impactSoft_medium_004.ogg" data-start="15.8" data-duration="0.15" data-track-index="26" data-volume="0.7"></audio>
+      <audio id="sfx-outro" src="assets/sfx/impact/impactBell_heavy_003.ogg" data-start="17.89" data-duration="0.65" data-track-index="27" data-volume="0.45"></audio>
+    </div>
+
+    <!-- Brand mark: exact path from components/ui/Logo.tsx -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <g id="jar" fill="currentColor">
+          <rect x="8.7" y="2.4" width="6.6" height="2.9" rx="1.45" />
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M9.6 5.1h4.8v3.1c0 1.05.45 2.05 1.24 2.74l2.16 1.96c1.14 1 1.8 2.45 1.8 3.97v.53a3.2 3.2 0 0 1-3.2 3.2H7.6a3.2 3.2 0 0 1-3.2-3.2v-.53c0-1.52.66-2.97 1.8-3.97l2.16-1.96C9.15 10.25 9.6 9.25 9.6 8.2V5.1ZM5.9 13.6h12.2v1.5H5.9v-1.5Z" />
+        </g>
+      </defs>
+    </svg>
+
+    <script>
+      (function () {
+        var TOTAL = 21.6;
+        var URL_HOST = "caraffastore.vercel.app/loja/";
+        var URL_SLUG = "casa-do-cafe";
+
+        // ---- Static build: deterministic QR-like pattern (seeded PRNG) ----
+        function mulberry32(a) {
+          return function () {
+            a |= 0; a = (a + 0x6d2b79f5) | 0;
+            var t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        }
+        (function buildQr() {
+          var rand = mulberry32(1042), n = 29, rects = [];
+          function inFinder(x, y) {
+            return (x < 8 && y < 8) || (x > n - 9 && y < 8) || (x < 8 && y > n - 9);
+          }
+          for (var y = 0; y < n; y++) for (var x = 0; x < n; x++) {
+            if (inFinder(x, y)) continue;
+            if (rand() > 0.52) rects.push('<rect x="' + x + '" y="' + y + '" width="1" height="1"/>');
+          }
+          [[0, 0], [n - 7, 0], [0, n - 7]].forEach(function (p) {
+            rects.push('<rect x="' + p[0] + '" y="' + p[1] + '" width="7" height="7"/>');
+            rects.push('<rect x="' + (p[0] + 1) + '" y="' + (p[1] + 1) + '" width="5" height="5" fill="#fff"/>');
+            rects.push('<rect x="' + (p[0] + 2) + '" y="' + (p[1] + 2) + '" width="3" height="3"/>');
+          });
+          document.getElementById("qr").innerHTML = '<g fill="#0c1b33">' + rects.join("") + "</g>";
+        })();
+
+        // ---- Typed URL: one span per character, revealed by seek-safe sets ----
+        var urlEl = document.getElementById("s2-url");
+        var chars = [];
+        (URL_HOST + URL_SLUG).split("").forEach(function (ch, i) {
+          var s = document.createElement("span");
+          s.textContent = ch;
+          if (i >= URL_HOST.length) s.className = "slug";
+          urlEl.appendChild(s);
+          chars.push(s);
+        });
+        var caret = document.createElement("i");
+        caret.className = "caret";
+        urlEl.appendChild(caret);
+
+        function offsetWithin(el, ancestor) {
+          var x = 0, y = 0;
+          while (el && el !== ancestor) {
+            x += el.offsetLeft + el.clientLeft;
+            y += el.offsetTop + el.clientTop;
+            el = el.offsetParent;
+          }
+          return { x: x, y: y };
+        }
+
+        function build() {
+          var btn = document.getElementById("add-0");
+          var o = offsetWithin(btn, document.getElementById("s3-in"));
+          var btnPos = { x: o.x + btn.offsetWidth * 0.5, y: o.y + btn.offsetHeight * 0.55 };
+
+          var tl = gsap.timeline({ paused: true });
+
+          // ---------- Background: slow ambient drift ----------
+          tl.fromTo("#bg-dots", { x: 0, y: 0 }, { x: -44, y: -22, duration: TOTAL, ease: "none" }, 0);
+          tl.fromTo("#bg-jar", { rotation: -4, y: 20 }, { rotation: 3, y: -20, duration: TOTAL, ease: "sine.inOut" }, 0);
+          tl.fromTo("#bg-glow-2", { x: 0 }, { x: 160, duration: TOTAL, ease: "sine.inOut" }, 0);
+          tl.fromTo("#bg-level", { scaleX: 0 }, { scaleX: 1, duration: TOTAL, ease: "none" }, 0);
+
+          // ---------- Scene fades: dip through the background, never a muddy double exposure ----------
+          var scenes = [["#s1-in", 0, 3.7], ["#s2-in", 3.7, 6.34], ["#s3-in", 6.34, 10.54], ["#s4-in", 10.54, 14.76], ["#s5-in", 14.76, 17.91], ["#s6-in", 17.91, TOTAL]];
+          scenes.forEach(function (s, i) {
+            if (i > 0) tl.fromTo(s[0], { opacity: 0 }, { opacity: 1, duration: 0.28, ease: "power2.out" }, s[1]);
+            if (i < scenes.length - 1) tl.to(s[0], { opacity: 0, duration: 0.26, ease: "power2.in" }, s[2] - 0.26);
+          });
+
+          // ---------- Scene 1: hook ----------
+          tl.fromTo("#s1-label", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, 0.05);
+          tl.fromTo("#s1 .w", { opacity: 0, y: 70, rotation: 3 }, { opacity: 1, y: 0, rotation: 0, duration: 0.5, ease: "back.out(1.6)", stagger: 0.1 }, 0.15);
+          tl.fromTo("#s1-rule", { scaleX: 0 }, { scaleX: 1, duration: 0.7, ease: "expo.out" }, 1.0);
+          tl.to("#s1 .headline", { scale: 1.025, duration: 2.4, ease: "sine.inOut", transformOrigin: "left center" }, 1.1);
+
+          // ---------- Scene 2: logo + typed link ----------
+          // beat-locked: 3.70s (strong cue) — logo lands
+          tl.fromTo("#s2-tile", { scale: 0.4, rotation: -14 }, { scale: 1, rotation: 0, duration: 0.55, ease: "back.out(1.8)" }, 3.72);
+          tl.fromTo("#s2-logo .logo-word", { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, 3.8);
+          tl.fromTo("#s2-bar", { opacity: 0, y: 40, scaleX: 0.86 }, { opacity: 1, y: 0, scaleX: 1, duration: 0.5, ease: "power3.out" }, 3.9);
+          tl.fromTo("#s2-cap", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 4.3);
+          var typeStart = 4.15, typeEnd = 5.3, step = (typeEnd - typeStart) / chars.length;
+          chars.forEach(function (c, i) {
+            tl.fromTo(c, { opacity: 0 }, { opacity: 1, duration: 0.01, ease: "none" }, typeStart + i * step);
+          });
+          // caret follows the text (positions measured once at build, after fonts load)
+          tl.set(caret, { x: 0, opacity: 1 }, 3.7);
+          chars.forEach(function (c, i) {
+            tl.set(caret, { x: c.offsetLeft + c.offsetWidth + 2 }, typeStart + i * step);
+          });
+          tl.to(caret, { opacity: 0, duration: 0.01, repeat: 3, yoyo: true, repeatDelay: 0.24 }, 5.4);
+
+          // ---------- Scene 3: storefront ----------
+          tl.fromTo("#s3-side", { opacity: 0, x: -50 }, { opacity: 1, x: 0, duration: 0.55, ease: "power3.out" }, 6.45);
+          tl.fromTo("#s3-browser", { opacity: 0, y: 70, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "expo.out" }, 6.34);
+          // beat-grid: card 1 at 6.86s, card 2 at 7.40s, card 3 at 7.92s, card 4 at 8.44s (visual items; full set then holds)
+          [6.86, 7.4, 7.92, 8.44].forEach(function (t, i) {
+            tl.fromTo("#card-" + i, { opacity: 0, y: 60, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "back.out(1.5)" }, t - 0.02);
+          });
+          // simulated click on "Adicionar" — target measured once (layout offsets, transform-free)
+          var tx = btnPos.x - 11, ty = btnPos.y - 7; // pointer tip sits at ~(11,7) inside its 54px box
+          tl.fromTo("#s3-pointer", { opacity: 0, x: tx + 300, y: ty + 120 }, { opacity: 1, x: tx + 220, y: ty + 70, duration: 0.25, ease: "power1.out" }, 8.65);
+          tl.to("#s3-pointer", { x: tx, y: ty, duration: 0.6, ease: "power3.inOut" }, 8.9);
+          tl.to("#s3-pointer", { scale: 0.84, duration: 0.08, ease: "power2.in", transformOrigin: "10% 5%" }, 9.46);
+          tl.to("#s3-pointer", { scale: 1, duration: 0.14, ease: "power2.out" }, 9.56);
+          tl.to("#add-0", { scale: 0.94, duration: 0.08 }, 9.46);
+          tl.fromTo("#added-0", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.25, ease: "back.out(2)" }, 9.52);
+          tl.set("#add-0", { opacity: 0 }, 9.56);
+          tl.to("#s3-b0", { opacity: 0, duration: 0.12 }, 9.62);
+          tl.fromTo("#s3-b1", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2.4)" }, 9.62);
+          tl.fromTo("#s3-cart", { scale: 1 }, { scale: 1.12, duration: 0.15, ease: "power2.out", yoyo: true, repeat: 1 }, 9.62);
+          tl.to("#s3-pointer", { x: tx + 60, y: ty + 70, opacity: 0, duration: 0.4, ease: "power2.in" }, 9.8);
+
+          // ---------- Scene 4: Pix ----------
+          tl.fromTo("#s4-phone", { opacity: 0, y: 90, rotation: -3 }, { opacity: 1, y: 0, rotation: 0, duration: 0.6, ease: "expo.out" }, 10.54);
+          tl.fromTo("#s4-h", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 10.95);
+          tl.set("#s4-pill", { opacity: 0 }, 10.54);
+          tl.set("#s4-seal", { opacity: 0 }, 10.54);
+          tl.set("#st-ok", { opacity: 0 }, 10.54);
+          tl.set("#s4-halo", { opacity: 0, scale: 0.6 }, 10.54);
+          // beat-locked: 12.65s (strong cue) — payment confirmed
+          tl.to("#s4-seal", { opacity: 1, duration: 0.2, ease: "power1.out" }, 12.62);
+          tl.fromTo("#s4-dot", { scale: 0.2 }, { scale: 1, duration: 0.55, ease: "back.out(2.2)" }, 12.62);
+          tl.to("#st-wait", { opacity: 0, duration: 0.15 }, 12.65);
+          tl.to("#st-ok", { opacity: 1, duration: 0.2 }, 12.68);
+          tl.to("#s4-halo", { opacity: 1, scale: 1, duration: 0.7, ease: "power2.out" }, 12.62);
+          tl.to("#s4-halo", { opacity: 0.35, duration: 1.2, ease: "sine.inOut" }, 13.32);
+          tl.fromTo("#s4-pill", { opacity: 0, y: 20, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "back.out(1.8)" }, 12.75);
+
+          // ---------- Scene 5: R$ 0,00 ----------
+          tl.fromTo("#s5-label", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.4, ease: "power2.out" }, 14.8);
+          tl.fromTo("#s5-panel", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.5, ease: "expo.out" }, 14.85);
+          tl.fromTo("#s5-row", { opacity: 0, x: 80 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, 15.05);
+          tl.fromTo("#s5-sale", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 15.28);
+          tl.fromTo("#s5-div", { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: "expo.out" }, 15.5);
+          tl.fromTo("#s5-fee", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 15.6);
+          // beat-grid: R$ 0,00 punch at 15.81s
+          tl.fromTo("#s5-zero", { scale: 0.55 }, { scale: 1, duration: 0.55, ease: "back.out(2.6)" }, 15.8);
+
+          // ---------- Scene 6: outro ----------
+          // beat-grid: logo at 17.91s
+          tl.fromTo("#s6-tile", { scale: 0.3, rotation: 12 }, { scale: 1, rotation: 0, duration: 0.6, ease: "back.out(1.9)" }, 17.93);
+          tl.fromTo("#s6-logo .logo-word", { opacity: 0, x: -50 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, 18.0);
+          tl.fromTo("#s6-claim", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 18.3);
+          tl.fromTo("#s6-cta", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 18.75);
+          tl.fromTo("#s6-site", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power1.out" }, 19.1);
+
+          // ---------- Audio-reactive: bass makes the brand glow and the logo tiles breathe ----------
+          var A = window.AUDIO_DATA;
+          var glow = document.getElementById("bg-glow");
+          var tiles = [document.getElementById("s2-tile"), document.getElementById("s6-tile")];
+          for (var f = 0; f < A.bass.length; f++) {
+            tl.call(
+              (function (b, a) {
+                return function () {
+                  glow.style.opacity = String(0.7 + 0.3 * Math.min(1, b * 2.2));
+                  glow.style.scale = String(1 + 0.08 * Math.min(1, b * 2.2));
+                  var shadow = "0 16px " + (40 + 34 * a).toFixed(1) + "px -14px rgba(27, 77, 255, " + (0.45 + 0.35 * a).toFixed(3) + ")";
+                  tiles[0].style.boxShadow = shadow;
+                  tiles[1].style.boxShadow = shadow;
+                };
+              })(A.bass[f], A.amp[f]),
+              [],
+              f / A.fps
+            );
+          }
+
+          window.__timelines["main"] = tl;
+          if (window.__hfForceTimelineRebind) window.__hfForceTimelineRebind();
+        }
+
+        document.fonts.ready.then(build);
+      })();
+    </script>
+  </body>
+</html>
